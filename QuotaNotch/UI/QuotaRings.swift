@@ -38,7 +38,7 @@ struct QuotaNotchView: View {
     private var provider: QuotaProvider { store.selectedProvider }
 
     var body: some View {
-        VStack(spacing: 12) {
+        VStack(spacing: 8) {
             if store.enabled {
                 HStack(spacing: 10) {
                     ForEach(QuotaProvider.allCases) { item in providerTile(item) }
@@ -54,8 +54,10 @@ struct QuotaNotchView: View {
                                 }
                             }
                             if let snapshot = result.snapshot {
-                                ForEach(snapshot.windows) { window in
-                                    windowCard(window, stale: result.failure != nil)
+                                LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 8) {
+                                    ForEach(snapshot.windows) { window in
+                                        windowCard(window, stale: result.failure != nil)
+                                    }
                                 }
                                 HStack(spacing: 4) {
                                     Text(result.failure == nil ? "更新于" : "旧数据 · 上次成功")
@@ -103,23 +105,25 @@ struct QuotaNotchView: View {
         let window = result?.snapshot?.windows.first
         return Button { store.selectedProvider = item } label: {
             HStack(spacing: 10) {
-                QuotaRing(provider: item, percent: window?.remainingPercent, stale: result?.failure != nil)
+                QuotaRing(provider: item, percent: window?.remainingPercent, stale: result?.failure != nil, size: 24)
                 VStack(alignment: .leading, spacing: 3) {
                     Text(item.title).font(.system(size: 12, weight: .semibold))
                     if let window {
-                        Text("\(window.remainingPercent, specifier: "%.0f")%")
-                            .font(.system(size: 22, weight: .medium, design: .rounded)).monospacedDigit()
                         Text("\(window.title)剩余\(result?.failure != nil ? " · 旧" : "")")
-                            .font(.system(size: 10)).foregroundStyle(.secondary)
+                            .font(.system(size: 9)).foregroundStyle(.secondary)
                     } else {
-                        Text("—").font(.system(size: 22, weight: .medium))
                         Text(result?.failure == nil ? "读取中" : "需查看状态")
-                            .font(.system(size: 10)).foregroundStyle(.secondary)
+                            .font(.system(size: 9)).foregroundStyle(.secondary)
                     }
                 }
                 Spacer(minLength: 0)
+                Group {
+                    if let window { Text("\(window.remainingPercent, specifier: "%.0f")%") }
+                    else { Text("—") }
+                }
+                .font(.system(size: 18, weight: .medium, design: .rounded)).monospacedDigit()
             }
-            .padding(12)
+            .padding(.horizontal, 10).padding(.vertical, 6)
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(.white.opacity(provider == item ? 0.08 : 0.035), in: RoundedRectangle(cornerRadius: 16))
             .overlay(RoundedRectangle(cornerRadius: 16).strokeBorder(provider == item ? item.accent.opacity(0.45) : .clear, lineWidth: 1))
@@ -160,7 +164,7 @@ struct QuotaNotchView: View {
             .help(isPinned ? "取消固定" : "固定此窗口（替换当前选择）")
             .accessibilityLabel("\(provider.title) \(window.title)，\(isPinned ? "取消固定" : "固定")")
         }
-        .padding(10)
+        .padding(8)
         .background(.white.opacity(0.045), in: RoundedRectangle(cornerRadius: 12))
     }
 
