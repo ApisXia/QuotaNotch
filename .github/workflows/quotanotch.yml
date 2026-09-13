@@ -1,0 +1,62 @@
+name: QuotaNotch macOS app
+
+on:
+  workflow_dispatch:
+  push:
+    branches: ['feature/quotanotch-ai-usage']
+  pull_request:
+    branches: [main, dev]
+    paths:
+      - 'QuotaNotch/**'
+      - 'QuotaNotchTests/**'
+      - 'boringNotch/**'
+      - 'boringNotch.xcodeproj/**'
+      - 'Package.swift'
+      - 'scripts/package-quotanotch.sh'
+      - '.github/workflows/quotanotch.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: quotanotch-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: macos-15
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: '26.0'
+      - name: Record toolchain and source revision
+        run: |
+          xcodebuild -version
+          swift --version
+          git rev-parse HEAD
+      - name: Fixture tests (no user accounts or credentials)
+        run: swift test --parallel
+      - name: Resolve app dependencies
+        run: xcodebuild -resolvePackageDependencies -project boringNotch.xcodeproj -scheme boringNotch
+      - name: Build universal app
+        run: |
+          xcodebuild build \
+            -project boringNotch.xcodeproj -scheme boringNotch \
+            -configuration Release -destination 'generic/platform=macOS' \
+            -derivedDataPath build/DerivedData \
+            ARCHS='arm64 x86_64' ONLY_ACTIVE_ARCH=NO \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO \
+            DEVELOPMENT_TEAM='' CODE_SIGN_IDENTITY=''
+      - name: Package app and corresponding source
+        run: bash scripts/package-quotanotch.sh
+      - name: Upload installable app, source and checksums
+        uses: actions/upload-artifact@v4
+        with:
+          name: QuotaNotch-macOS-${{ github.sha }}
+          path: build/QuotaNotch-dist/*
+          if-no-files-found: error
+          retention-days: 30

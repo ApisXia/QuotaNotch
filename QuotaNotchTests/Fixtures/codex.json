@@ -1,0 +1,1 @@
+{"rate_limit":{"primary_window":{"used_percent":27,"limit_window_seconds":18000,"reset_at":1789497000},"secondary_window":{"used_percent":91,"limit_window_seconds":604800,"reset_after_seconds":7200}},"credits":{"balance":125},"plan_type":"fixture"}

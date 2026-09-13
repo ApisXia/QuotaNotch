@@ -865,7 +865,8 @@ struct About: View {
                     Text("Version info")
                 }
 
-                UpdaterSettingsView(updater: updaterController.updater)
+                Text("QuotaNotch · 基于 Boring Notch。此版本通过 GitHub 构建文件手动更新。")
+                    .font(.caption)
 
                 HStack(spacing: 30) {
                     Spacer(minLength: 0)
@@ -903,7 +904,8 @@ struct About: View {
             //                openWindow(id: "onboarding")
             //            }
             //            .controlSize(.extraLarge)
-            CheckForUpdatesView(updater: updaterController.updater)
+            Text("自动更新已关闭，避免安装原版 Boring Notch。")
+                .font(.caption)
         }
         .navigationTitle("About")
     }

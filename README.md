@@ -1,3 +1,20 @@
+# QuotaNotch
+
+Boring Notch fork with a **Claude / Codex usage page inside the actual notch**.
+Independent app identity: `com.apisxia.quotanotch`. Original upstream updates are disabled.
+
+**[中文安装、登录与云端构建说明](docs/QuotaNotch-zh.md)** ·
+[macOS build workflow](.github/workflows/quotanotch.yml)
+
+Status: source implementation; macOS build and real-device validation pending.
+Run the **QuotaNotch macOS app** workflow in your fork to produce DMG/app ZIP plus matching source.
+Fixtures are used only by tests. No tokens, costs or credits totals are inferred.
+
+The original Boring Notch README is preserved below; its downloads and installation commands
+install the upstream app, **not QuotaNotch**.
+
+---
+
 <h1 align="center">
   <br>
   <a href="http://theboring.name"><img src="https://framerusercontent.com/images/RFK4vs0kn8pRMuOO58JeyoemXA.png?scale-down-to=256" alt="Boring Notch" width="150"></a>
@@ -193,5 +210,4 @@ For a full list of licenses and attributions, please see the [Third-Party Licens
 
 - **SwiftUI**: For making us look like coding wizards.
 - **You**: For being awesome and checking out **boring.notch**!
-
 
