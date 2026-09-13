@@ -106,34 +106,7 @@ struct ContentView: View {
         
         ZStack(alignment: .top) {
             VStack(spacing: 0) {
-                let mainLayout = NotchLayout()
-                    .frame(alignment: .top)
-                    .padding(
-                        .horizontal,
-                        vm.notchState == .open
-                        ? Defaults[.cornerRadiusScaling]
-                        ? (cornerRadiusInsets.opened.top) : (cornerRadiusInsets.opened.bottom)
-                        : cornerRadiusInsets.closed.bottom
-                    )
-                    .padding([.horizontal, .bottom], vm.notchState == .open ? 12 : 0)
-                    .background(.black)
-                    .clipShape(currentNotchShape)
-                    .overlay(alignment: .top) {
-                        Rectangle()
-                            .fill(.black)
-                            .frame(height: 1)
-                            .padding(.horizontal, topCornerRadius)
-                    }
-                    .shadow(
-                        color: ((vm.notchState == .open || isHovering) && Defaults[.enableShadow])
-                            ? .black.opacity(0.7) : .clear, radius: Defaults[.cornerRadiusScaling] ? 6 : 4
-                    )
-                    .padding(
-                        .bottom,
-                        vm.effectiveClosedNotchHeight == 0 ? 10 : 0
-                    )
-                
-                mainLayout
+                styledNotch
                     .frame(height: vm.notchState == .open ? vm.notchSize.height : nil)
                     .conditionalModifier(true) { view in
                         let openAnimation = Animation.spring(response: 0.42, dampingFraction: 0.8, blendDuration: 0)
@@ -161,20 +134,6 @@ struct ContentView: View {
                             .panGesture(direction: .up, enabled: vm.notchState == .open && coordinator.currentView != .aiUsage) { translation, phase in
                                 handleUpGesture(translation: translation, phase: phase)
                             }
-                    }
-                    .onReceive(NotificationCenter.default.publisher(for: .sharingDidFinish)) { _ in
-                        if vm.notchState == .open && !isHovering && !vm.isBatteryPopoverActive {
-                            hoverTask?.cancel()
-                            hoverTask = Task {
-                                try? await Task.sleep(for: .milliseconds(100))
-                                guard !Task.isCancelled else { return }
-                                await MainActor.run {
-                                    if self.vm.notchState == .open && !self.isHovering && !self.vm.isBatteryPopoverActive {
-                                        self.vm.close()
-                                    }
-                                }
-                            }
-                        }
                     }
                     .onChange(of: vm.notchState) { _, newState in
                         gestureProgress = .zero
@@ -232,6 +191,36 @@ struct ContentView: View {
         .environmentObject(vm)
         .task { quotaStore.start() }
         .onChange(of: coordinator.currentView) { _, _ in gestureProgress = .zero }
+    }
+
+    private var styledNotch: some View {
+         NotchLayout()
+                    .frame(alignment: .top)
+                    .padding(
+                        .horizontal,
+                        vm.notchState == .open
+                        ? Defaults[.cornerRadiusScaling]
+                        ? (cornerRadiusInsets.opened.top) : (cornerRadiusInsets.opened.bottom)
+                        : cornerRadiusInsets.closed.bottom
+                    )
+                    .padding([.horizontal, .bottom], vm.notchState == .open ? 12 : 0)
+                    .background(.black)
+                    .clipShape(currentNotchShape)
+                    .overlay(alignment: .top) {
+                        Rectangle()
+                            .fill(.black)
+                            .frame(height: 1)
+                            .padding(.horizontal, topCornerRadius)
+                    }
+                    .shadow(
+                        color: ((vm.notchState == .open || isHovering) && Defaults[.enableShadow])
+                            ? .black.opacity(0.7) : .clear, radius: Defaults[.cornerRadiusScaling] ? 6 : 4
+                    )
+                    .padding(
+                        .bottom,
+                        vm.effectiveClosedNotchHeight == 0 ? 10 : 0
+                    )
+                
     }
 
     @ViewBuilder
