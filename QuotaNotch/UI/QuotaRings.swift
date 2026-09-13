@@ -35,6 +35,9 @@ struct QuotaRing: View {
 struct QuotaNotchView: View {
     @ObservedObject private var store = QuotaNotchStore.shared
     private var provider: QuotaProvider { store.selectedProvider }
+    @State private var page = 0
+    private var windows: [QuotaWindow] { store.results[provider]?.snapshot?.windows ?? [] }
+    private var pageCount: Int { QuotaWindowPages.count(windows: windows.count) }
 
     var body: some View {
         VStack(spacing: 8) {
@@ -42,41 +45,8 @@ struct QuotaNotchView: View {
                 HStack(spacing: 10) {
                     ForEach(QuotaProvider.allCases) { item in providerTile(item) }
                 }
-                ScrollView {
-                    VStack(alignment: .leading, spacing: 10) {
-                        if let result = store.results[provider] {
-                            if let error = result.failure {
-                                Label(error.message, systemImage: "exclamationmark.circle")
-                                    .font(.caption).foregroundStyle(.orange)
-                                if error == .notSignedIn || error == .expired || error == .credentialsUnavailable {
-                                    Text(provider.loginHint).font(.caption).foregroundStyle(.secondary)
-                                }
-                            }
-                            if let snapshot = result.snapshot {
-                                LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 8) {
-                                    ForEach(snapshot.windows) { window in
-                                        windowCard(window, stale: result.failure != nil)
-                                    }
-                                }
-                                HStack(spacing: 4) {
-                                    Text(result.failure == nil ? "更新于" : "旧数据 · 上次成功")
-                                    Text(snapshot.fetchedAt, style: .time)
-                                    Spacer()
-                                    Text("下次查询")
-                                    Text(result.nextAttempt, style: .time)
-                                }
-                                .font(.system(size: 10)).foregroundStyle(.secondary)
-                            } else {
-                                Text("等待可用额度 · 不显示估算数据")
-                                    .font(.caption).foregroundStyle(.secondary)
-                            }
-                        } else {
-                            ProgressView("正在读取…").controlSize(.small)
-                        }
-                    }
-                    .padding(.bottom, 4)
-                }
-                .scrollIndicators(.hidden)
+                quotaDetails
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
                 pinSettings
                     .fixedSize(horizontal: false, vertical: true)
             } else {
@@ -97,6 +67,30 @@ struct QuotaNotchView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .foregroundStyle(.white)
         .task { store.start() }
+        .onChange(of: provider) { _, _ in page = 0 }
+        .onChange(of: windows.map(\.id)) { _, _ in page = 0 }
+    }
+
+    @ViewBuilder private var quotaDetails: some View {
+        if !windows.isEmpty {
+            HStack(spacing: 8) {
+                ForEach(Array(windows[QuotaWindowPages.range(windows: windows.count, page: page)])) { window in
+                    windowCard(window, stale: store.results[provider]?.failure != nil)
+                        .frame(maxWidth: .infinity)
+                }
+            }
+        } else if let result = store.results[provider] {
+            VStack(alignment: .leading, spacing: 3) {
+                Text(result.failure?.message ?? "等待可用额度 · 不显示估算数据")
+                    .foregroundStyle(.orange).font(.system(size: 11)).lineLimit(2)
+                if result.failure == .notSignedIn || result.failure == .expired || result.failure == .credentialsUnavailable {
+                    Text(provider.loginHint).font(.system(size: 10)).foregroundStyle(.secondary).lineLimit(1)
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+        } else {
+            ProgressView("正在读取…").controlSize(.small)
+        }
     }
 
     private func providerTile(_ item: QuotaProvider) -> some View {
@@ -135,7 +129,7 @@ struct QuotaNotchView: View {
         let pin = QuotaPin(providerID: provider.rawValue, windowID: window.id)
         let isPinned = store.pins.selected == pin
         return HStack(spacing: 12) {
-            QuotaRing(provider: provider, percent: window.remainingPercent, stale: stale, size: 32)
+            QuotaRing(provider: provider, percent: window.remainingPercent, stale: stale, size: 28)
             VStack(alignment: .leading, spacing: 4) {
                 HStack(spacing: 8) {
                     Text(window.title).font(.system(size: 12, weight: .semibold))
@@ -163,7 +157,8 @@ struct QuotaNotchView: View {
             .help(isPinned ? "取消固定" : "固定此窗口（替换当前选择）")
             .accessibilityLabel("\(provider.title) \(window.title)，\(isPinned ? "取消固定" : "固定")")
         }
-        .padding(8)
+        .lineLimit(1)
+        .padding(.horizontal, 8).padding(.vertical, 6)
         .background(.white.opacity(0.045), in: RoundedRectangle(cornerRadius: 12))
     }
 
@@ -172,9 +167,9 @@ struct QuotaNotchView: View {
         return "\(provider.title) · \(store.window(for: pin)?.title ?? "已固定窗口")"
     }
 
-    /// Outside ScrollView: controls stay in one stationary row.
+    /// A single fixed row: status, paging and controls never scroll.
     private var pinSettings: some View {
-        HStack(spacing: 14) {
+        HStack(spacing: 10) {
             Menu {
                 Button("不固定") { store.updatePins { $0.selected = nil } }
                 Divider()
@@ -200,6 +195,33 @@ struct QuotaNotchView: View {
             .menuStyle(.borderlessButton)
             .frame(maxWidth: .infinity, alignment: .leading)
             .help("固定一个额度窗口，与音乐共享刘海")
+            if pageCount > 1 {
+                HStack(spacing: 5) {
+                    Button { page = max(0, page - 1) } label: { Image(systemName: "chevron.left") }
+                        .disabled(page == 0).accessibilityLabel("上一页额度")
+                    Text("\(min(page + 1, pageCount))/\(pageCount)").monospacedDigit()
+                    Button { page = min(pageCount - 1, page + 1) } label: { Image(systemName: "chevron.right") }
+                        .disabled(page >= pageCount - 1).accessibilityLabel("下一页额度")
+                }
+                .font(.system(size: 10)).fixedSize()
+            }
+            QuotaRefreshStamp(updated: store.results[provider]?.snapshot?.fetchedAt,
+                              next: store.results[provider]?.nextAttempt,
+                              error: store.results[provider]?.failure?.message)
+                .fixedSize()
+            Menu {
+                Toggle("圆环显示数字", isOn: Binding(
+                    get: { store.pins.showsNumbers },
+                    set: { value in store.updatePins { $0.showsNumbers = value } }
+                ))
+                Text("环内数字为剩余百分比，省略 % 号以保持紧凑。")
+                if let failure = store.results[provider]?.failure {
+                    Divider()
+                    Text(failure.message)
+                }
+            } label: { Image(systemName: "gearshape") }
+            .menuStyle(.borderlessButton).fixedSize()
+            .help("显示设置与状态说明").accessibilityLabel("额度显示设置")
             Button { Task { await store.refresh() } } label: {
                 Label("刷新", systemImage: "arrow.clockwise")
             }
@@ -213,7 +235,7 @@ struct QuotaNotchView: View {
         }
         .font(.system(size: 11))
         .buttonStyle(.plain)
-        .padding(.horizontal, 12).padding(.vertical, 10)
+        .padding(.horizontal, 10).padding(.vertical, 8)
         .background(.white.opacity(0.055), in: RoundedRectangle(cornerRadius: 10))
     }
 }
@@ -306,6 +328,6 @@ struct QuotaPinnedWings: View {
         CompactQuotaGauge(brand: provider.brand,
                           percent: store.window(for: pin)?.remainingPercent,
                           stale: store.results[provider]?.failure != nil,
-                          showsBrand: showsMusic, size: iconSize)
+                          showsBrand: showsMusic, showsNumbers: store.pins.showsNumbers, size: iconSize)
     }
 }

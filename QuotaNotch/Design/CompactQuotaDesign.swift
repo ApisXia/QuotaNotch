@@ -74,6 +74,7 @@ struct CompactQuotaGauge: View {
     let percent: Double?
     var stale = false
     var showsBrand = false
+    var showsNumbers = false
     let size: CGFloat
 
     var body: some View {
@@ -86,19 +87,28 @@ struct CompactQuotaGauge: View {
                 Circle().inset(by: inset).trim(from: 0, to: min(1, max(0, percent / 100)))
                     .stroke(stale ? .gray : brand.color, style: StrokeStyle(lineWidth: stroke, lineCap: .round))
                     .rotationEffect(.degrees(-90))
+                if showsNumbers {
+                    Text("\(percent, specifier: "%.0f")")
+                        .font(.system(size: max(5, size * 0.36), weight: .semibold, design: .rounded))
+                        .monospacedDigit().lineLimit(1).minimumScaleFactor(0.7)
+                        .foregroundStyle(stale ? .gray : .white)
+                        .frame(width: size * 0.68)
+                        .offset(y: showsBrand ? -size * 0.07 : 0)
+                }
             } else {
                 Text("—").font(.system(size: max(5, size * 0.37), weight: .medium)).foregroundStyle(.gray)
             }
-            if stale {
+            if stale && percent != nil {
                 Circle().fill(.orange.opacity(0.85)).frame(width: 3, height: 3)
+                    .offset(y: showsNumbers && percent != nil ? size * 0.30 : 0)
             }
         }
         .frame(width: size, height: size)
         .overlay(alignment: .bottomTrailing) {
             if showsBrand && size >= 12 {
                 QuotaBrandMark(brand: brand, muted: stale)
-                    .frame(width: size * 0.38, height: size * 0.38)
-                    .padding(size * 0.05)
+                    .frame(width: size * (showsNumbers ? 0.30 : 0.38), height: size * (showsNumbers ? 0.30 : 0.38))
+                    .padding(size * (showsNumbers ? 0.04 : 0.05))
                     .background(.black, in: Circle())
             }
         }

@@ -37,13 +37,28 @@ private struct FixtureSheet: View {
             row("Full · 100%", brand: .codex, percent: 100)
             row("Unknown", brand: .codex, percent: nil, music: true)
             row("Stale · 9%", brand: .claude, percent: 9, music: true, stale: true)
+            row("Numbers · 58", brand: .claude, percent: 58, music: true, numbers: true)
+            row("Numbers · 100", brand: .codex, percent: 100, music: true, numbers: true)
+            row("Numbers · 0", brand: .codex, percent: 0, numbers: true)
+            row("Old number · 9", brand: .claude, percent: 9, music: true, stale: true, numbers: true)
+            HStack(spacing: 10) {
+                Label("Claude · 5 小时", systemImage: "pin.fill")
+                Spacer()
+                QuotaRefreshStamp(updated: Date(timeIntervalSince1970: 1789400000),
+                                  next: Date(timeIntervalSince1970: 1789400900))
+                Image(systemName: "gearshape")
+                Label("刷新", systemImage: "arrow.clockwise")
+                Label("暂停", systemImage: "pause")
+            }
+            .font(.system(size: 11)).padding(10)
+            .background(.white.opacity(0.055), in: RoundedRectangle(cornerRadius: 10))
             Divider()
             Text("4× detail — badge remains inside the 20pt box").font(.system(size: 12))
             HStack(spacing: 70) {
                 QuotaBrandMark(brand: .claude).frame(width: size, height: size).scaleEffect(4)
                 QuotaBrandMark(brand: .codex).frame(width: size, height: size).scaleEffect(4)
-                CompactQuotaGauge(brand: .claude, percent: 58, showsBrand: true, size: size).scaleEffect(4)
-                CompactQuotaGauge(brand: .codex, percent: 73, showsBrand: true, size: size).scaleEffect(4)
+                CompactQuotaGauge(brand: .claude, percent: 58, showsBrand: true, showsNumbers: true, size: size).scaleEffect(4)
+                CompactQuotaGauge(brand: .codex, percent: 100, showsBrand: true, showsNumbers: true, size: size).scaleEffect(4)
             }
             .padding(.horizontal, 30).frame(height: 86)
             Text("Album artwork and bars are placeholders. Real notch positioning / animation needs Mac testing.")
@@ -69,7 +84,7 @@ private struct FixtureSheet: View {
         }
     }
 
-    private func row(_ label: String, brand: QuotaBrand?, percent: Double?, music: Bool = false, stale: Bool = false) -> some View {
+    private func row(_ label: String, brand: QuotaBrand?, percent: Double?, music: Bool = false, stale: Bool = false, numbers: Bool = false) -> some View {
         HStack {
             Text(label).font(.system(size: 12)).frame(width: 160, alignment: .leading)
             HStack(spacing: QuotaCompactMetrics.spacing) {
@@ -87,7 +102,7 @@ private struct FixtureSheet: View {
                 Color.black.frame(width: 185 - 6, height: height)
                 Group {
                     if let brand {
-                        CompactQuotaGauge(brand: brand, percent: percent, stale: stale, showsBrand: music, size: size)
+                        CompactQuotaGauge(brand: brand, percent: percent, stale: stale, showsBrand: music, showsNumbers: numbers, size: size)
                     } else { bars }
                 }
                 .frame(width: size, height: size).clipped()
