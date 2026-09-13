@@ -20,6 +20,7 @@ struct ContentView: View {
 
     @ObservedObject var coordinator = BoringViewCoordinator.shared
     @ObservedObject var musicManager = MusicManager.shared
+    @ObservedObject private var quotaStore = QuotaNotchStore.shared
     @ObservedObject var batteryModel = BatteryStatusViewModel.shared
     @ObservedObject var brightnessManager = BrightnessManager.shared
     @ObservedObject var volumeManager = VolumeManager.shared
@@ -65,6 +66,8 @@ struct ContentView: View {
             && vm.notchState == .closed && Defaults[.showPowerStatusNotifications]
         {
             chinWidth = 640
+        } else if showQuotaWings {
+            chinWidth += 2 * QuotaPinnedWings.wingWidth
         } else if (!coordinator.expandingView.show || coordinator.expandingView.type == .music)
             && vm.notchState == .closed && (musicManager.isPlaying || !musicManager.isPlayerIdle)
             && coordinator.musicLiveActivityEnabled && !vm.hideOnClosed
@@ -78,6 +81,15 @@ struct ContentView: View {
         }
 
         return chinWidth
+    }
+
+    private var showQuotaWings: Bool {
+        vm.notchState == .closed && quotaStore.pins.shouldDisplay(
+            enabled: quotaStore.enabled,
+            hidden: vm.hideOnClosed || vm.effectiveClosedNotchHeight <= 0,
+            transient: coordinator.expandingView.show || coordinator.sneakPeek.show || coordinator.helloAnimationRunning,
+            musicPlaying: musicManager.isPlaying && coordinator.musicLiveActivityEnabled
+        )
     }
 
     var body: some View {
@@ -136,13 +148,13 @@ struct ContentView: View {
                     }
                     .conditionalModifier(Defaults[.enableGestures]) { view in
                         view
-                            .panGesture(direction: .down) { translation, phase in
+                            .panGesture(direction: .down, enabled: vm.notchState == .closed) { translation, phase in
                                 handleDownGesture(translation: translation, phase: phase)
                             }
                     }
                     .conditionalModifier(Defaults[.closeGestureEnabled] && Defaults[.enableGestures]) { view in
                         view
-                            .panGesture(direction: .up) { translation, phase in
+                            .panGesture(direction: .up, enabled: vm.notchState == .open && coordinator.currentView != .aiUsage) { translation, phase in
                                 handleUpGesture(translation: translation, phase: phase)
                             }
                     }
@@ -161,6 +173,7 @@ struct ContentView: View {
                         }
                     }
                     .onChange(of: vm.notchState) { _, newState in
+                        gestureProgress = .zero
                         if newState == .closed && isHovering {
                             withAnimation {
                                 isHovering = false
@@ -214,6 +227,8 @@ struct ContentView: View {
         .background(dragDetector)
         .preferredColorScheme(.dark)
         .environmentObject(vm)
+        .task { quotaStore.start() }
+        .onChange(of: coordinator.currentView) { _, _ in gestureProgress = .zero }
         .onChange(of: vm.anyDropZoneTargeting) { _, isTargeted in
             anyDropDebounceTask?.cancel()
 
@@ -287,6 +302,13 @@ struct ContentView: View {
                       } else if coordinator.sneakPeek.show && Defaults[.inlineHUD] && (coordinator.sneakPeek.type != .music) && (coordinator.sneakPeek.type != .battery) && vm.notchState == .closed {
                           InlineHUD(type: $coordinator.sneakPeek.type, value: $coordinator.sneakPeek.value, icon: $coordinator.sneakPeek.icon, hoverAnimation: $isHovering, gestureProgress: $gestureProgress)
                               .transition(.opacity)
+                      } else if showQuotaWings {
+                          QuotaPinnedWings(centerWidth: vm.closedNotchSize.width, height: vm.effectiveClosedNotchHeight) { provider in
+                              quotaStore.selectedProvider = provider
+                              coordinator.currentView = .aiUsage
+                              doOpen()
+                          }
+                          .transition(.opacity)
                       } else if (!coordinator.expandingView.show || coordinator.expandingView.type == .music) && vm.notchState == .closed && (musicManager.isPlaying || !musicManager.isPlayerIdle) && coordinator.musicLiveActivityEnabled && !vm.hideOnClosed {
                           MusicLiveActivity()
                               .frame(alignment: .center)
@@ -585,7 +607,7 @@ struct ContentView: View {
     }
 
     private func handleUpGesture(translation: CGFloat, phase: NSEvent.Phase) {
-        guard vm.notchState == .open && !vm.isHoveringCalendar else { return }
+        guard vm.notchState == .open && !vm.isHoveringCalendar && coordinator.currentView != .aiUsage else { return }
 
         withAnimation(animationSpring) {
             gestureProgress = (translation / Defaults[.gestureSensitivity]) * -20

@@ -19,7 +19,7 @@ enum PanDirection {
 }
 
 extension View {
-    func panGesture(direction: PanDirection, threshold: CGFloat = 4, action: @escaping (CGFloat, NSEvent.Phase) -> Void) -> some View {
+    func panGesture(direction: PanDirection, threshold: CGFloat = 4, enabled: Bool = true, action: @escaping (CGFloat, NSEvent.Phase) -> Void) -> some View {
         self
             .gesture(
                 DragGesture(minimumDistance: 0)
@@ -28,15 +28,17 @@ extension View {
                         guard s > 0, s.magnitude >= threshold else { return }
                         action(s.magnitude, .changed)
                     }
-                    .onEnded { _ in action(0, .ended) }
+                    .onEnded { _ in action(0, .ended) },
+                including: enabled ? .all : .subviews
             )
-            .background(ScrollMonitor(direction: direction, threshold: threshold, action: action))
+            .background(ScrollMonitor(direction: direction, threshold: threshold, enabled: enabled, action: action))
     }
 }
 
 private struct ScrollMonitor: NSViewRepresentable {
     let direction: PanDirection
     let threshold: CGFloat
+    let enabled: Bool
     let action: (CGFloat, NSEvent.Phase) -> Void
 
     func makeNSView(context: Context) -> NSView {
@@ -44,26 +46,39 @@ private struct ScrollMonitor: NSViewRepresentable {
         context.coordinator.installMonitor(on: view)
         return view
     }
-    func updateNSView(_ nsView: NSView, context: Context) {}
+    func updateNSView(_ nsView: NSView, context: Context) {
+        context.coordinator.action = action
+        context.coordinator.enabled = enabled
+    }
     static func dismantleNSView(_ nsView: NSView, coordinator: Coordinator) { coordinator.removeMonitor() }
 
     func makeCoordinator() -> Coordinator { 
-        Coordinator(direction: direction, threshold: threshold, action: action) 
+        Coordinator(direction: direction, threshold: threshold, enabled: enabled, action: action)
     }
 
     @MainActor final class Coordinator: NSObject {
         private let direction: PanDirection
         private let threshold: CGFloat
-        private let action: (CGFloat, NSEvent.Phase) -> Void
+        var action: (CGFloat, NSEvent.Phase) -> Void
+        var enabled: Bool {
+            didSet {
+                if !enabled {
+                    accumulated = 0
+                    active = false
+                    endTask?.cancel()
+                }
+            }
+        }
         private var monitor: Any?
         private var accumulated: CGFloat = 0
         private var active = false
             private var endTask: Task<Void, Never>?
         private let noiseThreshold: CGFloat = 0.2
 
-        init(direction: PanDirection, threshold: CGFloat, action: @escaping (CGFloat, NSEvent.Phase) -> Void) {
+        init(direction: PanDirection, threshold: CGFloat, enabled: Bool, action: @escaping (CGFloat, NSEvent.Phase) -> Void) {
             self.direction = direction
             self.threshold = threshold
+            self.enabled = enabled
             self.action = action
         }
 
@@ -87,7 +102,8 @@ private struct ScrollMonitor: NSViewRepresentable {
         func installMonitor(on view: NSView) {
             removeMonitor()
             monitor = NSEvent.addLocalMonitorForEvents(matching: [.scrollWheel]) { [weak self, weak view] event in
-                guard let self = self, event.window === view?.window else { return event }
+                guard let self, self.enabled, let view, event.window === view.window,
+                      view.bounds.contains(view.convert(event.locationInWindow, from: nil)) else { return event }
                 self.handleScroll(event)
                 return event
             }
