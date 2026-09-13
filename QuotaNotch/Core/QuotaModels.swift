@@ -3,11 +3,12 @@ import Foundation
 import CoreFoundation
 
 enum QuotaProvider: String, CaseIterable, Sendable, Identifiable {
-    case claude, codex
+    case claude, codex, gemini
     var id: String { rawValue }
-    var title: String { self == .claude ? "Claude" : "Codex" }
+    var title: String { switch self { case .claude: return "Claude"; case .codex: return "Codex"; case .gemini: return "Gemini CLI" } }
     var loginHint: String {
-        self == .claude ? "在本机 Claude Code 中运行 /login，然后刷新。" : "在本机终端运行 codex login，然后刷新。"
+        if self == .gemini { return "需有效的 Gemini CLI / Code Assist 登录；不读取 Gemini 网页版额度。" }
+        return self == .claude ? "在本机 Claude Code 中运行 /login，然后刷新。" : "在本机终端运行 codex login，然后刷新。"
     }
     var interval: TimeInterval { self == .claude ? 900 : 300 }
 }
@@ -62,6 +63,19 @@ enum QuotaParser {
                 windows.append(QuotaWindow(id: key, title: title, remainingPercent: 100 - used,
                                            resetsAt: isoDate(window["resets_at"] as? String)))
             }
+        } else if provider == .gemini {
+            var models: [String: QuotaWindow] = [:]
+            for bucket in root["buckets"] as? [[String: Any]] ?? [] {
+                guard let model = bucket["modelId"] as? String, !model.isEmpty,
+                      let remaining = number(bucket["remainingFraction"]),
+                      (0...1).contains(remaining) else { continue }
+                let window = QuotaWindow(id: model, title: model,
+                    remainingPercent: remaining * 100,
+                    resetsAt: isoDate(bucket["resetTime"] as? String))
+                if let existing = models[model], existing.remainingPercent <= window.remainingPercent { continue }
+                models[model] = window
+            }
+            windows = models.values.sorted { $0.id < $1.id }
         } else if let limits = root["rate_limit"] as? [String: Any] {
             for (key, fallback) in [("primary_window", "主窗口"), ("secondary_window", "次窗口")] {
                 guard let window = limits[key] as? [String: Any],

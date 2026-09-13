@@ -26,7 +26,6 @@ public enum NotchState {
 
 public enum NotchViews {
     case home
-    case shelf
     case aiUsage
 }
 
@@ -37,7 +36,6 @@ enum SettingsEnum {
     case download
     case mediaPlayback
     case hud
-    case shelf
     case extensions
 }
 

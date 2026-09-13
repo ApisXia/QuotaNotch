@@ -2,9 +2,9 @@
 import SwiftUI
 
 enum QuotaBrand: CaseIterable, Equatable {
-    case claude, codex
+    case claude, codex, gemini
     var color: Color {
-        self == .claude ? Color(red: 0.89, green: 0.61, blue: 0.48)
+        self == .gemini ? Color(red: 0.56, green: 0.66, blue: 0.96) : self == .claude ? Color(red: 0.89, green: 0.61, blue: 0.48)
             : Color(red: 0.62, green: 0.83, blue: 0.75)
     }
 }
@@ -18,7 +18,9 @@ struct QuotaBrandMark: View {
         GeometryReader { proxy in
             let side = min(proxy.size.width, proxy.size.height)
             let ink = muted ? Color.gray : brand.color
-            if brand == .claude {
+            if brand == .gemini {
+                GeminiSpark().fill(ink).frame(width: side, height: side)
+            } else if brand == .claude {
                 ClaudeRays().fill(ink)
                     .frame(width: side, height: side)
             } else {
@@ -115,5 +117,17 @@ struct CompactQuotaGauge: View {
         .clipped()
         .animation(.easeInOut(duration: 0.3), value: percent)
         .accessibilityHidden(true)
+    }
+}
+
+private struct GeminiSpark: Shape {
+    func path(in r: CGRect) -> Path {
+        var p = Path()
+        p.move(to: CGPoint(x: r.midX, y: r.minY))
+        p.addQuadCurve(to: CGPoint(x: r.maxX, y: r.midY), control: CGPoint(x: r.midX, y: r.midY))
+        p.addQuadCurve(to: CGPoint(x: r.midX, y: r.maxY), control: CGPoint(x: r.midX, y: r.midY))
+        p.addQuadCurve(to: CGPoint(x: r.minX, y: r.midY), control: CGPoint(x: r.midX, y: r.midY))
+        p.addQuadCurve(to: CGPoint(x: r.midX, y: r.minY), control: CGPoint(x: r.midX, y: r.midY))
+        return p
     }
 }

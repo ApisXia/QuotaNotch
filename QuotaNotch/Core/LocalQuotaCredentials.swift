@@ -28,9 +28,9 @@ struct LocalQuotaCredentials: QuotaCredentialSource {
         } else if provider == .claude, let configured = env["CLAUDE_CONFIG_DIR"], configured.hasPrefix("/") {
             base = URL(fileURLWithPath: configured, isDirectory: true)
         } else {
-            base = home.appendingPathComponent(provider == .claude ? ".claude" : ".codex", isDirectory: true)
+            base = home.appendingPathComponent(provider == .claude ? ".claude" : (provider == .gemini ? ".gemini" : ".codex"), isDirectory: true)
         }
-        let path = base.appendingPathComponent(provider == .claude ? ".credentials.json" : "auth.json")
+        let path = base.appendingPathComponent(provider == .claude ? ".credentials.json" : (provider == .gemini ? "oauth_creds.json" : "auth.json"))
         if FileManager.default.fileExists(atPath: path.path) {
             guard let data = try? Data(contentsOf: path) else { throw QuotaFailure.credentialsUnavailable }
             return try Self.decode(data, provider: provider)
@@ -60,14 +60,14 @@ struct LocalQuotaCredentials: QuotaCredentialSource {
 
     static func decode(_ data: Data, provider: QuotaProvider) throws -> QuotaCredential {
         guard let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-              let tokens = root[provider == .claude ? "claudeAiOauth" : "tokens"] as? [String: Any],
+              let tokens = (provider == .gemini ? root : root[provider == .claude ? "claudeAiOauth" : "tokens"]) as? [String: Any],
               let token = tokens[provider == .claude ? "accessToken" : "access_token"] as? String,
               !token.isEmpty, !token.contains("\r"), !token.contains("\n") else {
             throw QuotaFailure.notSignedIn
         }
         let account = tokens["account_id"] as? String
         if let account, account.contains("\r") || account.contains("\n") { throw QuotaFailure.notSignedIn }
-        let expiry = QuotaParser.number(tokens["expiresAt"]).map { Date(timeIntervalSince1970: $0 / 1000) }
+        let expiry = QuotaParser.number(tokens[provider == .gemini ? "expiry_date" : "expiresAt"]).map { Date(timeIntervalSince1970: $0 / 1000) }
         return QuotaCredential(accessToken: token, accountID: account, expiresAt: expiry)
     }
 }

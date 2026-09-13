@@ -13,6 +13,21 @@ final class QuotaNotchStore: ObservableObject {
               let value = try? JSONDecoder().decode(QuotaPins.self, from: data) else { return QuotaPins() }
         return value
     }()
+    @Published private var disabledProviders = Set(UserDefaults.standard.stringArray(forKey: "quotaNotchDisabledProviders") ?? ["gemini"])
+
+    func providerEnabled(_ provider: QuotaProvider) -> Bool { !disabledProviders.contains(provider.rawValue) }
+
+    func setProvider(_ provider: QuotaProvider, enabled: Bool) {
+        if enabled { disabledProviders.remove(provider.rawValue) }
+        else {
+            disabledProviders.insert(provider.rawValue)
+            results[provider] = nil
+            if pins.selected?.provider == provider { updatePins { $0.selected = nil } }
+        }
+        UserDefaults.standard.set(Array(disabledProviders), forKey: "quotaNotchDisabledProviders")
+        if enabled { Task { await refresh() } }
+    }
+
     private let client = QuotaClient()
     private var polling: Task<Void, Never>?
 
@@ -56,10 +71,15 @@ final class QuotaNotchStore: ObservableObject {
         guard enabled, !refreshing else { return }
         refreshing = true
         defer { refreshing = false }
-        async let claude = client.refresh(.claude)
-        async let codex = client.refresh(.codex)
-        let values = await (claude, codex)
-        guard enabled, !Task.isCancelled else { return }
-        results = [.claude: values.0, .codex: values.1]
+        let providers = QuotaProvider.allCases.filter { providerEnabled($0) }
+        await withTaskGroup(of: (QuotaProvider, QuotaResult).self) { group in
+            for provider in providers {
+                group.addTask { [client] in (provider, await client.refresh(provider)) }
+            }
+            for await (provider, result) in group {
+                guard enabled, !Task.isCancelled, providerEnabled(provider) else { continue }
+                results[provider] = result
+            }
+        }
     }
 }

@@ -27,42 +27,11 @@ struct SettingsView: View {
     var body: some View {
         NavigationSplitView {
             List(selection: $selectedTab) {
-                NavigationLink(value: "General") {
-                    Label("General", systemImage: "gear")
-                }
-                NavigationLink(value: "Appearance") {
-                    Label("Appearance", systemImage: "eye")
-                }
-                NavigationLink(value: "Media") {
-                    Label("Media", systemImage: "play.laptopcomputer")
-                }
-                NavigationLink(value: "Calendar") {
-                    Label("Calendar", systemImage: "calendar")
-                }
-                NavigationLink(value: "HUD") {
-                    Label("HUDs", systemImage: "dial.medium.fill")
-                }
-                NavigationLink(value: "Battery") {
-                    Label("Battery", systemImage: "battery.100.bolt")
-                }
-//                NavigationLink(value: "Downloads") {
-//                    Label("Downloads", systemImage: "square.and.arrow.down")
-//                }
-                NavigationLink(value: "Shelf") {
-                    Label("Shelf", systemImage: "books.vertical")
-                }
-                NavigationLink(value: "Shortcuts") {
-                    Label("Shortcuts", systemImage: "keyboard")
-                }
-                // NavigationLink(value: "Extensions") {
-                //     Label("Extensions", systemImage: "puzzlepiece.extension")
-                // }
-                NavigationLink(value: "Advanced") {
-                    Label("Advanced", systemImage: "gearshape.2")
-                }
-                NavigationLink(value: "About") {
-                    Label("About", systemImage: "info.circle")
-                }
+                NavigationLink(value: "General") { Label("通用", systemImage: "gearshape") }
+                NavigationLink(value: "Quota") { Label("AI 额度", systemImage: "chart.pie") }
+                NavigationLink(value: "Media") { Label("音乐", systemImage: "music.note") }
+                NavigationLink(value: "Appearance") { Label("外观与提示", systemImage: "circle.lefthalf.filled") }
+                NavigationLink(value: "About") { Label("关于", systemImage: "info.circle") }
             }
             .listStyle(SidebarListStyle())
             .tint(.effectiveAccent)
@@ -74,23 +43,11 @@ struct SettingsView: View {
                 case "General":
                     GeneralSettings()
                 case "Appearance":
-                    Appearance()
+                    QuotaAppearancePreferences()
                 case "Media":
                     Media()
-                case "Calendar":
-                    CalendarSettings()
-                case "HUD":
-                    HUD()
-                case "Battery":
-                    Charge()
-                case "Shelf":
-                    Shelf()
-                case "Shortcuts":
-                    Shortcuts()
-                case "Extensions":
-                    GeneralSettings()
-                case "Advanced":
-                    Advanced()
+                case "Quota":
+                    QuotaPreferences()
                 case "About":
                     if let controller = updaterController {
                         About(updaterController: controller)
@@ -262,6 +219,10 @@ struct GeneralSettings: View {
             NotchBehaviour()
 
             gestureControls()
+            Section("快捷键") {
+                KeyboardShortcuts.Recorder("展开／收起刘海", name: .toggleNotchOpen)
+                KeyboardShortcuts.Recorder("显示音乐信息", name: .toggleSneakPeek)
+            }
         }
         .toolbar {
             Button("Quit app") {
@@ -286,8 +247,6 @@ struct GeneralSettings: View {
             }
                 .disabled(!openNotchOnHover)
             if enableGestures {
-                Toggle("Change media with horizontal gestures", isOn: .constant(false))
-                    .disabled(true)
                 Defaults.Toggle(key: .closeGestureEnabled) {
                     Text("Close gesture")
                 }
@@ -865,13 +824,13 @@ struct About: View {
                     Text("Version info")
                 }
 
-                Text("QuotaNotch · 基于 Boring Notch。此版本通过 GitHub 构建文件手动更新。")
+                Text("QuotaNotch · 基于 Boring Notch。可在 Releases 下载更新。")
                     .font(.caption)
 
                 HStack(spacing: 30) {
                     Spacer(minLength: 0)
                     Button {
-                        if let url = URL(string: "https://github.com/TheBoredTeam/boring.notch") {
+                        if let url = URL(string: "https://github.com/ApisXia/QuotaNotch") {
                             NSWorkspace.shared.open(url)
                         }
                     } label: {
@@ -884,13 +843,19 @@ struct About: View {
                         }
                         .contentShape(Rectangle())
                     }
+                    Link(destination: URL(string: "https://github.com/ApisXia/QuotaNotch/releases/latest")!) {
+                        VStack(spacing: 5) {
+                            Image(systemName: "arrow.down.circle").font(.system(size: 18))
+                            Text("Releases")
+                        }
+                    }
                     Spacer(minLength: 0)
                 }
                 .buttonStyle(PlainButtonStyle())
             }
             VStack(spacing: 0) {
                 Divider()
-                Text("Made with 🫶🏻 by not so boring not.people")
+                Text("QuotaNotch by ApisXia · Based on Boring Notch")
                     .foregroundStyle(.secondary)
                     .padding(.top, 5)
                     .padding(.bottom, 7)
@@ -910,254 +875,6 @@ struct About: View {
         .navigationTitle("About")
     }
 }
-
-struct Shelf: View {
-    
-    @Default(.shelfTapToOpen) var shelfTapToOpen: Bool
-    @Default(.quickShareProvider) var quickShareProvider
-    @Default(.expandedDragDetection) var expandedDragDetection: Bool
-    @StateObject private var quickShareService = QuickShareService.shared
-
-    private var selectedProvider: QuickShareProvider? {
-        quickShareService.availableProviders.first(where: { $0.id == quickShareProvider })
-    }
-    
-    init() {
-        Task { await QuickShareService.shared.discoverAvailableProviders() }
-    }
-    
-    var body: some View {
-        Form {
-            Section {
-                Defaults.Toggle(key: .boringShelf) {
-                    Text("Enable shelf")
-                }
-                Defaults.Toggle(key: .openShelfByDefault) {
-                    Text("Open shelf by default if items are present")
-                }
-                Defaults.Toggle(key: .expandedDragDetection) {
-                    Text("Expanded drag detection area")
-                }
-                .onChange(of: expandedDragDetection) {
-                    NotificationCenter.default.post(
-                        name: Notification.Name.expandedDragDetectionChanged,
-                        object: nil
-                    )
-                }
-                Defaults.Toggle(key: .copyOnDrag) {
-                    Text("Copy items on drag")
-                }
-                Defaults.Toggle(key: .autoRemoveShelfItems) {
-                    Text("Remove from shelf after dragging")
-                }
-
-            } header: {
-                HStack {
-                    Text("General")
-                }
-            }
-            
-            Section {
-                Picker("Quick Share Service", selection: $quickShareProvider) {
-                    ForEach(quickShareService.availableProviders, id: \.id) { provider in
-                        HStack {
-                            Group {
-                                if let imgData = provider.imageData, let nsImg = NSImage(data: imgData) {
-                                    Image(nsImage: nsImg)
-                                        .resizable()
-                                        .aspectRatio(contentMode: .fit)
-                                } else {
-                                    Image(systemName: "square.and.arrow.up")
-                                }
-                            }
-                            .frame(width: 16, height: 16)
-                            .foregroundColor(.accentColor)
-                            Text(provider.id)
-                        }
-                        .tag(provider.id)
-                    }
-                }
-                .pickerStyle(.menu)
-                
-                if let selectedProvider = selectedProvider {
-                    HStack {
-                        Group {
-                            if let imgData = selectedProvider.imageData, let nsImg = NSImage(data: imgData) {
-                                Image(nsImage: nsImg)
-                                    .resizable()
-                                    .aspectRatio(contentMode: .fit)
-                            } else {
-                                Image(systemName: "square.and.arrow.up")
-                            }
-                        }
-                        .frame(width: 16, height: 16)
-                        .foregroundColor(.accentColor)
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text("Currently selected: \(selectedProvider.id)")
-                                .font(.caption)
-                                .foregroundColor(.secondary)
-                            Text("Files dropped on the shelf will be shared via this service")
-                                .font(.caption2)
-                                .foregroundColor(.secondary)
-                        }
-                    }
-                    .padding(.vertical, 4)
-                }
-                // Providers are always enabled; user can pick default service above.
-                
-            } header: {
-                HStack {
-                    Text("Quick Share")
-                }
-            } footer: {
-                Text("Choose which service to use when sharing files from the shelf. Click the shelf button to select files, or drag files onto it to share immediately.")
-                    .font(.caption)
-                    .foregroundColor(.secondary)
-            }
-        }
-        .accentColor(.effectiveAccent)
-        .navigationTitle("Shelf")
-    }
-}
-
-//struct Extensions: View {
-//    @State private var effectTrigger: Bool = false
-//    var body: some View {
-//        Form {
-//            Section {
-//                List {
-//                    ForEach(extensionManager.installedExtensions.indices, id: \.self) { index in
-//                        let item = extensionManager.installedExtensions[index]
-//                        HStack {
-//                            AppIcon(for: item.bundleIdentifier)
-//                                .resizable()
-//                                .frame(width: 24, height: 24)
-//                            Text(item.name)
-//                            ListItemPopover {
-//                                Text("Description")
-//                            }
-//                            Spacer(minLength: 0)
-//                            HStack(spacing: 6) {
-//                                Circle()
-//                                    .frame(width: 6, height: 6)
-//                                    .foregroundColor(
-//                                        isExtensionRunning(item.bundleIdentifier)
-//                                            ? .green : item.status == .disabled ? .gray : .red
-//                                    )
-//                                    .conditionalModifier(isExtensionRunning(item.bundleIdentifier))
-//                                { view in
-//                                    view
-//                                        .shadow(color: .green, radius: 3)
-//                                }
-//                                Text(
-//                                    isExtensionRunning(item.bundleIdentifier)
-//                                        ? "Running"
-//                                        : item.status == .disabled ? "Disabled" : "Stopped"
-//                                )
-//                                .contentTransition(.numericText())
-//                                .foregroundStyle(.secondary)
-//                                .font(.footnote)
-//                            }
-//                            .frame(width: 60, alignment: .leading)
-//
-//                            Menu(
-//                                content: {
-//                                    Button("Restart") {
-//                                        let ws = NSWorkspace.shared
-//
-//                                        if let ext = ws.runningApplications.first(where: {
-//                                            $0.bundleIdentifier == item.bundleIdentifier
-//                                        }) {
-//                                            ext.terminate()
-//                                        }
-//
-//                                        if let appURL = ws.urlForApplication(
-//                                            withBundleIdentifier: item.bundleIdentifier)
-//                                        {
-//                                            ws.openApplication(
-//                                                at: appURL, configuration: .init(),
-//                                                completionHandler: nil)
-//                                        }
-//                                    }
-//                                    .keyboardShortcut("R", modifiers: .command)
-//                                    Button("Disable") {
-//                                        if let ext = NSWorkspace.shared.runningApplications.first(
-//                                            where: { $0.bundleIdentifier == item.bundleIdentifier })
-//                                        {
-//                                            ext.terminate()
-//                                        }
-//                                        extensionManager.installedExtensions[index].status =
-//                                            .disabled
-//                                    }
-//                                    .keyboardShortcut("D", modifiers: .command)
-//                                    Divider()
-//                                    Button("Uninstall", role: .destructive) {
-//                                        //
-//                                    }
-//                                },
-//                                label: {
-//                                    Image(systemName: "ellipsis.circle")
-//                                        .foregroundStyle(.secondary)
-//                                }
-//                            )
-//                            .controlSize(.regular)
-//                        }
-//                        .buttonStyle(PlainButtonStyle())
-//                        .padding(.vertical, 5)
-//                    }
-//                }
-//                .frame(minHeight: 120)
-//                .actionBar {
-//                    Button {
-//                    } label: {
-//                        HStack(spacing: 3) {
-//                            Image(systemName: "plus")
-//                            Text("Add manually")
-//                        }
-//                        .foregroundStyle(.secondary)
-//                    }
-//                    .disabled(true)
-//                    Spacer()
-//                    Button {
-//                        withAnimation(.linear(duration: 1)) {
-//                            effectTrigger.toggle()
-//                        } completion: {
-//                            effectTrigger.toggle()
-//                        }
-//                        extensionManager.checkIfExtensionsAreInstalled()
-//                    } label: {
-//                        HStack(spacing: 3) {
-//                            Image(systemName: "arrow.triangle.2.circlepath")
-//                                .rotationEffect(effectTrigger ? .degrees(360) : .zero)
-//                        }
-//                        .foregroundStyle(.secondary)
-//                    }
-//                }
-//                .controlSize(.small)
-//                .buttonStyle(PlainButtonStyle())
-//                .overlay {
-//                    if extensionManager.installedExtensions.isEmpty {
-//                        Text("No extension installed")
-//                            .foregroundStyle(Color(.secondaryLabelColor))
-//                            .padding(.bottom, 22)
-//                    }
-//                }
-//            } header: {
-//                HStack(spacing: 0) {
-//                    Text("Installed extensions")
-//                    if !extensionManager.installedExtensions.isEmpty {
-//                        Text(" – \(extensionManager.installedExtensions.count)")
-//                            .foregroundStyle(.secondary)
-//                    }
-//                }
-//            }
-//        }
-//        .accentColor(.effectiveAccent)
-//        .navigationTitle("Extensions")
-//        // TipsView()
-//        // .padding(.horizontal, 19)
-//    }
-//}
 
 struct Appearance: View {
     @ObservedObject var coordinator = BoringViewCoordinator.shared
@@ -1568,50 +1285,6 @@ struct Advanced: View {
                 }
             } header: {
                 Text("Window Appearance")
-            }
-            
-            Section {
-                HStack {
-                    ForEach(icons, id: \.self) { icon in
-                        Spacer()
-                        VStack {
-                            Image(icon)
-                                .resizable()
-                                .frame(width: 80, height: 80)
-                                .background(
-                                    RoundedRectangle(cornerRadius: 20, style: .circular)
-                                        .strokeBorder(
-                                            icon == selectedIcon ? Color.effectiveAccent : .clear,
-                                            lineWidth: 2.5
-                                        )
-                                )
-
-                            Text("Default")
-                                .fontWeight(.medium)
-                                .font(.caption)
-                                .foregroundStyle(icon == selectedIcon ? .white : .secondary)
-                                .padding(.horizontal, 10)
-                                .padding(.vertical, 3)
-                                .background(
-                                    Capsule()
-                                        .fill(icon == selectedIcon ? Color.effectiveAccent : .clear)
-                                )
-                        }
-                        .onTapGesture {
-                            withAnimation {
-                                selectedIcon = icon
-                            }
-                            NSApp.applicationIconImage = NSImage(named: icon)
-                        }
-                        Spacer()
-                    }
-                }
-                .disabled(true)
-            } header: {
-                HStack {
-                    Text("App icon")
-                    customBadge(text: "Coming soon")
-                }
             }
             
             Section {

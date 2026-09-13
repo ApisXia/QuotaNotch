@@ -31,6 +31,7 @@ private struct FixtureSheet: View {
             row("Music reference", brand: nil, percent: nil, music: true)
             row("Claude · 58%", brand: .claude, percent: 58)
             row("Music + Claude", brand: .claude, percent: 58, music: true)
+            row("Gemini · 50%", brand: .gemini, percent: 50, music: true, numbers: true)
             row("Codex · 73%", brand: .codex, percent: 73)
             row("Music + Codex", brand: .codex, percent: 73, music: true)
             row("Empty · 0%", brand: .claude, percent: 0)

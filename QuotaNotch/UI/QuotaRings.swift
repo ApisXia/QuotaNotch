@@ -2,7 +2,7 @@
 import SwiftUI
 
 extension QuotaProvider {
-    var brand: QuotaBrand { self == .claude ? .claude : .codex }
+    var brand: QuotaBrand { self == .gemini ? .gemini : (self == .claude ? .claude : .codex) }
     var accent: Color { brand.color }
 }
 
@@ -42,7 +42,7 @@ struct QuotaNotchView: View {
     var body: some View {
         VStack(spacing: 8) {
             if store.enabled {
-                HStack(spacing: 10) {
+                HStack(spacing: 6) {
                     ForEach(QuotaProvider.allCases) { item in providerTile(item) }
                 }
                 quotaDetails
@@ -56,7 +56,7 @@ struct QuotaNotchView: View {
                     QuotaRing(provider: .codex, percent: nil)
                 }
                 Text("让额度留在刘海边上").font(.headline)
-                Text("读取这台 Mac 的 Claude / Codex 登录状态，查看剩余额度。")
+                Text("读取这台 Mac 的 Claude / Codex / Gemini CLI 登录状态，查看剩余额度。")
                     .font(.caption).foregroundStyle(.secondary).multilineTextAlignment(.center)
                 Button("启用本机用量监控") { store.setEnabled(true) }
                     .buttonStyle(.bordered)
@@ -72,7 +72,13 @@ struct QuotaNotchView: View {
     }
 
     @ViewBuilder private var quotaDetails: some View {
-        if !windows.isEmpty {
+        if !store.providerEnabled(provider) {
+            VStack(spacing: 6) {
+                Text("此服务已暂停").font(.caption).foregroundStyle(.secondary)
+                Button("启用 " + provider.title) { store.setProvider(provider, enabled: true) }
+                    .buttonStyle(.bordered).controlSize(.small)
+            }
+        } else if !windows.isEmpty {
             HStack(spacing: 8) {
                 ForEach(Array(windows[QuotaWindowPages.range(windows: windows.count, page: page)])) { window in
                     windowCard(window, stale: store.results[provider]?.failure != nil)
@@ -97,16 +103,16 @@ struct QuotaNotchView: View {
         let result = store.results[item]
         let window = result?.snapshot?.windows.first
         return Button { store.selectedProvider = item } label: {
-            HStack(spacing: 10) {
+            HStack(spacing: 6) {
                 QuotaRing(provider: item, percent: window?.remainingPercent, stale: result?.failure != nil, size: 24)
                 VStack(alignment: .leading, spacing: 3) {
-                    Text(item.title).font(.system(size: 12, weight: .semibold))
+                    Text(item.title).font(.system(size: 11, weight: .semibold)).lineLimit(1)
                     if let window {
                         Text("\(window.title)剩余\(result?.failure != nil ? " · 旧" : "")")
-                            .font(.system(size: 9)).foregroundStyle(.secondary)
+                            .font(.system(size: 9)).foregroundStyle(.secondary).lineLimit(1)
                     } else {
-                        Text(result?.failure == nil ? "读取中" : "需查看状态")
-                            .font(.system(size: 9)).foregroundStyle(.secondary)
+                        Text(!store.providerEnabled(item) ? "已暂停" : (result?.failure == nil ? "读取中" : "需查看状态"))
+                            .font(.system(size: 9)).foregroundStyle(.secondary).lineLimit(1)
                     }
                 }
                 Spacer(minLength: 0)
@@ -114,9 +120,9 @@ struct QuotaNotchView: View {
                     if let window { Text("\(window.remainingPercent, specifier: "%.0f")%") }
                     else { Text("—") }
                 }
-                .font(.system(size: 18, weight: .medium, design: .rounded)).monospacedDigit()
+                .font(.system(size: 14, weight: .medium, design: .rounded)).monospacedDigit()
             }
-            .padding(.horizontal, 10).padding(.vertical, 6)
+            .padding(.horizontal, 7).padding(.vertical, 6)
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(.white.opacity(provider == item ? 0.08 : 0.035), in: RoundedRectangle(cornerRadius: 16))
             .overlay(RoundedRectangle(cornerRadius: 16).strokeBorder(provider == item ? item.accent.opacity(0.45) : .clear, lineWidth: 1))
