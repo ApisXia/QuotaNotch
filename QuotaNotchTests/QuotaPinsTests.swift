@@ -5,50 +5,65 @@ final class QuotaPinsTests: XCTestCase {
     private let claude = QuotaPin(providerID: "claude", windowID: "five_hour")
     private let codex = QuotaPin(providerID: "codex", windowID: "secondary_window")
 
-    func testMovingAndReplacingOnlyAffectsAssignedSlots() {
-        var pins = QuotaPins()
-        pins.assign(claude, toLeft: true)
-        pins.assign(codex, toLeft: false)
-        pins.assign(claude, toLeft: false)
-        XCTAssertNil(pins.left)
-        XCTAssertEqual(pins.right, claude)
-        pins.assign(codex, toLeft: true)
-        pins.remove(claude)
-        XCTAssertEqual(pins.left, codex)
-        XCTAssertNil(pins.right)
+    func testFourTaskCombinations() {
+        let scenarios: [(QuotaPin?, Bool, QuotaPresentation)] = [
+            (nil, false, .none), (nil, true, .music),
+            (claude, false, .quota), (claude, true, .combined)
+        ]
+        for (pin, music, expected) in scenarios {
+            let pins = QuotaPins(selected: pin)
+            XCTAssertEqual(pins.presentation(enabled: true, hidden: false, transient: false, musicPlaying: music), expected)
+        }
     }
 
-    func testMusicYieldsThenRestoresPinsWithoutChangingSelection() {
-        var pins = QuotaPins()
-        pins.assign(claude, toLeft: true)
-        XCTAssertFalse(pins.shouldDisplay(enabled: true, hidden: false, transient: false, musicPlaying: true))
-        XCTAssertTrue(pins.shouldDisplay(enabled: true, hidden: false, transient: false, musicPlaying: false))
-        pins.yieldToMusic = false
-        XCTAssertTrue(pins.shouldDisplay(enabled: true, hidden: false, transient: false, musicPlaying: true))
-        XCTAssertEqual(pins.left, claude)
+    func testPausingMusicKeepsQuotaAndResumingRestoresCombined() {
+        let pins = QuotaPins(selected: codex)
+        for (playing, expected) in [(true, QuotaPresentation.combined), (false, .quota), (true, .combined)] {
+            XCTAssertEqual(pins.presentation(enabled: true, hidden: false, transient: false, musicPlaying: playing), expected)
+        }
+        XCTAssertEqual(pins.selected, codex)
     }
 
-    func testTransientSystemEventsAndHiddenNotchAlwaysWin() {
-        var pins = QuotaPins()
-        pins.assign(codex, toLeft: false)
-        pins.yieldToMusic = false
-        XCTAssertFalse(pins.shouldDisplay(enabled: true, hidden: false, transient: true, musicPlaying: false))
-        XCTAssertFalse(pins.shouldDisplay(enabled: true, hidden: true, transient: false, musicPlaying: false))
-        XCTAssertFalse(pins.shouldDisplay(enabled: false, hidden: false, transient: false, musicPlaying: false))
+    func testDisablingQuotaPreservesMusicAndChoice() {
+        let pins = QuotaPins(selected: claude)
+        XCTAssertEqual(pins.presentation(enabled: false, hidden: false, transient: false, musicPlaying: true), .music)
+        XCTAssertEqual(pins.presentation(enabled: false, hidden: false, transient: false, musicPlaying: false), .none)
+        XCTAssertEqual(pins.selected, claude)
     }
 
-    func testNoSelectionOrUnknownProviderDoesNotCreateWings() {
-        var pins = QuotaPins()
-        XCTAssertFalse(pins.shouldDisplay(enabled: true, hidden: false, transient: false, musicPlaying: false))
-        pins.left = QuotaPin(providerID: "unsupported", windowID: "unknown")
+    func testTransientAndHiddenStatesSuppressBothTasks() {
+        let pins = QuotaPins(selected: codex)
+        XCTAssertEqual(pins.presentation(enabled: true, hidden: false, transient: true, musicPlaying: true), .none)
+        XCTAssertEqual(pins.presentation(enabled: true, hidden: true, transient: false, musicPlaying: true), .none)
+        XCTAssertEqual(pins.presentation(enabled: true, hidden: false, transient: false, musicPlaying: true), .combined)
+    }
+
+    func testSelectionReplacementAndClearingPersist() throws {
+        var pins = QuotaPins(selected: claude)
+        pins.selected = codex
+        XCTAssertEqual(try JSONDecoder().decode(QuotaPins.self, from: JSONEncoder().encode(pins)).selected, codex)
+        pins.selected = nil
+        XCTAssertNil(try JSONDecoder().decode(QuotaPins.self, from: JSONEncoder().encode(pins)).selected)
+    }
+
+    func testLegacyTwoSidedSettingsPreferRightRegardlessOfMusicPreference() throws {
+        let data = Data(#"{"left":{"providerID":"claude","windowID":"five_hour"},"right":{"providerID":"codex","windowID":"secondary_window"},"yieldToMusic":true}"#.utf8)
+        let pins = try JSONDecoder().decode(QuotaPins.self, from: data)
+        XCTAssertEqual(pins.selected, codex)
+        XCTAssertEqual(pins.presentation(enabled: true, hidden: false, transient: false, musicPlaying: true), .combined)
+    }
+
+    func testLegacyLeftOnlyAndInvalidRightFallback() throws {
+        for right in ["null", #"{"providerID":"unsupported","windowID":"unknown"}"#] {
+            let data = Data("{\"left\":{\"providerID\":\"claude\",\"windowID\":\"five_hour\"},\"right\":\(right)}".utf8)
+            XCTAssertEqual(try JSONDecoder().decode(QuotaPins.self, from: data).selected, claude)
+        }
+    }
+
+    func testUnknownProviderDoesNotClaimQuotaSpace() throws {
+        let data = Data(#"{"selected":{"providerID":"unsupported","windowID":"unknown"}}"#.utf8)
+        let pins = try JSONDecoder().decode(QuotaPins.self, from: data)
         XCTAssertFalse(pins.hasPins)
-    }
-
-    func testPinsAndMusicPreferenceSurviveRestart() throws {
-        var pins = QuotaPins()
-        pins.assign(codex, toLeft: false)
-        pins.yieldToMusic = false
-        let restored = try JSONDecoder().decode(QuotaPins.self, from: JSONEncoder().encode(pins))
-        XCTAssertEqual(restored, pins)
+        XCTAssertEqual(pins.presentation(enabled: true, hidden: false, transient: false, musicPlaying: true), .music)
     }
 }

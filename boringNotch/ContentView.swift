@@ -83,13 +83,18 @@ struct ContentView: View {
         return chinWidth
     }
 
-    private var showQuotaWings: Bool {
-        vm.notchState == .closed && quotaStore.pins.shouldDisplay(
+    private var quotaPresentation: QuotaPresentation {
+        guard vm.notchState == .closed else { return .none }
+        return quotaStore.pins.presentation(
             enabled: quotaStore.enabled,
             hidden: vm.hideOnClosed || vm.effectiveClosedNotchHeight <= 0,
             transient: coordinator.expandingView.show || coordinator.sneakPeek.show || coordinator.helloAnimationRunning,
             musicPlaying: musicManager.isPlaying && coordinator.musicLiveActivityEnabled
         )
+    }
+
+    private var showQuotaWings: Bool {
+        quotaPresentation == .quota || quotaPresentation == .combined
     }
 
     var body: some View {
@@ -303,9 +308,16 @@ struct ContentView: View {
                           InlineHUD(type: $coordinator.sneakPeek.type, value: $coordinator.sneakPeek.value, icon: $coordinator.sneakPeek.icon, hoverAnimation: $isHovering, gestureProgress: $gestureProgress)
                               .transition(.opacity)
                       } else if showQuotaWings {
-                          QuotaPinnedWings(centerWidth: vm.closedNotchSize.width, height: vm.effectiveClosedNotchHeight) { provider in
+                          QuotaPinnedWings(centerWidth: vm.closedNotchSize.width,
+                                           height: vm.effectiveClosedNotchHeight,
+                                           showsMusic: quotaPresentation == .combined,
+                                           useVisualizer: useMusicVisualizer,
+                                           albumArtNamespace: albumArtNamespace) { provider in
                               quotaStore.selectedProvider = provider
                               coordinator.currentView = .aiUsage
+                              doOpen()
+                          } onMusic: {
+                              coordinator.currentView = .home
                               doOpen()
                           }
                           .transition(.opacity)

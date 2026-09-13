@@ -8,24 +8,40 @@ struct QuotaPin: Codable, Equatable, Sendable {
 }
 
 struct QuotaPins: Codable, Equatable, Sendable {
-    var left: QuotaPin?
-    var right: QuotaPin?
-    var yieldToMusic = true
-    var hasPins: Bool { left?.provider != nil || right?.provider != nil }
+    var selected: QuotaPin?
+    var hasPins: Bool { selected?.provider != nil }
 
-    mutating func assign(_ pin: QuotaPin, toLeft: Bool) {
-        // Moving a window never leaves the same window on both sides.
-        if left == pin { left = nil }
-        if right == pin { right = nil }
-        if toLeft { left = pin } else { right = pin }
+    init(selected: QuotaPin? = nil) { self.selected = selected }
+
+    private enum CodingKeys: String, CodingKey { case selected, left, right }
+
+    init(from decoder: Decoder) throws {
+        let values = try decoder.container(keyedBy: CodingKeys.self)
+        if values.contains(.selected) {
+            selected = try values.decodeIfPresent(QuotaPin.self, forKey: .selected)
+        } else {
+            // Preserve one existing choice during upgrade: right, then left.
+            let right = try values.decodeIfPresent(QuotaPin.self, forKey: .right)
+            let left = try values.decodeIfPresent(QuotaPin.self, forKey: .left)
+            selected = right?.provider != nil ? right : left
+        }
+        if selected?.provider == nil { selected = nil }
     }
 
-    mutating func remove(_ pin: QuotaPin) {
-        if left == pin { left = nil }
-        if right == pin { right = nil }
+    func encode(to encoder: Encoder) throws {
+        var values = encoder.container(keyedBy: CodingKeys.self)
+        try values.encode(selected, forKey: .selected)
     }
 
-    func shouldDisplay(enabled: Bool, hidden: Bool, transient: Bool, musicPlaying: Bool) -> Bool {
-        enabled && hasPins && !hidden && !transient && !(yieldToMusic && musicPlaying)
+    func presentation(enabled: Bool, hidden: Bool, transient: Bool, musicPlaying: Bool) -> QuotaPresentation {
+        guard !hidden && !transient else { return .none }
+        switch (enabled && hasPins, musicPlaying) {
+        case (true, true): return .combined
+        case (true, false): return .quota
+        case (false, true): return .music
+        case (false, false): return .none
+        }
     }
 }
+
+enum QuotaPresentation: Equatable { case none, music, quota, combined }

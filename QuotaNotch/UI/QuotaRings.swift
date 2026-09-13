@@ -72,11 +72,12 @@ struct QuotaNotchView: View {
                         } else {
                             ProgressView("正在读取…").controlSize(.small)
                         }
-                        pinSettings
                     }
                     .padding(.bottom, 4)
                 }
                 .scrollIndicators(.hidden)
+                pinSettings
+                    .fixedSize(horizontal: false, vertical: true)
             } else {
                 Spacer(minLength: 0)
                 HStack(spacing: 20) {
@@ -129,7 +130,7 @@ struct QuotaNotchView: View {
 
     private func windowCard(_ window: QuotaWindow, stale: Bool) -> some View {
         let pin = QuotaPin(providerID: provider.rawValue, windowID: window.id)
-        let position = store.pins.left == pin ? "左侧" : (store.pins.right == pin ? "右侧" : "固定")
+        let isPinned = store.pins.selected == pin
         return HStack(spacing: 12) {
             QuotaRing(provider: provider, percent: window.remainingPercent, stale: stale, size: 32)
             VStack(alignment: .leading, spacing: 4) {
@@ -149,91 +150,189 @@ struct QuotaNotchView: View {
                 .font(.system(size: 10)).foregroundStyle(.secondary)
             }
             Spacer(minLength: 0)
-            Menu {
-                Button("固定到左侧") { store.updatePins { $0.assign(pin, toLeft: true) } }
-                Button("固定到右侧") { store.updatePins { $0.assign(pin, toLeft: false) } }
-                if store.pins.left == pin || store.pins.right == pin {
-                    Button("取消固定") { store.updatePins { $0.remove(pin) } }
-                }
+            Button {
+                store.updatePins { $0.selected = isPinned ? nil : pin }
             } label: {
-                Label(position, systemImage: "pin.fill").font(.system(size: 10, weight: .medium))
+                Image(systemName: isPinned ? "pin.fill" : "pin")
+                    .foregroundStyle(isPinned ? provider.accent : .gray)
             }
-            .menuStyle(.borderlessButton).fixedSize()
-            .accessibilityLabel("\(provider.title) \(window.title)，\(position)")
+            .buttonStyle(.plain)
+            .help(isPinned ? "取消固定" : "固定此窗口（替换当前选择）")
+            .accessibilityLabel("\(provider.title) \(window.title)，\(isPinned ? "取消固定" : "固定")")
         }
         .padding(10)
         .background(.white.opacity(0.045), in: RoundedRectangle(cornerRadius: 12))
     }
 
+    private var pinnedTitle: String {
+        guard let pin = store.pins.selected, let provider = pin.provider else { return "选择固定额度" }
+        return "\(provider.title) · \(store.window(for: pin)?.title ?? "已固定窗口")"
+    }
+
+    /// Outside ScrollView: controls stay in one stationary row.
     private var pinSettings: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack {
-                Text("刘海固定").font(.system(size: 11, weight: .semibold))
-                Spacer()
-                Button { Task { await store.refresh() } } label: { Image(systemName: "arrow.clockwise") }
-                    .disabled(store.refreshing).help("刷新（遵守查询冷却）").accessibilityLabel("刷新额度")
-                Button { store.setEnabled(false) } label: { Image(systemName: "pause.circle") }
-                    .help("暂停监控").accessibilityLabel("暂停监控")
+        HStack(spacing: 14) {
+            Menu {
+                Button("不固定") { store.updatePins { $0.selected = nil } }
+                Divider()
+                ForEach(QuotaProvider.allCases) { item in
+                    Section(item.title) {
+                        ForEach(store.results[item]?.snapshot?.windows ?? []) { window in
+                            let pin = QuotaPin(providerID: item.rawValue, windowID: window.id)
+                            Button {
+                                store.updatePins { $0.selected = pin }
+                            } label: {
+                                if store.pins.selected == pin {
+                                    Label(window.title, systemImage: "checkmark")
+                                } else { Text(window.title) }
+                            }
+                        }
+                    }
+                }
+            } label: {
+                Label(pinnedTitle, systemImage: "pin.fill")
+                    .font(.system(size: 11, weight: .medium))
+                    .lineLimit(1).truncationMode(.tail)
             }
-            Text("左右各一个窗口；固定新窗口会替换该侧显示。")
-                .font(.system(size: 10)).foregroundStyle(.secondary)
-            Toggle("音乐播放时暂让位", isOn: Binding(
-                get: { store.pins.yieldToMusic },
-                set: { value in store.updatePins { $0.yieldToMusic = value } }
-            ))
-            .toggleStyle(.switch).controlSize(.mini).font(.system(size: 11))
-            if store.pins.hasPins {
-                Button("清除两侧固定") { store.updatePins { $0.left = nil; $0.right = nil } }
-                    .font(.system(size: 10)).foregroundStyle(.secondary)
+            .menuStyle(.borderlessButton)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .help("固定一个额度窗口，与音乐共享刘海")
+            Button { Task { await store.refresh() } } label: {
+                Label("刷新", systemImage: "arrow.clockwise")
             }
+            .disabled(store.refreshing).help("刷新（遵守查询冷却）")
+            .fixedSize()
+            Button { store.setEnabled(false) } label: {
+                Label("暂停", systemImage: "pause")
+            }
+            .help("暂停用量监控")
+            .fixedSize()
         }
+        .font(.system(size: 11))
         .buttonStyle(.plain)
-        .padding(.top, 4)
+        .padding(.horizontal, 12).padding(.vertical, 10)
+        .background(.white.opacity(0.055), in: RoundedRectangle(cornerRadius: 10))
     }
 }
 
-/// Equal-width wings keep the physical camera cutout centered even with a single pin.
+/// One selection shares the physical cutout with music. Equal wings keep it centered.
 @MainActor
 struct QuotaPinnedWings: View {
     @ObservedObject private var store = QuotaNotchStore.shared
+    @ObservedObject private var music = MusicManager.shared
     let centerWidth: CGFloat
     let height: CGFloat
+    let showsMusic: Bool
+    let useVisualizer: Bool
+    let albumArtNamespace: Namespace.ID
     let onSelect: (QuotaProvider) -> Void
-    static let wingWidth: CGFloat = 62
+    let onMusic: () -> Void
+    static let wingWidth: CGFloat = 88
+
+    private var iconSize: CGFloat { min(26, max(12, height - 10)) }
 
     var body: some View {
-        HStack(spacing: 0) {
-            wing(store.pins.left)
-            Color.clear.frame(width: centerWidth, height: height)
-            wing(store.pins.right)
+        if let pin = store.pins.selected, let provider = pin.provider {
+            HStack(spacing: 0) {
+                Button {
+                    if showsMusic { onMusic() } else { onSelect(provider) }
+                } label: {
+                    Group {
+                        if showsMusic { albumWithActivity }
+                        else {
+                            Image(systemName: provider.symbol)
+                                .font(.system(size: 19, weight: .medium))
+                                .foregroundStyle(provider.accent)
+                                .frame(width: iconSize, height: iconSize)
+                        }
+                    }
+                    .frame(width: Self.wingWidth, height: height)
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .help(showsMusic ? "打开音乐" : "\(provider.title) · 打开额度")
+                .accessibilityLabel(showsMusic ? "打开音乐" : "打开\(provider.title)额度")
+
+                Color.clear.frame(width: centerWidth, height: height)
+
+                Button { onSelect(provider) } label: {
+                    quotaIndicator(pin, provider: provider)
+                        .frame(width: Self.wingWidth, height: height)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .help("\(provider.title) · \(store.window(for: pin)?.title ?? "等待额度") · 点击查看")
+                .accessibilityLabel("\(provider.title) \(store.window(for: pin)?.title ?? "额度")")
+                .accessibilityValue(reading(for: pin))
+            }
+            .frame(height: height)
+            .animation(.smooth(duration: 0.25), value: showsMusic)
         }
-        .frame(height: height)
     }
 
-    @ViewBuilder private func wing(_ pin: QuotaPin?) -> some View {
-        if let pin, let provider = pin.provider {
-            let window = store.window(for: pin)
-            let failed = store.results[provider]?.failure != nil
-            Button { onSelect(provider) } label: {
-                HStack(spacing: 5) {
-                    QuotaRing(provider: provider, percent: window?.remainingPercent, stale: failed,
-                              size: min(24, max(12, height - 8)))
-                    VStack(spacing: 0) {
-                        if let window {
-                            Text("\(window.remainingPercent, specifier: "%.0f")%")
-                                .font(.system(size: 10, weight: .semibold, design: .rounded)).monospacedDigit()
-                        } else { Text("—").font(.system(size: 11)) }
-                        if failed { Text(window == nil ? "!" : "旧").font(.system(size: 7)).foregroundStyle(.orange) }
+    private var albumWithActivity: some View {
+        Image(nsImage: music.albumArt)
+            .resizable().scaledToFill()
+            .frame(width: iconSize, height: iconSize)
+            .clipShape(RoundedRectangle(cornerRadius: 6))
+            .matchedGeometryEffect(id: "albumArt", in: albumArtNamespace)
+            .overlay(alignment: .bottomTrailing) {
+                Group {
+                    if useVisualizer {
+                        AudioSpectrumView(isPlaying: $music.isPlaying)
+                    } else {
+                        LottieAnimationContainer()
                     }
                 }
-                .frame(width: Self.wingWidth, height: height)
-                .contentShape(Rectangle())
+                .foregroundStyle(.white)
+                .frame(width: 12, height: 8)
+                .padding(2)
+                .background(.black.opacity(0.78), in: RoundedRectangle(cornerRadius: 3))
+                .offset(x: 3, y: 2)
+                .allowsHitTesting(false)
+                .accessibilityHidden(true)
             }
-            .buttonStyle(.plain)
-            .help("\(provider.title) · \(window?.title ?? "等待额度")\(failed ? " · 状态异常，点击查看" : " · 点击查看")")
-            .accessibilityLabel("\(provider.title) \(window?.title ?? "额度未知")\(failed ? "，数据异常" : "")")
-        } else {
-            Color.clear.frame(width: Self.wingWidth, height: height)
+    }
+
+    private func reading(for pin: QuotaPin) -> String {
+        guard let window = store.window(for: pin) else { return "额度未知" }
+        let stale = pin.provider.flatMap { store.results[$0]?.failure } != nil
+        return "剩余 \(Int(window.remainingPercent.rounded()))%\(stale ? "，旧数据" : "")"
+    }
+
+    private func quotaIndicator(_ pin: QuotaPin, provider: QuotaProvider) -> some View {
+        let window = store.window(for: pin)
+        let failed = store.results[provider]?.failure != nil
+        let color: Color = failed ? .gray : provider.accent
+        return HStack(spacing: 5) {
+            if showsMusic {
+                Image(systemName: provider.symbol)
+                    .font(.system(size: 9, weight: .medium))
+                    .foregroundStyle(color)
+            }
+            Capsule()
+                .fill(.white.opacity(0.14))
+                .frame(width: showsMusic ? 25 : 34, height: 4)
+                .overlay(alignment: .leading) {
+                    if let window {
+                        Capsule().fill(color)
+                            .frame(width: (showsMusic ? 25 : 34) * window.remainingPercent / 100, height: 4)
+                    }
+                }
+                .animation(.easeInOut(duration: 0.3), value: window?.remainingPercent)
+            VStack(spacing: 0) {
+                if let window {
+                    Text("\(window.remainingPercent, specifier: "%.0f")%")
+                        .font(.system(size: 10, weight: .semibold, design: .rounded))
+                        .monospacedDigit()
+                } else { Text("—").font(.system(size: 11)) }
+                if failed {
+                    Text(window == nil ? "!" : "旧")
+                        .font(.system(size: 7)).foregroundStyle(.orange)
+                }
+            }
+            .foregroundStyle(failed ? .gray : .white)
         }
+        .accessibilityHidden(true)
     }
 }
