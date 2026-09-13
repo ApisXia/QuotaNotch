@@ -280,6 +280,9 @@ struct QuotaPinnedWings: View {
                 Group {
                     if useVisualizer {
                         AudioSpectrumView(isPlaying: $music.isPlaying)
+                            .frame(width: 16, height: 14)
+                            .scaleEffect(0.55)
+                            .frame(width: 12, height: 8)
                     } else {
                         LottieAnimationContainer()
                     }
