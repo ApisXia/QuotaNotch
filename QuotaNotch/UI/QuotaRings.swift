@@ -40,7 +40,7 @@ struct QuotaNotchView: View {
     private var pageCount: Int { QuotaWindowPages.count(windows: windows.count) }
 
     var body: some View {
-        VStack(spacing: 8) {
+        VStack(spacing: 6) {
             if store.enabled && store.visibleProviders.isEmpty {
                 Spacer(minLength: 0)
                 Text("所有 AI 服务已暂停").font(.headline)
@@ -52,7 +52,7 @@ struct QuotaNotchView: View {
                     ForEach(store.visibleProviders) { item in providerTile(item) }
                     Spacer(minLength: 0)
                 }
-                .padding(3)
+                .padding(2)
                 .background(.white.opacity(0.035), in: RoundedRectangle(cornerRadius: 9))
                 quotaDetails
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
@@ -198,7 +198,7 @@ struct QuotaNotchView: View {
         }
         .font(.system(size: 11))
         .buttonStyle(.plain)
-        .padding(.horizontal, 10).padding(.vertical, 8)
+        .padding(.horizontal, 10).padding(.vertical, 6)
         .background(.white.opacity(0.055), in: RoundedRectangle(cornerRadius: 10))
     }
 }

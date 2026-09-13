@@ -24,12 +24,12 @@ private struct UsageSheet: View {
         VStack(alignment: .leading, spacing: 16) {
             Text("QuotaNotch").font(.system(size: 22, weight: .semibold))
             Text("AI 额度").font(.headline)
-            VStack(spacing: 8) {
+            VStack(spacing: 6) {
                 HStack(spacing: 2) {
                     QuotaProviderTab(title: "Claude", brand: .claude, selected: true)
                     QuotaProviderTab(title: "Codex", brand: .codex, selected: false)
                     Spacer()
-                }.padding(3).background(.white.opacity(0.035), in: RoundedRectangle(cornerRadius: 9))
+                }.padding(2).background(.white.opacity(0.035), in: RoundedRectangle(cornerRadius: 9))
                 HStack(spacing: 8) {
                     QuotaWindowTile(title: QuotaText.localized("5 小时"), percent: 58,
                                     reset: Date(timeIntervalSince1970: 1789416000), accent: QuotaBrand.claude.color, pinned: true)
@@ -47,9 +47,10 @@ private struct UsageSheet: View {
                     Label("暂停", systemImage: "pause").fixedSize()
                 }
                 .font(.system(size: 11))
-                .padding(.horizontal, 10).padding(.vertical, 8)
+                .padding(.horizontal, 10).padding(.vertical, 6)
                 .background(.white.opacity(0.055), in: RoundedRectangle(cornerRadius: 10))
             }
+            .frame(height: 126)
             .padding(8).background(.black, in: RoundedRectangle(cornerRadius: 16))
             HStack {
                 Label("主页", systemImage: "house.fill")

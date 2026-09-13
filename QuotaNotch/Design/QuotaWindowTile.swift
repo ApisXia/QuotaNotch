@@ -18,6 +18,7 @@ struct QuotaWindowTile: View {
                 Spacer(minLength: 4)
                 Button(action: onPin) {
                     Image(systemName: pinned ? "pin.fill" : "pin")
+                        .font(.system(size: 11))
                         .foregroundStyle(pinned ? accent : .gray)
                 }
                 .buttonStyle(.plain)
@@ -47,7 +48,7 @@ struct QuotaWindowTile: View {
             }
             .font(.system(size: 9)).foregroundStyle(.secondary).lineLimit(1).minimumScaleFactor(0.8)
         }
-        .padding(.horizontal, 10).padding(.vertical, 4)
+        .padding(.horizontal, 10).padding(.vertical, 3)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(.white.opacity(0.04), in: RoundedRectangle(cornerRadius: 10))
     }
@@ -64,7 +65,7 @@ struct QuotaProviderTab: View {
                 QuotaBrandMark(brand: brand).frame(width: 13, height: 13)
                 Text(title).font(.system(size: 11, weight: selected ? .semibold : .medium))
             }
-            .padding(.horizontal, 11).padding(.vertical, 4)
+            .padding(.horizontal, 11).padding(.vertical, 3)
             .foregroundStyle(selected ? .white : .gray)
             .background(selected ? .white.opacity(0.13) : .clear,
                         in: RoundedRectangle(cornerRadius: 7))
