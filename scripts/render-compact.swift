@@ -51,6 +51,7 @@ private struct FixtureSheet: View {
         }
         .padding(28)
         .frame(width: 620)
+        .foregroundStyle(.white)
         .background(Color(red: 0.12, green: 0.13, blue: 0.16))
     }
 
