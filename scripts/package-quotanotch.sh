@@ -7,15 +7,7 @@ staging='build/QuotaNotch-dmg'
 test -d "$app"
 mkdir -p "$dist" "$staging"
 # Ad-hoc sign embedded code from the inside out. This is NOT notarization.
-while IFS= read -r -d '' binary; do
-  if file "$binary" | grep -q 'Mach-O'; then
-    codesign --force --sign - --timestamp=none "$binary"
-  fi
-done < <(find "$app/Contents" -type f -print0)
-while IFS= read -r -d '' bundle; do
-  codesign --force --sign - --timestamp=none "$bundle"
-done < <(find "$app/Contents" -depth -type d \( -name '*.framework' -o -name '*.xpc' -o -name '*.app' \) -print0)
-codesign --force --sign - --timestamp=none "$app"
+python3 scripts/sign-quotanotch.py "$app"
 codesign --verify --deep --strict --verbose=2 "$app"
 test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$app/Contents/Info.plist")" = 'com.apisxia.quotanotch'
 test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleDisplayName' "$app/Contents/Info.plist")" = 'QuotaNotch'

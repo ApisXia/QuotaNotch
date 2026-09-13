@@ -6,6 +6,8 @@ Home/Shelf、动画与交互，新增 AI 标签。不是独立菜单栏额度面
 
 ## 安装与使用
 
+系统要求：macOS 15 或更新版本（内嵌 MediaRemoteAdapter 二进制要求 macOS 15）。
+
 1. GitHub 仓库 Actions → **QuotaNotch macOS app** → 成功的运行 → 下载 artifact。
    解压后打开 `QuotaNotch.dmg`，把 QuotaNotch 拖入 Applications；也可使用 app.zip。
 2. 退出正在运行的 Boring Notch，再启动 QuotaNotch。两者能分别安装，但不要同时
@@ -53,13 +55,14 @@ Home/Shelf、动画与交互，新增 AI 标签。不是独立菜单栏额度面
 打包 DMG / ZIP，附同一提交的完整源码和 SHA-256 校验值。它不需要 Apple 证书 secrets，
 不推送上游，不发布 Release，不改变仓库权限。GitHub runner 配额/Actions 权限仍需可用。
 
-工作流已写入，但是否成功以实际 Actions 结果为准；本次 Linux 开发环境没有
-Xcode/Swift，尚未运行 Swift 测试、macOS 编译、签名验证或真实刘海交互验证。
-DMG 只有工作流通过后才会产生，源码压缩包不是安装程序。
+GitHub macOS CI 已通过全部 14 个 fixtures 测试及 Intel/Apple Silicon 通用 App 编译。
+首次运行在打包签名顺序处失败，本版已修复。安装包是否成功以实际 Actions 结果为准。
+Linux workspace 本身不运行 Xcode；真实刘海交互和真实账户仍需 Mac 实机验证。
+DMG 只有完整工作流通过后才会产生，源码压缩包不是安装程序。
 
-如当前连接器无法创建 fork：在 GitHub 网页 fork Boring Notch 到自己的账户，名称可填
-QuotaNotch，向 ChatGPT GitHub 连接授权该仓库，并提供链接。随后可在云端继续推送功能分支。
-首次 fork 的 GitHub Actions 可能需要在 Actions 页手动启用。
+仓库：https://github.com/ApisXia/QuotaNotch
+功能分支：`feature/quotanotch-ai-usage`；PR：https://github.com/ApisXia/QuotaNotch/pull/1
+GitHub 端仓库安装授权已完成，代码通过云端连接器提交；PR 按原项目规则指向 `dev`。
 
 ## 验收清单（需 Mac）
 

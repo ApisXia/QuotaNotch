@@ -6,7 +6,8 @@ Independent app identity: `com.apisxia.quotanotch`. Original upstream updates ar
 **[中文安装、登录与云端构建说明](docs/QuotaNotch-zh.md)** ·
 [macOS build workflow](.github/workflows/quotanotch.yml)
 
-Status: source implementation; macOS build and real-device validation pending.
+Status: all 14 fixture tests and universal macOS compilation passed in CI;
+installer packaging is being validated. Real-device validation remains pending.
 Run the **QuotaNotch macOS app** workflow in your fork to produce DMG/app ZIP plus matching source.
 Fixtures are used only by tests. No tokens, costs or credits totals are inferred.
 
@@ -210,4 +211,3 @@ For a full list of licenses and attributions, please see the [Third-Party Licens
 
 - **SwiftUI**: For making us look like coding wizards.
 - **You**: For being awesome and checking out **boring.notch**!
-

@@ -13,6 +13,7 @@ on:
       - 'boringNotch.xcodeproj/**'
       - 'Package.swift'
       - 'scripts/package-quotanotch.sh'
+      - 'scripts/sign-quotanotch.py'
       - '.github/workflows/quotanotch.yml'
 
 permissions:
