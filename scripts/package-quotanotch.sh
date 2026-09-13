@@ -15,7 +15,7 @@ if /usr/libexec/PlistBuddy -c 'Print :SUFeedURL' "$app/Contents/Info.plist" 2>/d
   echo 'Unexpected upstream update feed' >&2
   exit 1
 fi
-lipo -verify_arch arm64 x86_64 "$app/Contents/MacOS/QuotaNotch"
+lipo "$app/Contents/MacOS/QuotaNotch" -verify_arch arm64 x86_64
 ditto -c -k --sequesterRsrc --keepParent "$app" "$dist/QuotaNotch.app.zip"
 ditto "$app" "$staging/QuotaNotch.app"
 ln -s /Applications "$staging/Applications"
