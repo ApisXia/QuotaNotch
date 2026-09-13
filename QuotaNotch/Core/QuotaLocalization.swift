@@ -13,6 +13,9 @@ enum QuotaText {
 enum QuotaLanguage: String, CaseIterable {
     case system, english = "en", chinese = "zh-Hans"
     static let atLaunch = stored()
+    static var locale: Locale {
+        atLaunch == .system ? .autoupdatingCurrent : Locale(identifier: atLaunch.rawValue)
+    }
     var appleLanguages: [String]? {
         switch self {
         case .system: return nil

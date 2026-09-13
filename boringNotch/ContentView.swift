@@ -188,6 +188,7 @@ struct ContentView: View {
         )
         .animation(.smooth, value: gestureProgress)
         .preferredColorScheme(.dark)
+        .environment(\.locale, QuotaLanguage.locale)
         .environmentObject(vm)
         .task { quotaStore.start() }
         .onChange(of: coordinator.currentView) { _, _ in gestureProgress = .zero }
