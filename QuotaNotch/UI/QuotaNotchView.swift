@@ -15,6 +15,8 @@ final class QuotaNotchStore: ObservableObject {
     }()
     @Published private var disabledProviders = Set(UserDefaults.standard.stringArray(forKey: "quotaNotchDisabledProviders") ?? ["gemini"])
 
+    var visibleProviders: [QuotaProvider] { QuotaProviderVisibility.visible(disabled: disabledProviders) }
+
     func providerEnabled(_ provider: QuotaProvider) -> Bool { !disabledProviders.contains(provider.rawValue) }
 
     func setProvider(_ provider: QuotaProvider, enabled: Bool) {
@@ -23,6 +25,9 @@ final class QuotaNotchStore: ObservableObject {
             disabledProviders.insert(provider.rawValue)
             results[provider] = nil
             if pins.selected?.provider == provider { updatePins { $0.selected = nil } }
+        }
+        if let selection = QuotaProviderVisibility.selection(selectedProvider, disabled: disabledProviders) {
+            selectedProvider = selection
         }
         UserDefaults.standard.set(Array(disabledProviders), forKey: "quotaNotchDisabledProviders")
         if enabled { Task { await refresh() } }
@@ -57,6 +62,9 @@ final class QuotaNotchStore: ObservableObject {
     }
 
     func start() {
+        if let selection = QuotaProviderVisibility.selection(selectedProvider, disabled: disabledProviders) {
+            selectedProvider = selection
+        }
         guard enabled, polling == nil else { return }
         polling = Task { [weak self] in
             while !Task.isCancelled {

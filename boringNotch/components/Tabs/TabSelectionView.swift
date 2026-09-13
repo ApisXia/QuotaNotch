@@ -16,7 +16,7 @@ struct TabModel: Identifiable {
 }
 
 let tabs = [
-    TabModel(label: "音乐", icon: "music.note", view: .home),
+    TabModel(label: "主页", icon: "house.fill", view: .home),
     TabModel(label: "AI 用量", icon: "chart.bar.fill", view: .aiUsage)
 ]
 
@@ -26,14 +26,14 @@ struct TabSelectionView: View {
     var body: some View {
         HStack(spacing: 0) {
             ForEach(tabs) { tab in
-                    TabButton(label: tab.label, icon: tab.icon, selected: coordinator.currentView == tab.view) {
+                    TabButton(label: QuotaText.localized(tab.label), icon: tab.icon, selected: coordinator.currentView == tab.view) {
                         withAnimation(.smooth) {
                             coordinator.currentView = tab.view
                         }
                     }
                     .frame(height: 26)
-                    .help(tab.label)
-                    .accessibilityLabel(tab.label)
+                    .help(QuotaText.localized(tab.label))
+                    .accessibilityLabel(QuotaText.localized(tab.label))
                     .foregroundStyle(tab.view == coordinator.currentView ? .white : .gray)
                     .background {
                         if tab.view == coordinator.currentView {

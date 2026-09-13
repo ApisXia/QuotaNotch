@@ -45,7 +45,7 @@ jobs:
       - name: Render native compact UX fixtures
         run: |
           mkdir -p build/QuotaNotch-dist
-          swiftc -target "$(uname -m)-apple-macos15.0" -parse-as-library QuotaNotch/Design/*.swift QuotaNotch/Core/QuotaCompactMetrics.swift scripts/render-compact.swift -o build/render-compact
+          swiftc -target "$(uname -m)-apple-macos15.0" -parse-as-library QuotaNotch/Design/*.swift QuotaNotch/Core/QuotaCompactMetrics.swift QuotaNotch/Core/QuotaLocalization.swift QuotaNotch/Core/QuotaModels.swift scripts/render-compact.swift -o build/render-compact
           build/render-compact
       - name: Upload native UX preview
         uses: actions/upload-artifact@v4
@@ -63,6 +63,10 @@ jobs:
             ARCHS='arm64 x86_64' ONLY_ACTIVE_ARCH=NO \
             CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO \
             DEVELOPMENT_TEAM='' CODE_SIGN_IDENTITY=''
+      - name: Verify compiled English and Chinese translations
+        run: python3 scripts/verify-localization.py build/DerivedData/Build/Products/Release/QuotaNotch.app
+      - name: Render English and Chinese usage layouts
+        run: bash scripts/render-localized-usage.sh
       - name: Package app and corresponding source
         run: bash scripts/package-quotanotch.sh
       - name: Upload installable app, source and checksums

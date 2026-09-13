@@ -18,6 +18,14 @@ struct QuotaWindow: Sendable, Equatable, Identifiable {
     let title: String
     let remainingPercent: Double
     let resetsAt: Date?
+    var localizedTitle: String {
+        for suffix in [" 小时", " 天"] where title.hasSuffix(suffix) {
+            let prefix = String(title.dropLast(suffix.count))
+            if Double(prefix) != nil { return QuotaText.format("%@" + suffix, prefix) }
+        }
+        return QuotaText.localized(title)
+    }
+
 }
 
 struct QuotaSnapshot: Sendable, Equatable {
@@ -32,13 +40,13 @@ enum QuotaFailure: Error, Sendable, Equatable {
 
     var message: String {
         switch self {
-        case .notSignedIn: return "未找到本机 CLI 登录凭据"
-        case .expired: return "登录已过期或没有用量读取权限，请重新登录"
-        case .credentialsUnavailable: return "无法读取本机凭据，请检查文件或钥匙串权限"
-        case .network: return "网络连接失败，稍后可重试"
-        case .invalidResponse: return "用量接口没有返回可识别的数据"
-        case .http(let code): return "用量服务暂不可用（HTTP \(code)）"
-        case .rateLimited: return "服务端限流，等待重试时间"
+        case .notSignedIn: return QuotaText.localized("未找到本机 CLI 登录凭据")
+        case .expired: return QuotaText.localized("登录已过期或没有用量读取权限，请重新登录")
+        case .credentialsUnavailable: return QuotaText.localized("无法读取本机凭据，请检查文件或钥匙串权限")
+        case .network: return QuotaText.localized("网络连接失败，稍后可重试")
+        case .invalidResponse: return QuotaText.localized("用量接口没有返回可识别的数据")
+        case .http(let code): return QuotaText.format("用量服务暂不可用（HTTP %d）", code)
+        case .rateLimited: return QuotaText.localized("服务端限流，等待重试时间")
         }
     }
 }

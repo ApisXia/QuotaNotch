@@ -29,6 +29,7 @@ struct SettingsView: View {
             List(selection: $selectedTab) {
                 NavigationLink(value: "General") { Label("通用", systemImage: "gearshape") }
                 NavigationLink(value: "Quota") { Label("AI 额度", systemImage: "chart.pie") }
+                NavigationLink(value: "Calendar") { Label("日历", systemImage: "calendar") }
                 NavigationLink(value: "Media") { Label("音乐", systemImage: "music.note") }
                 NavigationLink(value: "Appearance") { Label("外观与提示", systemImage: "circle.lefthalf.filled") }
                 NavigationLink(value: "About") { Label("关于", systemImage: "info.circle") }
@@ -44,6 +45,8 @@ struct SettingsView: View {
                     GeneralSettings()
                 case "Appearance":
                     QuotaAppearancePreferences()
+                case "Calendar":
+                    CalendarSettings()
                 case "Media":
                     Media()
                 case "Quota":
@@ -85,6 +88,8 @@ struct SettingsView: View {
 }
 
 struct GeneralSettings: View {
+    @State private var language = QuotaLanguage.stored()
+    private let startingLanguage = QuotaLanguage.atLaunch
     @State private var screens: [(uuid: String, name: String)] = NSScreen.screens.compactMap { screen in
         guard let uuid = screen.displayUUID else { return nil }
         return (uuid, screen.localizedName)
@@ -108,6 +113,20 @@ struct GeneralSettings: View {
 
     var body: some View {
         Form {
+            Section("语言 / Language") {
+                Picker("应用语言", selection: $language) {
+                    Text("跟随系统").tag(QuotaLanguage.system)
+                    Text(verbatim: "简体中文").tag(QuotaLanguage.chinese)
+                    Text(verbatim: "English").tag(QuotaLanguage.english)
+                }
+                .onChange(of: language) { _, value in value.save() }
+                if language != startingLanguage {
+                    Text("重启后应用新语言，账户和固定设置会保留。")
+                        .font(.caption).foregroundStyle(.secondary)
+                    Button("重启并应用 / Restart to apply") { ApplicationRelauncher.restart() }
+                }
+            }
+
             Section {
                 Toggle(isOn: Binding(
                     get: { Defaults[.menubarIcon] },

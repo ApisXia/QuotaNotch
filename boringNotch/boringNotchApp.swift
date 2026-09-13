@@ -21,6 +21,7 @@ struct DynamicNotchApp: App {
     let updaterController: SPUStandardUpdaterController
 
     init() {
+        _ = QuotaLanguage.atLaunch
         updaterController = SPUStandardUpdaterController(
             startingUpdater: false, updaterDelegate: nil, userDriverDelegate: nil)
 
@@ -36,7 +37,7 @@ struct DynamicNotchApp: App {
                 }
             }
             .keyboardShortcut(KeyEquivalent(","), modifiers: .command)
-            Text("QuotaNotch · Claude / Codex")
+            Text("QuotaNotch · Claude / Codex / Gemini")
             Divider()
             Button("Restart QuotaNotch") {
                 ApplicationRelauncher.restart()

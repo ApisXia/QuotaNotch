@@ -23,10 +23,10 @@ struct QuotaPreferences: View {
                             }
                         }
                         if store.providerEnabled(provider) {
-                            Text(store.results[provider]?.failure?.message ??
-                                 (store.results[provider]?.snapshot == nil ? "等待查询" : "已连接"))
+                            Text(LocalizedStringKey(store.results[provider]?.failure?.message ??
+                                 (store.results[provider]?.snapshot == nil ? "等待查询" : "已连接")))
                                 .font(.caption).foregroundStyle(.secondary)
-                            Text(provider.loginHint).font(.caption).foregroundStyle(.secondary)
+                            Text(LocalizedStringKey(provider.loginHint)).font(.caption).foregroundStyle(.secondary)
                         }
                     }.padding(.vertical, 3)
                 }
