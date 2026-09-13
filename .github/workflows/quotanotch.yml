@@ -14,6 +14,7 @@ on:
       - 'Package.swift'
       - 'scripts/package-quotanotch.sh'
       - 'scripts/sign-quotanotch.py'
+      - 'scripts/render-compact.swift'
       - '.github/workflows/quotanotch.yml'
 
 permissions:
@@ -41,6 +42,16 @@ jobs:
           git rev-parse HEAD
       - name: Fixture tests (no user accounts or credentials)
         run: swift test --parallel
+      - name: Render native compact UX fixtures
+        run: |
+          mkdir -p build/QuotaNotch-dist
+          swiftc -target "$(uname -m)-apple-macos15.0" -parse-as-library QuotaNotch/Design/CompactQuotaDesign.swift QuotaNotch/Core/QuotaCompactMetrics.swift scripts/render-compact.swift -o build/render-compact
+          build/render-compact
+      - name: Upload native UX preview
+        uses: actions/upload-artifact@v4
+        with:
+          name: Compact-UX-${{ github.sha }}
+          path: build/QuotaNotch-dist/Compact-UX.png
       - name: Resolve app dependencies
         run: xcodebuild -resolvePackageDependencies -project boringNotch.xcodeproj -scheme boringNotch
       - name: Build universal app

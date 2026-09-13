@@ -2,8 +2,8 @@
 import SwiftUI
 
 extension QuotaProvider {
-    var accent: Color { self == .claude ? Color(red: 0.91, green: 0.60, blue: 0.43) : Color(red: 0.48, green: 0.81, blue: 0.70) }
-    var symbol: String { self == .claude ? "sun.max.fill" : "chevron.left.forwardslash.chevron.right" }
+    var brand: QuotaBrand { self == .claude ? .claude : .codex }
+    var accent: Color { brand.color }
 }
 
 /// A missing reading is an empty track and a dash, never a full or zero quota claim.
@@ -22,9 +22,8 @@ struct QuotaRing: View {
                             style: StrokeStyle(lineWidth: size > 30 ? 3 : 2, lineCap: .round))
                     .rotationEffect(.degrees(-90))
             }
-            Image(systemName: provider.symbol)
-                .font(.system(size: size * 0.36, weight: .semibold))
-                .foregroundStyle(stale ? .gray : provider.accent)
+            QuotaBrandMark(brand: provider.brand, muted: stale)
+                .frame(width: size * 0.48, height: size * 0.48)
         }
         .frame(width: size, height: size)
         .animation(.easeInOut(duration: 0.35), value: percent)
@@ -231,26 +230,22 @@ struct QuotaPinnedWings: View {
     let albumArtNamespace: Namespace.ID
     let onSelect: (QuotaProvider) -> Void
     let onMusic: () -> Void
-    static let wingWidth: CGFloat = 88
-
-    private var iconSize: CGFloat { min(26, max(12, height - 10)) }
+    private var iconSize: CGFloat { QuotaCompactMetrics.iconSize(height: height) }
 
     var body: some View {
         if let pin = store.pins.selected, let provider = pin.provider {
-            HStack(spacing: 0) {
+            HStack(spacing: QuotaCompactMetrics.spacing) {
                 Button {
                     if showsMusic { onMusic() } else { onSelect(provider) }
                 } label: {
                     Group {
                         if showsMusic { albumWithActivity }
                         else {
-                            Image(systemName: provider.symbol)
-                                .font(.system(size: 19, weight: .medium))
-                                .foregroundStyle(provider.accent)
+                            QuotaBrandMark(brand: provider.brand)
                                 .frame(width: iconSize, height: iconSize)
                         }
                     }
-                    .frame(width: Self.wingWidth, height: height)
+                    .frame(width: iconSize, height: height)
                     .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
@@ -261,11 +256,11 @@ struct QuotaPinnedWings: View {
 
                 Button { onSelect(provider) } label: {
                     quotaIndicator(pin, provider: provider)
-                        .frame(width: Self.wingWidth, height: height)
+                        .frame(width: iconSize, height: height)
                         .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
-                .help("\(provider.title) · \(store.window(for: pin)?.title ?? "等待额度") · 点击查看")
+                .help("\(provider.title) · \(store.window(for: pin)?.title ?? "等待额度") · \(reading(for: pin))")
                 .accessibilityLabel("\(provider.title) \(store.window(for: pin)?.title ?? "额度")")
                 .accessibilityValue(reading(for: pin))
             }
@@ -278,27 +273,27 @@ struct QuotaPinnedWings: View {
         Image(nsImage: music.albumArt)
             .resizable().scaledToFill()
             .frame(width: iconSize, height: iconSize)
-            .clipShape(RoundedRectangle(cornerRadius: 6))
+            .clipShape(RoundedRectangle(cornerRadius: MusicPlayerImageSizes.cornerRadiusInset.closed))
             .matchedGeometryEffect(id: "albumArt", in: albumArtNamespace)
             .overlay(alignment: .bottomTrailing) {
                 Group {
                     if useVisualizer {
                         AudioSpectrumView(isPlaying: $music.isPlaying)
                             .frame(width: 16, height: 14)
-                            .scaleEffect(0.55)
-                            .frame(width: 12, height: 8)
+                            .scaleEffect(0.45)
+                            .frame(width: 9, height: 7)
                     } else {
                         LottieAnimationContainer()
                     }
                 }
                 .foregroundStyle(.white)
-                .frame(width: 12, height: 8)
-                .padding(2)
+                .frame(width: 9, height: 7)
+                .padding(1)
                 .background(.black.opacity(0.78), in: RoundedRectangle(cornerRadius: 3))
-                .offset(x: 3, y: 2)
                 .allowsHitTesting(false)
                 .accessibilityHidden(true)
             }
+            .clipped()
     }
 
     private func reading(for pin: QuotaPin) -> String {
@@ -308,38 +303,9 @@ struct QuotaPinnedWings: View {
     }
 
     private func quotaIndicator(_ pin: QuotaPin, provider: QuotaProvider) -> some View {
-        let window = store.window(for: pin)
-        let failed = store.results[provider]?.failure != nil
-        let color: Color = failed ? .gray : provider.accent
-        return HStack(spacing: 5) {
-            if showsMusic {
-                Image(systemName: provider.symbol)
-                    .font(.system(size: 9, weight: .medium))
-                    .foregroundStyle(color)
-            }
-            Capsule()
-                .fill(.white.opacity(0.14))
-                .frame(width: showsMusic ? 25 : 34, height: 4)
-                .overlay(alignment: .leading) {
-                    if let window {
-                        Capsule().fill(color)
-                            .frame(width: (showsMusic ? 25 : 34) * window.remainingPercent / 100, height: 4)
-                    }
-                }
-                .animation(.easeInOut(duration: 0.3), value: window?.remainingPercent)
-            VStack(spacing: 0) {
-                if let window {
-                    Text("\(window.remainingPercent, specifier: "%.0f")%")
-                        .font(.system(size: 10, weight: .semibold, design: .rounded))
-                        .monospacedDigit()
-                } else { Text("—").font(.system(size: 11)) }
-                if failed {
-                    Text(window == nil ? "!" : "旧")
-                        .font(.system(size: 7)).foregroundStyle(.orange)
-                }
-            }
-            .foregroundStyle(failed ? .gray : .white)
-        }
-        .accessibilityHidden(true)
+        CompactQuotaGauge(brand: provider.brand,
+                          percent: store.window(for: pin)?.remainingPercent,
+                          stale: store.results[provider]?.failure != nil,
+                          showsBrand: showsMusic, size: iconSize)
     }
 }

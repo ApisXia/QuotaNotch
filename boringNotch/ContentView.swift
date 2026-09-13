@@ -67,7 +67,7 @@ struct ContentView: View {
         {
             chinWidth = 640
         } else if showQuotaWings {
-            chinWidth += 2 * QuotaPinnedWings.wingWidth
+            chinWidth += QuotaCompactMetrics.chinAddition(height: vm.effectiveClosedNotchHeight)
         } else if (!coordinator.expandingView.show || coordinator.expandingView.type == .music)
             && vm.notchState == .closed && (musicManager.isPlaying || !musicManager.isPlayerIdle)
             && coordinator.musicLiveActivityEnabled && !vm.hideOnClosed
@@ -308,7 +308,7 @@ struct ContentView: View {
                           InlineHUD(type: $coordinator.sneakPeek.type, value: $coordinator.sneakPeek.value, icon: $coordinator.sneakPeek.icon, hoverAnimation: $isHovering, gestureProgress: $gestureProgress)
                               .transition(.opacity)
                       } else if showQuotaWings {
-                          QuotaPinnedWings(centerWidth: vm.closedNotchSize.width,
+                          QuotaPinnedWings(centerWidth: vm.closedNotchSize.width - cornerRadiusInsets.closed.top,
                                            height: vm.effectiveClosedNotchHeight,
                                            showsMusic: quotaPresentation == .combined,
                                            useVisualizer: useMusicVisualizer,
@@ -423,7 +423,7 @@ struct ContentView: View {
 
     @ViewBuilder
     func MusicLiveActivity() -> some View {
-        HStack {
+        HStack(spacing: QuotaCompactMetrics.spacing) {
             Image(nsImage: musicManager.albumArt)
                 .resizable()
                 .clipped()
