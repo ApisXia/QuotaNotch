@@ -25,7 +25,8 @@ final class PreferencesTests: XCTestCase {
         QuotaLanguage.english.save(in: defaults)
         XCTAssertEqual(defaults.stringArray(forKey: "AppleLanguages"), ["en"])
         QuotaLanguage.system.save(in: defaults)
-        XCTAssertNil(defaults.object(forKey: "AppleLanguages"))
+        // Removing an app override reveals the system language through defaults lookup.
+        XCTAssertNil(defaults.persistentDomain(forName: name)?["AppleLanguages"])
         XCTAssertEqual(QuotaLanguage.stored(in: defaults), .system)
         XCTAssertEqual(defaults.string(forKey: "quotaNotchPins"), "existing-pin")
     }
