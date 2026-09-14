@@ -1,0 +1,27 @@
+name: Simplify 1.0.0 release downloads
+on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/tidy-release-assets.yml']
+permissions:
+  contents: write
+jobs:
+  tidy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Keep DMG and GitHub source downloads
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          gh release view v1.0.0 --json assets --jq '.assets[].name' > /tmp/release-assets.txt
+          for asset in QuotaNotch.app.zip QuotaNotch-1.0.0-source.zip SHA256SUMS.txt SOURCE-COMMIT.txt LICENSE THIRD_PARTY_LICENSES; do
+            if grep -Fxq "$asset" /tmp/release-assets.txt; then
+              gh release delete-asset v1.0.0 "$asset" --yes
+            fi
+          done
+          gh release edit v1.0.0 --notes-file docs/Release-1.0.0.md

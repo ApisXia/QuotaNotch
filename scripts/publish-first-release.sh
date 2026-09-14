@@ -15,5 +15,5 @@ if gh release view v1.0.0 --json isDraft --jq .isDraft > existing-draft.txt 2>/d
 else
   gh release create v1.0.0 --target "$GITHUB_SHA" --title 'QuotaNotch 1.0.0' --notes-file ../docs/Release-1.0.0.md --draft
 fi
-gh release upload v1.0.0 QuotaNotch-1.0.0.dmg QuotaNotch.app.zip QuotaNotch-1.0.0-source.zip SHA256SUMS.txt SOURCE-COMMIT.txt LICENSE THIRD_PARTY_LICENSES --clobber
+gh release upload v1.0.0 QuotaNotch-1.0.0.dmg --clobber
 gh release edit v1.0.0 --draft=false --latest

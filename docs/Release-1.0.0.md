@@ -24,4 +24,4 @@ The first stable release: AI quota, music and calendar in your MacBook notch.
 
 Requires macOS 15+; universal Apple Silicon / Intel app. Ad-hoc signed, not Apple notarized. Updates install manually from GitHub Releases.
 
-Source and GPL-3.0 / third-party notices are included. `SHA256SUMS.txt` verifies the release files; `SOURCE-COMMIT.txt` identifies the exact source revision.
+Source is available below via GitHub’s Source code downloads. GPL-3.0 and third-party notices remain inside the installation package and source.
