@@ -679,7 +679,7 @@ struct About: View {
                 Text("QuotaNotch by ApisXia")
                 Link("基于 Boring Notch", destination: URL(string: "https://github.com/TheBoredTeam/boring.notch")!)
                 Link("GPL-3.0 许可证", destination: URL(string: "https://github.com/ApisXia/QuotaNotch/blob/main/LICENSE")!)
-                Link("第三方许可", destination: URL(string: "https://github.com/ApisXia/QuotaNotch/blob/feature/quotanotch-focused-gemini/THIRD_PARTY_LICENSES")!)
+                Link("第三方许可", destination: URL(string: "https://github.com/ApisXia/QuotaNotch/blob/main/THIRD_PARTY_LICENSES")!)
             }
         }
         .navigationTitle("About")
