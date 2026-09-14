@@ -14,7 +14,9 @@ on:
       - 'Package.swift'
       - 'scripts/package-quotanotch.sh'
       - 'scripts/sign-quotanotch.py'
-      - 'scripts/render-compact.swift'
+      - 'scripts/**'
+      - 'README*'
+      - 'docs/assets/**'
       - '.github/workflows/quotanotch.yml'
 
 permissions:

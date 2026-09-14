@@ -19,12 +19,12 @@ lipo "$app/Contents/MacOS/QuotaNotch" -verify_arch arm64 x86_64
 ditto -c -k --sequesterRsrc --keepParent "$app" "$dist/QuotaNotch.app.zip"
 ditto "$app" "$staging/QuotaNotch.app"
 ln -s /Applications "$staging/Applications"
-cp docs/QuotaNotch-zh.md "$staging/安装与使用.md"
+cp README.zh-CN.md "$staging/安装与使用.md"
 cp LICENSE "$staging/LICENSE"
 git archive --format=zip --prefix=QuotaNotch-source/ -o "$dist/QuotaNotch-source.zip" HEAD
 cp "$dist/QuotaNotch-source.zip" "$staging/QuotaNotch-source.zip"
 hdiutil create -volname QuotaNotch -srcfolder "$staging" -ov -format UDZO "$dist/QuotaNotch.dmg"
 git rev-parse HEAD > "$dist/SOURCE-COMMIT.txt"
-cp docs/QuotaNotch-zh.md "$dist/README-zh.md"
+cp README.zh-CN.md "$dist/README-zh.md"
 cp LICENSE THIRD_PARTY_LICENSES "$dist/"
 (cd "$dist" && shasum -a 256 QuotaNotch.dmg QuotaNotch.app.zip QuotaNotch-source.zip > SHA256SUMS.txt)

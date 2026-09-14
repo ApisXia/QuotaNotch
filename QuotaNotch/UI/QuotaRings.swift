@@ -211,7 +211,6 @@ struct QuotaPinnedWings: View {
     let centerWidth: CGFloat
     let height: CGFloat
     let showsMusic: Bool
-    let useVisualizer: Bool
     let albumArtNamespace: Namespace.ID
     let onSelect: (QuotaProvider) -> Void
     let onMusic: () -> Void
@@ -262,14 +261,10 @@ struct QuotaPinnedWings: View {
             .matchedGeometryEffect(id: "albumArt", in: albumArtNamespace)
             .overlay(alignment: .bottomTrailing) {
                 Group {
-                    if useVisualizer {
                         AudioSpectrumView(isPlaying: $music.isPlaying)
                             .frame(width: 16, height: 14)
                             .scaleEffect(0.45)
                             .frame(width: 9, height: 7)
-                    } else {
-                        LottieAnimationContainer()
-                    }
                 }
                 .foregroundStyle(.white)
                 .frame(width: 9, height: 7)
