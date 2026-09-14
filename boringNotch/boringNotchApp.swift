@@ -30,13 +30,14 @@ struct DynamicNotchApp: App {
     }
 
     var body: some Scene {
-        MenuBarExtra("QuotaNotch", systemImage: "chart.bar.fill", isInserted: $showMenuBarIcon) {
+        MenuBarExtra("QuotaNotch", image: "QuotaStatus", isInserted: $showMenuBarIcon) {
             Button("Settings") {
                 DispatchQueue.main.async {
                     SettingsWindowController.shared.showWindow()
                 }
             }
             .keyboardShortcut(KeyEquivalent(","), modifiers: .command)
+            Link("查看更新", destination: URL(string: "https://github.com/ApisXia/QuotaNotch/releases")!)
             Text("QuotaNotch · Claude / Codex / Gemini")
             Divider()
             Button("Restart QuotaNotch") {

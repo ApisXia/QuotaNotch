@@ -704,10 +704,10 @@ struct About: View {
                         }
                         .contentShape(Rectangle())
                     }
-                    Link(destination: URL(string: "https://github.com/ApisXia/QuotaNotch/releases/latest")!) {
+                    Link(destination: URL(string: "https://github.com/ApisXia/QuotaNotch/releases")!) {
                         VStack(spacing: 5) {
                             Image(systemName: "arrow.down.circle").font(.system(size: 18))
-                            Text("Releases")
+                            Text("查看更新")
                         }
                     }
                     Spacer(minLength: 0)
@@ -730,7 +730,7 @@ struct About: View {
             //                openWindow(id: "onboarding")
             //            }
             //            .controlSize(.extraLarge)
-            Text("自动更新已关闭，避免安装原版 Boring Notch。")
+            Text("当前通过 GitHub Releases 手动更新。")
                 .font(.caption)
         }
         .navigationTitle("About")

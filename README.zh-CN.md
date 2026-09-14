@@ -34,3 +34,5 @@
 ## 许可证与致谢
 
 保留上游 **GPL-3.0** 许可证及原作者版权声明，见 [LICENSE](LICENSE) 和 [THIRD_PARTY_LICENSES](THIRD_PARTY_LICENSES)。蜷睡猫额度环为本项目选定的原创图标，正式源图保存在 `docs/assets`；AI 品牌图形用于标识对应服务。
+
+当前通过 GitHub Releases 手动更新。发布 Release 不会自动启用 Sparkle；还需配置本项目的更新订阅地址、公钥和安装包签名，并启用更新器。

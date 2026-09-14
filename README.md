@@ -34,3 +34,5 @@ Real notch placement, playback, calendar permissions and live account responses 
 ## License and credits
 
 This fork retains the upstream **GPL-3.0** license: see [LICENSE](LICENSE) and [THIRD_PARTY_LICENSES](THIRD_PARTY_LICENSES). Original copyright and third-party notices remain intact. The sleeping-cat quota icon is the selected original QuotaNotch artwork; its production source is in `docs/assets`. Provider marks identify their respective services.
+
+Updates currently install manually from GitHub Releases. Publishing a GitHub release alone does not enable Sparkle: an appcast feed, QuotaNotch signing public key, signed update archives and updater activation must be configured first.

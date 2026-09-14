@@ -23627,23 +23627,6 @@
         }
       }
     },
-    "自动更新已关闭，避免安装原版 Boring Notch。" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Automatic updates are disabled to avoid installing the upstream Boring Notch app."
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "自动更新已关闭，避免安装原版 Boring Notch。"
-          }
-        }
-      }
-    },
     "Launch at login" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -23963,6 +23946,40 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "匹配专辑封面"
+          }
+        }
+      }
+    },
+    "当前通过 GitHub Releases 手动更新。" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Updates are installed manually from GitHub Releases."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "当前通过 GitHub Releases 手动更新。"
+          }
+        }
+      }
+    },
+    "查看更新" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "View updates"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "查看更新"
           }
         }
       }

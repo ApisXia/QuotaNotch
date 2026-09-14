@@ -69,6 +69,10 @@ jobs:
         run: python3 scripts/verify-localization.py build/DerivedData/Build/Products/Release/QuotaNotch.app
       - name: Render English and Chinese usage layouts
         run: bash scripts/render-localized-usage.sh
+      - name: Verify and render compiled status icon
+        run: |
+          swiftc -parse-as-library scripts/render-status-icon.swift -o build/render-status-icon
+          build/render-status-icon build/DerivedData/Build/Products/Release/QuotaNotch.app
       - name: Package app and corresponding source
         run: bash scripts/package-quotanotch.sh
       - name: Upload installable app, source and checksums
