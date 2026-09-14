@@ -18,12 +18,7 @@ let appVersion = "\(Bundle.main.infoDictionary?["CFBundleShortVersionString"] as
 let temporaryDirectory = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first!
 let spacing: CGFloat = 16
 
-struct CustomVisualizer: Codable, Hashable, Equatable, Defaults.Serializable {
-    let UUID: UUID
-    var name: String
-    var url: URL
-    var speed: CGFloat = 1.0
-}
+
 
 enum CalendarSelectionState: Codable, Defaults.Serializable {
     case all
@@ -32,7 +27,6 @@ enum CalendarSelectionState: Codable, Defaults.Serializable {
 
 enum HideNotchOption: String, Defaults.Serializable {
     case always
-    case nowPlayingOnly
     case never
 }
 
@@ -73,7 +67,6 @@ extension Defaults.Keys {
     static let menubarIcon = Key<Bool>("menubarIcon", default: true)
     static let showOnAllDisplays = Key<Bool>("showOnAllDisplays", default: false)
     static let automaticallySwitchDisplay = Key<Bool>("automaticallySwitchDisplay", default: true)
-    static let releaseName = Key<String>("releaseName", default: "Flying Rabbit 🐇🪽")
     
     // MARK: Behavior
     static let minimumHoverDuration = Key<TimeInterval>("minimumHoverDuration", default: 0.3)
@@ -97,8 +90,6 @@ extension Defaults.Keys {
     // MARK: Appearance
     static let showEmojis = Key<Bool>("showEmojis", default: false)
     //static let alwaysShowTabs = Key<Bool>("alwaysShowTabs", default: true)
-    static let showMirror = Key<Bool>("showMirror", default: false)
-    static let mirrorShape = Key<MirrorShapeEnum>("mirrorShape", default: MirrorShapeEnum.rectangle)
     static let settingsIconInNotch = Key<Bool>("settingsIconInNotch", default: true)
     static let lightingEffect = Key<Bool>("lightingEffect", default: true)
     static let enableShadow = Key<Bool>("enableShadow", default: true)
@@ -113,14 +104,8 @@ extension Defaults.Keys {
         default: SliderColorEnum.white
     )
     static let playerColorTinting = Key<Bool>("playerColorTinting", default: true)
-    static let useMusicVisualizer = Key<Bool>("useMusicVisualizer", default: true)
-    static let customVisualizers = Key<[CustomVisualizer]>("customVisualizers", default: [])
-    static let selectedVisualizer = Key<CustomVisualizer?>("selectedVisualizer", default: nil)
     
     // MARK: Gestures
-    static let enableGestures = Key<Bool>("enableGestures", default: true)
-    static let closeGestureEnabled = Key<Bool>("closeGestureEnabled", default: true)
-    static let gestureSensitivity = Key<CGFloat>("gestureSensitivity", default: 200.0)
     
     // MARK: Media playback
     static let coloredSpectrogram = Key<Bool>("coloredSpectrogram", default: true)
@@ -128,7 +113,6 @@ extension Defaults.Keys {
     static let sneakPeekStyles = Key<SneakPeekStyle>("sneakPeekStyles", default: .standard)
     static let waitInterval = Key<Double>("waitInterval", default: 3)
     static let showShuffleAndRepeat = Key<Bool>("showShuffleAndRepeat", default: false)
-    static let enableLyrics = Key<Bool>("enableLyrics", default: false)
     static let musicControlSlots = Key<[MusicControlButton]>(
         "musicControlSlots",
         default: MusicControlButton.defaultLayout
@@ -145,10 +129,6 @@ extension Defaults.Keys {
     static let showPowerStatusIcons = Key<Bool>("showPowerStatusIcons", default: true)
     
     // MARK: Downloads
-    static let enableDownloadListener = Key<Bool>("enableDownloadListener", default: true)
-    static let enableSafariDownloads = Key<Bool>("enableSafariDownloads", default: true)
-    static let selectedDownloadIndicatorStyle = Key<DownloadIndicatorStyle>("selectedDownloadIndicatorStyle", default: DownloadIndicatorStyle.progress)
-    static let selectedDownloadIconStyle = Key<DownloadIconStyle>("selectedDownloadIconStyle", default: DownloadIconStyle.onlyAppIcon)
     
     // MARK: HUD
     static let hudReplacement = Key<Bool>("hudReplacement", default: false)
@@ -156,20 +136,9 @@ extension Defaults.Keys {
     static let enableGradient = Key<Bool>("enableGradient", default: false)
     static let systemEventIndicatorShadow = Key<Bool>("systemEventIndicatorShadow", default: false)
     static let systemEventIndicatorUseAccent = Key<Bool>("systemEventIndicatorUseAccent", default: false)
-    static let showOpenNotchHUD = Key<Bool>("showOpenNotchHUD", default: true)
-    static let showOpenNotchHUDPercentage = Key<Bool>("showOpenNotchHUDPercentage", default: true)
     static let showClosedNotchHUDPercentage = Key<Bool>("showClosedNotchHUDPercentage", default: false)
     // Option key modifier behaviour for media keys
     static let optionKeyAction = Key<OptionKeyAction>("optionKeyAction", default: OptionKeyAction.openSettings)
-    
-    // MARK: Shelf
-    static let boringShelf = Key<Bool>("boringShelf", default: true)
-    static let openShelfByDefault = Key<Bool>("openShelfByDefault", default: true)
-    static let shelfTapToOpen = Key<Bool>("shelfTapToOpen", default: true)
-    static let quickShareProvider = Key<String>("quickShareProvider", default: QuickShareProvider.defaultProvider.id)
-    static let copyOnDrag = Key<Bool>("copyOnDrag", default: false)
-    static let autoRemoveShelfItems = Key<Bool>("autoRemoveShelfItems", default: false)
-    static let expandedDragDetection = Key<Bool>("expandedDragDetection", default: true)
     
     // MARK: Calendar
     static let calendarSelectionState = Key<CalendarSelectionState>("calendarSelectionState", default: .all)
@@ -178,7 +147,7 @@ extension Defaults.Keys {
     static let autoScrollToNextEvent = Key<Bool>("autoScrollToNextEvent", default: true)
     
     // MARK: Fullscreen Media Detection
-    static let hideNotchOption = Key<HideNotchOption>("hideNotchOption", default: .nowPlayingOnly)
+    static let hideNotchOption = Key<HideNotchOption>("hideNotchOption", default: .always)
     
     // MARK: Media Controller
     static let mediaController = Key<MediaControllerType>("mediaController", default: defaultMediaController)

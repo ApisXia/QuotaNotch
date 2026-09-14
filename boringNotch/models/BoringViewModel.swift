@@ -19,17 +19,11 @@ class BoringViewModel: NSObject, ObservableObject {
     @Published var contentType: ContentType = .normal
     @Published private(set) var notchState: NotchState = .closed
 
-    @Published var dragDetectorTargeting: Bool = false
-    @Published var generalDropTargeting: Bool = false
-    @Published var dropZoneTargeting: Bool = false
-    @Published var dropEvent: Bool = false
-    @Published var anyDropZoneTargeting: Bool = false
     var cancellables: Set<AnyCancellable> = []
     
     @Published var hideOnClosed: Bool = true
 
     @Published var edgeAutoOpenActive: Bool = false
-    @Published var isHoveringCalendar: Bool = false
     @Published var isBatteryPopoverActive: Bool = false
 
     @Published var screenUUID: String?
@@ -37,9 +31,6 @@ class BoringViewModel: NSObject, ObservableObject {
     @Published var notchSize: CGSize = getClosedNotchSize()
     @Published var closedNotchSize: CGSize = getClosedNotchSize()
     
-    let webcamManager = WebcamManager.shared
-    @Published var isCameraExpanded: Bool = false
-    @Published var isRequestingAuthorization: Bool = false
     
     deinit {
         destroy()
@@ -59,13 +50,6 @@ class BoringViewModel: NSObject, ObservableObject {
         notchSize = getClosedNotchSize(screenUUID: screenUUID)
         closedNotchSize = notchSize
 
-        Publishers.CombineLatest3($dropZoneTargeting, $dragDetectorTargeting, $generalDropTargeting)
-            .map { shelf, drag, general in
-                shelf || drag || general
-            }
-            .assign(to: \.anyDropZoneTargeting, on: self)
-            .store(in: &cancellables)
-        
         setupDetectorObserver()
     }
     
@@ -128,53 +112,7 @@ class BoringViewModel: NSObject, ObservableObject {
         return max(0, menuBarHeight - currentHeight)
     }
 
-    func toggleCameraPreview() {
-        if isRequestingAuthorization {
-            return
-        }
 
-        switch webcamManager.authorizationStatus {
-        case .authorized:
-            if webcamManager.isSessionRunning {
-                webcamManager.stopSession()
-                isCameraExpanded = false
-            } else if webcamManager.cameraAvailable {
-                webcamManager.startSession()
-                isCameraExpanded = true
-            }
-
-        case .denied, .restricted:
-            DispatchQueue.main.async {
-                NSApp.setActivationPolicy(.regular)
-                NSApp.activate(ignoringOtherApps: true)
-
-                let alert = NSAlert()
-                alert.messageText = "Camera Access Required"
-                alert.informativeText = "Please allow camera access in System Settings."
-                alert.addButton(withTitle: "Open Settings")
-                alert.addButton(withTitle: "Cancel")
-
-                if alert.runModal() == .alertFirstButtonReturn {
-                    if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Camera") {
-                        NSWorkspace.shared.open(url)
-                    }
-                }
-
-                NSApp.setActivationPolicy(.accessory)
-                NSApp.deactivate()
-            }
-
-        case .notDetermined:
-            isRequestingAuthorization = true
-            webcamManager.checkAndRequestVideoAuthorization()
-            DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
-                self.isRequestingAuthorization = false
-            }
-
-        default:
-            break
-        }
-    }
     
     func isMouseHovering(position: NSPoint = NSEvent.mouseLocation) -> Bool {
         let screenFrame = getScreenFrame(screenUUID)
@@ -198,10 +136,6 @@ class BoringViewModel: NSObject, ObservableObject {
     }
 
     func close() {
-        // Do not close while a share picker or sharing service is active
-        if SharingStateManager.shared.preventNotchClose {
-            return
-        }
         self.notchSize = getClosedNotchSize(screenUUID: self.screenUUID)
         self.closedNotchSize = self.notchSize
         self.notchState = .closed
@@ -209,11 +143,7 @@ class BoringViewModel: NSObject, ObservableObject {
         self.coordinator.sneakPeek.show = false
         self.edgeAutoOpenActive = false
 
-        // Set the current view to shelf if it contains files and the user enables openShelfByDefault
-        // Otherwise, if the user has not enabled openLastShelfByDefault, set the view to home
-    if !ShelfStateViewModel.shared.isEmpty && Defaults[.openShelfByDefault] {
-            coordinator.currentView = .shelf
-        } else if !coordinator.openLastTabByDefault {
+        if !coordinator.openLastTabByDefault {
             coordinator.currentView = .home
         }
     }
