@@ -6,6 +6,10 @@ AI quota, music and calendar in your MacBook notch.
 
 [简体中文](README.zh-CN.md) · [Download](https://github.com/ApisXia/QuotaNotch/releases) · [Builds](https://github.com/ApisXia/QuotaNotch/actions/workflows/quotanotch.yml)
 
+![QuotaNotch](docs/assets/usage-preview-en.png)
+
+Native UI preview with sample data.
+
 - Claude, Codex and optional Gemini CLI / Code Assist quota.
 - Pin one quota beside music. Hover left for music, right for quota.
 - Low quota gradually turns yellow, then red, with a subtle glow.

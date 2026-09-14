@@ -6,6 +6,10 @@
 
 [English](README.md) · [下载](https://github.com/ApisXia/QuotaNotch/releases) · [构建附件](https://github.com/ApisXia/QuotaNotch/actions/workflows/quotanotch.yml)
 
+![QuotaNotch](docs/assets/usage-preview.png)
+
+原生界面预览，使用示例数据。
+
 - 支持 Claude、Codex 和可选的 Gemini CLI / Code Assist 额度。
 - 固定一个额度与音乐共享刘海：悬停左边看音乐，右边看额度。
 - 额度不足时逐渐变黄、变红，并带轻微光晕。

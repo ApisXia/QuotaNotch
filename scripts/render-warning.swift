@@ -32,6 +32,6 @@ struct WarningSheet: View {
                 CompactQuotaGauge(brand: .claude, percent: 0, stale: true, showsNumbers: true, size: 20)
                 CompactQuotaGauge(brand: .claude, percent: nil, size: 20)
             }.font(.caption).foregroundStyle(.secondary)
-        }.padding(24).background(Color.black)
+        }.padding(24).foregroundStyle(.white).background(Color.black)
     }
 }
