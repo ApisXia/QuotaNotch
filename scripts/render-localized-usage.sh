@@ -14,6 +14,6 @@ cat > "$preview/Contents/Info.plist" <<'PLIST'
 <key>CFBundleDevelopmentRegion</key><string>en</string>
 </dict></plist>
 PLIST
-swiftc -target "$(uname -m)-apple-macos15.0" -parse-as-library QuotaNotch/Design/*.swift QuotaNotch/Core/QuotaCompactMetrics.swift QuotaNotch/Core/QuotaLocalization.swift QuotaNotch/Core/QuotaModels.swift scripts/render-usage.swift -o "$preview/Contents/MacOS/LanguagePreview"
+swiftc -target "$(uname -m)-apple-macos15.0" -parse-as-library QuotaNotch/Design/*.swift QuotaNotch/Core/QuotaWarning.swift QuotaNotch/Core/QuotaCompactMetrics.swift QuotaNotch/Core/QuotaLocalization.swift QuotaNotch/Core/QuotaModels.swift scripts/render-usage.swift -o "$preview/Contents/MacOS/LanguagePreview"
 "$preview/Contents/MacOS/LanguagePreview" -AppleLanguages '(en)' build/QuotaNotch-dist/Usage-English.png
 "$preview/Contents/MacOS/LanguagePreview" -AppleLanguages '(zh-Hans)' build/QuotaNotch-dist/Usage-Chinese.png

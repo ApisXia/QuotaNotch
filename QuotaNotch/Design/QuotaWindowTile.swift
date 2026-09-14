@@ -9,8 +9,10 @@ struct QuotaWindowTile: View {
     var stale = false
     var pinned = false
     var onPin: () -> Void = {}
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
+        let ink = QuotaWarningInk(accent: accent, percent: percent, stale: stale)
         VStack(alignment: .leading, spacing: 2) {
             HStack {
                 Text(title).font(.system(size: 10, weight: .medium))
@@ -33,12 +35,15 @@ struct QuotaWindowTile: View {
                     .font(.system(size: 10)).foregroundStyle(.secondary)
             }
             GeometryReader { proxy in
-                Capsule().fill(.white.opacity(0.09))
+                Capsule().fill(ink.track)
+                    .shadow(color: ink.warning.exhausted ? ink.halo : .clear, radius: 1.5)
                     .overlay(alignment: .leading) {
-                        Capsule().fill(stale ? .gray : accent)
-                            .frame(width: proxy.size.width * max(0, min(1, percent / 100)))
+                        Capsule().fill(ink.color)
+                            .frame(width: proxy.size.width * ink.warning.fraction)
+                            .shadow(color: ink.halo, radius: 1.5)
                     }
             }.frame(height: 3)
+                .animation(reduceMotion ? nil : .easeInOut(duration: 0.35), value: percent)
             HStack(spacing: 3) {
                 if let reset {
                     Text("重置")

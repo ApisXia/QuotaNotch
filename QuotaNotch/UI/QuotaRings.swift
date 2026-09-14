@@ -14,13 +14,16 @@ struct QuotaRing: View {
     var size: CGFloat = 42
 
     var body: some View {
+        let ink = QuotaWarningInk(accent: provider.accent, percent: percent, stale: stale)
         ZStack {
-            Circle().stroke(.white.opacity(0.10), lineWidth: size > 30 ? 3 : 2)
+            Circle().stroke(ink.track, lineWidth: size > 30 ? 3 : 2)
+                .shadow(color: ink.warning.exhausted ? ink.halo : .clear, radius: 1.5)
             if let percent {
-                Circle().trim(from: 0, to: max(0, min(1, percent / 100)))
-                    .stroke(stale ? Color.gray : provider.accent,
+                Circle().trim(from: 0, to: ink.warning.fraction)
+                    .stroke(ink.color,
                             style: StrokeStyle(lineWidth: size > 30 ? 3 : 2, lineCap: .round))
                     .rotationEffect(.degrees(-90))
+                    .shadow(color: ink.halo, radius: 1.5)
             }
             QuotaBrandMark(brand: provider.brand, muted: stale)
                 .frame(width: size * 0.48, height: size * 0.48)

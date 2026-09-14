@@ -78,17 +78,21 @@ struct CompactQuotaGauge: View {
     var showsBrand = false
     var showsNumbers = false
     let size: CGFloat
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         let stroke = max(1, min(1.8, size * 0.085))
-        let inset = stroke / 2 + 0.5
+        let inset = stroke / 2 + 1.5
+        let ink = QuotaWarningInk(accent: brand.color, percent: percent, stale: stale)
         ZStack {
             Circle().inset(by: inset)
-                .stroke(.white.opacity(0.20), style: StrokeStyle(lineWidth: stroke, dash: percent == nil ? [1.5, 2] : []))
+                .stroke(ink.track, style: StrokeStyle(lineWidth: stroke, dash: percent == nil ? [1.5, 2] : []))
+                .shadow(color: ink.warning.exhausted ? ink.halo : .clear, radius: 1.2)
             if let percent {
-                Circle().inset(by: inset).trim(from: 0, to: min(1, max(0, percent / 100)))
-                    .stroke(stale ? .gray : brand.color, style: StrokeStyle(lineWidth: stroke, lineCap: .round))
+                Circle().inset(by: inset).trim(from: 0, to: ink.warning.fraction)
+                    .stroke(ink.color, style: StrokeStyle(lineWidth: stroke, lineCap: .round))
                     .rotationEffect(.degrees(-90))
+                    .shadow(color: ink.halo, radius: 1.2)
                 if showsNumbers {
                     Text("\(percent, specifier: "%.0f")")
                         .font(.system(size: max(5, size * 0.36), weight: .semibold, design: .rounded))
@@ -115,7 +119,7 @@ struct CompactQuotaGauge: View {
             }
         }
         .clipped()
-        .animation(.easeInOut(duration: 0.3), value: percent)
+        .animation(reduceMotion ? nil : .easeInOut(duration: 0.35), value: percent)
         .accessibilityHidden(true)
     }
 }

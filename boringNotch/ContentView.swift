@@ -85,7 +85,7 @@ struct ContentView: View {
             enabled: quotaStore.enabled,
             hidden: vm.hideOnClosed || vm.effectiveClosedNotchHeight <= 0,
             transient: coordinator.expandingView.show || coordinator.sneakPeek.show || coordinator.helloAnimationRunning,
-            musicPlaying: musicManager.isPlaying && coordinator.musicLiveActivityEnabled
+            musicPlaying: (musicManager.isPlaying || !musicManager.isPlayerIdle) && coordinator.musicLiveActivityEnabled
         )
     }
 
@@ -110,7 +110,7 @@ struct ContentView: View {
                         handleHover(hovering)
                     }
                     .onTapGesture {
-                        doOpen()
+                        openFromPointer()
                     }
                     .onChange(of: vm.notchState) { _, newState in
                         if newState == .closed && isHovering {
@@ -447,6 +447,31 @@ struct ContentView: View {
         }
     }
 
+    private func openFromPointer() {
+        guard vm.notchState == .closed else { return }
+        var presentation = quotaPresentation
+        // Album artwork remains visible briefly after playback pauses.
+        if presentation == .none && !vm.hideOnClosed && vm.effectiveClosedNotchHeight > 0
+            && !coordinator.expandingView.show && !coordinator.sneakPeek.show
+            && !coordinator.helloAnimationRunning && coordinator.musicLiveActivityEnabled
+            && (musicManager.isPlaying || !musicManager.isPlayerIdle) {
+            presentation = .music
+        }
+        let screen = vm.screenUUID.flatMap { NSScreen.screen(withUUID: $0) } ?? NSScreen.main
+        let midpoint = screen?.frame.midX ?? NSEvent.mouseLocation.x
+        let target = presentation.openingPage(pointerX: Double(NSEvent.mouseLocation.x),
+                                               midpointX: Double(midpoint), isOpen: false)
+        // Commit selection before open(), so the first expanded frame has the right content.
+        switch target {
+        case .home: coordinator.currentView = .home
+        case .quota:
+            if let provider = quotaStore.pins.selected?.provider { quotaStore.selectedProvider = provider }
+            coordinator.currentView = .aiUsage
+        case nil: break
+        }
+        doOpen()
+    }
+
     // MARK: - Hover Management
 
     private func handleHover(_ hovering: Bool) {
@@ -475,7 +500,7 @@ struct ContentView: View {
                           self.isHovering,
                           !self.coordinator.sneakPeek.show else { return }
                     
-                    self.doOpen()
+                    self.openFromPointer()
                 }
             }
         } else {

@@ -653,85 +653,34 @@ func lighterColor(from nsColor: NSColor, amount: CGFloat = 0.14) -> Color {
 }
 
 struct About: View {
-    @State private var showBuildNumber: Bool = false
     let updaterController: SPUStandardUpdaterController
-    @Environment(\.openWindow) var openWindow
     var body: some View {
-        VStack {
-            Form {
-                Section {
-                    HStack {
-                        Text("Release name")
-                        Spacer()
-                        Text("QuotaNotch")
-                            .foregroundStyle(.secondary)
+        Form {
+            Section {
+                HStack(spacing: 16) {
+                    Image("logo2").resizable().scaledToFit()
+                        .frame(width: 64, height: 64).clipShape(RoundedRectangle(cornerRadius: 14))
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("QuotaNotch").font(.title2.weight(.semibold))
+                        Text("AI 额度、音乐与日历，留在刘海边上。")
+                            .font(.callout).foregroundStyle(.secondary)
+                        Text("\(Bundle.main.releaseVersionNumber ?? "—") (\(Bundle.main.buildVersionNumber ?? "—"))")
+                            .font(.caption).foregroundStyle(.secondary).monospacedDigit()
                     }
-                    HStack {
-                        Text("Version")
-                        Spacer()
-                        if showBuildNumber {
-                            Text("(\(Bundle.main.buildVersionNumber ?? ""))")
-                                .foregroundStyle(.secondary)
-                        }
-                        Text(Bundle.main.releaseVersionNumber ?? "unkown")
-                            .foregroundStyle(.secondary)
-                    }
-                    .onTapGesture {
-                        withAnimation {
-                            showBuildNumber.toggle()
-                        }
-                    }
-                } header: {
-                    Text("Version info")
-                }
-
-                Text("QuotaNotch · 基于 Boring Notch。可在 Releases 下载更新。")
-                    .font(.caption)
-
-                HStack(spacing: 30) {
-                    Spacer(minLength: 0)
-                    Button {
-                        if let url = URL(string: "https://github.com/ApisXia/QuotaNotch") {
-                            NSWorkspace.shared.open(url)
-                        }
-                    } label: {
-                        VStack(spacing: 5) {
-                            Image("Github")
-                                .resizable()
-                                .aspectRatio(contentMode: .fit)
-                                .frame(width: 18)
-                            Text("GitHub")
-                        }
-                        .contentShape(Rectangle())
-                    }
-                    Link(destination: URL(string: "https://github.com/ApisXia/QuotaNotch/releases")!) {
-                        VStack(spacing: 5) {
-                            Image(systemName: "arrow.down.circle").font(.system(size: 18))
-                            Text("查看更新")
-                        }
-                    }
-                    Spacer(minLength: 0)
-                }
-                .buttonStyle(PlainButtonStyle())
+                }.padding(.vertical, 8)
             }
-            VStack(spacing: 0) {
-                Divider()
-                Text("QuotaNotch by ApisXia · Based on Boring Notch")
-                    .foregroundStyle(.secondary)
-                    .padding(.top, 5)
-                    .padding(.bottom, 7)
-                    .multilineTextAlignment(.center)
-                    .padding(.horizontal, 10)
+            Section("更新与支持") {
+                Link("查看更新", destination: URL(string: "https://github.com/ApisXia/QuotaNotch/releases")!)
+                Link("GitHub", destination: URL(string: "https://github.com/ApisXia/QuotaNotch")!)
+                Text("当前通过 GitHub Releases 手动更新。")
+                    .font(.caption).foregroundStyle(.secondary)
             }
-            .frame(maxWidth: .infinity, alignment: .center)
-        }
-        .toolbar {
-            //            Button("Welcome window") {
-            //                openWindow(id: "onboarding")
-            //            }
-            //            .controlSize(.extraLarge)
-            Text("当前通过 GitHub Releases 手动更新。")
-                .font(.caption)
+            Section("致谢与许可") {
+                Text("QuotaNotch by ApisXia")
+                Link("基于 Boring Notch", destination: URL(string: "https://github.com/TheBoredTeam/boring.notch")!)
+                Link("GPL-3.0 许可证", destination: URL(string: "https://github.com/ApisXia/QuotaNotch/blob/main/LICENSE")!)
+                Link("第三方许可", destination: URL(string: "https://github.com/ApisXia/QuotaNotch/blob/feature/quotanotch-focused-gemini/THIRD_PARTY_LICENSES")!)
+            }
         }
         .navigationTitle("About")
     }

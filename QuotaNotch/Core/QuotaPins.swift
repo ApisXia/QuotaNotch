@@ -51,3 +51,17 @@ struct QuotaPins: Codable, Equatable, Sendable {
 }
 
 enum QuotaPresentation: Equatable { case none, music, quota, combined }
+
+/// Resolve only at the moment a closed notch opens. Open content never follows the pointer.
+enum QuotaOpeningPage: Equatable { case home, quota }
+extension QuotaPresentation {
+    func openingPage(pointerX: Double, midpointX: Double, isOpen: Bool) -> QuotaOpeningPage? {
+        guard !isOpen else { return nil }
+        switch self {
+        case .none: return nil
+        case .music: return .home
+        case .quota: return .quota
+        case .combined: return pointerX < midpointX ? .home : .quota
+        }
+    }
+}
