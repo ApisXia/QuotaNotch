@@ -431,3 +431,16 @@ Exhibit B - "Incompatible With Secondary Licenses" Notice
 
 This Source Code Form is "Incompatible With Secondary Licenses", as
 defined by the Mozilla Public License, v. 2.0.
+
+-----------------------------------------------------------------------------
+QuotaNotch integration reference (2026)
+=====================================
+QuotaNotch is a modified Boring Notch distribution under the repository's GPL-3.0
+license. Original notices above are retained.
+
+ClaudeBar (https://github.com/tddworks/ClaudeBar), commit
+b4077683c95b2863d65da6d8b8bd6788a5a77736, was reviewed as a behavioral reference
+for Claude/Codex usage endpoints and credential locations. Its README declares
+MIT but that snapshot contains no standalone full license text. No ClaudeBar
+source files, fixtures, images, icons or UI were copied into this distribution.
+The QuotaNotch core, view and tests were independently written for this fork.

@@ -5,7 +5,6 @@
 //  Created by Richard Kunkli on 07/08/2024.
 //
 
-import AVFoundation
 import Defaults
 import EventKit
 import KeyboardShortcuts
@@ -27,42 +26,12 @@ struct SettingsView: View {
     var body: some View {
         NavigationSplitView {
             List(selection: $selectedTab) {
-                NavigationLink(value: "General") {
-                    Label("General", systemImage: "gear")
-                }
-                NavigationLink(value: "Appearance") {
-                    Label("Appearance", systemImage: "eye")
-                }
-                NavigationLink(value: "Media") {
-                    Label("Media", systemImage: "play.laptopcomputer")
-                }
-                NavigationLink(value: "Calendar") {
-                    Label("Calendar", systemImage: "calendar")
-                }
-                NavigationLink(value: "HUD") {
-                    Label("HUDs", systemImage: "dial.medium.fill")
-                }
-                NavigationLink(value: "Battery") {
-                    Label("Battery", systemImage: "battery.100.bolt")
-                }
-//                NavigationLink(value: "Downloads") {
-//                    Label("Downloads", systemImage: "square.and.arrow.down")
-//                }
-                NavigationLink(value: "Shelf") {
-                    Label("Shelf", systemImage: "books.vertical")
-                }
-                NavigationLink(value: "Shortcuts") {
-                    Label("Shortcuts", systemImage: "keyboard")
-                }
-                // NavigationLink(value: "Extensions") {
-                //     Label("Extensions", systemImage: "puzzlepiece.extension")
-                // }
-                NavigationLink(value: "Advanced") {
-                    Label("Advanced", systemImage: "gearshape.2")
-                }
-                NavigationLink(value: "About") {
-                    Label("About", systemImage: "info.circle")
-                }
+                NavigationLink(value: "General") { Label("通用", systemImage: "gearshape") }
+                NavigationLink(value: "Quota") { Label("AI 额度", systemImage: "chart.pie") }
+                NavigationLink(value: "Calendar") { Label("日历", systemImage: "calendar") }
+                NavigationLink(value: "Media") { Label("音乐", systemImage: "music.note") }
+                NavigationLink(value: "Appearance") { Label("外观与提示", systemImage: "circle.lefthalf.filled") }
+                NavigationLink(value: "About") { Label("关于", systemImage: "info.circle") }
             }
             .listStyle(SidebarListStyle())
             .tint(.effectiveAccent)
@@ -74,23 +43,13 @@ struct SettingsView: View {
                 case "General":
                     GeneralSettings()
                 case "Appearance":
-                    Appearance()
-                case "Media":
-                    Media()
+                    QuotaAppearancePreferences()
                 case "Calendar":
                     CalendarSettings()
-                case "HUD":
-                    HUD()
-                case "Battery":
-                    Charge()
-                case "Shelf":
-                    Shelf()
-                case "Shortcuts":
-                    Shortcuts()
-                case "Extensions":
-                    GeneralSettings()
-                case "Advanced":
-                    Advanced()
+                case "Media":
+                    Media()
+                case "Quota":
+                    QuotaPreferences()
                 case "About":
                     if let controller = updaterController {
                         About(updaterController: controller)
@@ -128,6 +87,8 @@ struct SettingsView: View {
 }
 
 struct GeneralSettings: View {
+    @State private var language = QuotaLanguage.stored()
+    private let startingLanguage = QuotaLanguage.atLaunch
     @State private var screens: [(uuid: String, name: String)] = NSScreen.screens.compactMap { screen in
         guard let uuid = screen.displayUUID else { return nil }
         return (uuid, screen.localizedName)
@@ -135,9 +96,7 @@ struct GeneralSettings: View {
     @EnvironmentObject var vm: BoringViewModel
     @ObservedObject var coordinator = BoringViewCoordinator.shared
 
-    @Default(.mirrorShape) var mirrorShape
     @Default(.showEmojis) var showEmojis
-    @Default(.gestureSensitivity) var gestureSensitivity
     @Default(.minimumHoverDuration) var minimumHoverDuration
     @Default(.nonNotchHeight) var nonNotchHeight
     @Default(.nonNotchHeightMode) var nonNotchHeightMode
@@ -145,12 +104,25 @@ struct GeneralSettings: View {
     @Default(.notchHeightMode) var notchHeightMode
     @Default(.showOnAllDisplays) var showOnAllDisplays
     @Default(.automaticallySwitchDisplay) var automaticallySwitchDisplay
-    @Default(.enableGestures) var enableGestures
     @Default(.openNotchOnHover) var openNotchOnHover
     
 
     var body: some View {
         Form {
+            Section("语言 / Language") {
+                Picker("应用语言", selection: $language) {
+                    Text("跟随系统").tag(QuotaLanguage.system)
+                    Text(verbatim: "简体中文").tag(QuotaLanguage.chinese)
+                    Text(verbatim: "English").tag(QuotaLanguage.english)
+                }
+                .onChange(of: language) { _, value in value.save() }
+                if language != startingLanguage {
+                    Text("重启后应用新语言，账户和固定设置会保留。")
+                        .font(.caption).foregroundStyle(.secondary)
+                    Button("重启并应用 / Restart to apply") { ApplicationRelauncher.restart() }
+                }
+            }
+
             Section {
                 Toggle(isOn: Binding(
                     get: { Defaults[.menubarIcon] },
@@ -261,7 +233,10 @@ struct GeneralSettings: View {
 
             NotchBehaviour()
 
-            gestureControls()
+            Section("快捷键") {
+                KeyboardShortcuts.Recorder("展开／收起刘海", name: .toggleNotchOpen)
+                KeyboardShortcuts.Recorder("显示音乐信息", name: .toggleSneakPeek)
+            }
         }
         .toolbar {
             Button("Quit app") {
@@ -271,51 +246,7 @@ struct GeneralSettings: View {
         }
         .accentColor(.effectiveAccent)
         .navigationTitle("General")
-        .onChange(of: openNotchOnHover) {
-            if !openNotchOnHover {
-                enableGestures = true
-            }
-        }
-    }
 
-    @ViewBuilder
-    func gestureControls() -> some View {
-        Section {
-            Defaults.Toggle(key: .enableGestures) {
-                Text("Enable gestures")
-            }
-                .disabled(!openNotchOnHover)
-            if enableGestures {
-                Toggle("Change media with horizontal gestures", isOn: .constant(false))
-                    .disabled(true)
-                Defaults.Toggle(key: .closeGestureEnabled) {
-                    Text("Close gesture")
-                }
-                Slider(value: $gestureSensitivity, in: 100...300, step: 100) {
-                    HStack {
-                        Text("Gesture sensitivity")
-                        Spacer()
-                        Text(
-                            Defaults[.gestureSensitivity] == 100
-                                ? "High" : Defaults[.gestureSensitivity] == 200 ? "Medium" : "Low"
-                        )
-                        .foregroundStyle(.secondary)
-                    }
-                }
-            }
-        } header: {
-            HStack {
-                Text("Gesture control")
-                customBadge(text: "Beta")
-            }
-        } footer: {
-            Text(
-                "Two-finger swipe up on notch to close, two-finger swipe down on notch to open when **Open notch on hover** option is disabled"
-            )
-            .multilineTextAlignment(.trailing)
-            .foregroundStyle(.secondary)
-            .font(.caption)
-        }
     }
 
     @ViewBuilder
@@ -382,86 +313,6 @@ struct Charge: View {
     }
 }
 
-//struct Downloads: View {
-//    @Default(.selectedDownloadIndicatorStyle) var selectedDownloadIndicatorStyle
-//    @Default(.selectedDownloadIconStyle) var selectedDownloadIconStyle
-//    var body: some View {
-//        Form {
-//            warningBadge("We don't support downloads yet", "It will be supported later on.")
-//            Section {
-//                Defaults.Toggle(key: .enableDownloadListener) {
-//                    Text("Show download progress")
-//                }
-//                    .disabled(true)
-//                Defaults.Toggle(key: .enableSafariDownloads) {
-//                    Text("Enable Safari Downloads")
-//                }
-//                    .disabled(!Defaults[.enableDownloadListener])
-//                Picker("Download indicator style", selection: $selectedDownloadIndicatorStyle) {
-//                    Text("Progress bar")
-//                        .tag(DownloadIndicatorStyle.progress)
-//                    Text("Percentage")
-//                        .tag(DownloadIndicatorStyle.percentage)
-//                }
-//                Picker("Download icon style", selection: $selectedDownloadIconStyle) {
-//                    Text("Only app icon")
-//                        .tag(DownloadIconStyle.onlyAppIcon)
-//                    Text("Only download icon")
-//                        .tag(DownloadIconStyle.onlyIcon)
-//                    Text("Both")
-//                        .tag(DownloadIconStyle.iconAndAppIcon)
-//                }
-//
-//            } header: {
-//                HStack {
-//                    Text("Download indicators")
-//                    comingSoonTag()
-//                }
-//            }
-//            Section {
-//                List {
-//                    ForEach([].indices, id: \.self) { index in
-//                        Text("\(index)")
-//                    }
-//                }
-//                .frame(minHeight: 96)
-//                .overlay {
-//                    if true {
-//                        Text("No excluded apps")
-//                            .foregroundStyle(Color(.secondaryLabelColor))
-//                    }
-//                }
-//                .actionBar(padding: 0) {
-//                    Group {
-//                        Button {
-//                        } label: {
-//                            Image(systemName: "plus")
-//                                .frame(width: 25, height: 16, alignment: .center)
-//                                .contentShape(Rectangle())
-//                                .foregroundStyle(.secondary)
-//                        }
-//
-//                        Divider()
-//                        Button {
-//                        } label: {
-//                            Image(systemName: "minus")
-//                                .frame(width: 20, height: 16, alignment: .center)
-//                                .contentShape(Rectangle())
-//                                .foregroundStyle(.secondary)
-//                        }
-//                    }
-//                }
-//            } header: {
-//                HStack(spacing: 4) {
-//                    Text("Exclude apps")
-//                    comingSoonTag()
-//                }
-//            }
-//        }
-//        .navigationTitle("Downloads")
-//    }
-//}
-
 struct HUD: View {
     @EnvironmentObject var vm: BoringViewModel
     @Default(.inlineHUD) var inlineHUD
@@ -511,7 +362,7 @@ struct HUD: View {
             Section {
                 Picker("Option key behaviour", selection: $optionKeyAction) {
                     ForEach(OptionKeyAction.allCases) { opt in
-                        Text(opt.rawValue).tag(opt)
+                        Text(LocalizedStringKey(opt.rawValue)).tag(opt)
                     }
                 }
                 
@@ -529,22 +380,6 @@ struct HUD: View {
                 }
             } header: {
                 Text("General")
-            }
-            .disabled(!hudReplacement)
-            
-            Section {
-                Defaults.Toggle(key: .showOpenNotchHUD) {
-                    Text("Show HUD in open notch")
-                }
-                Defaults.Toggle(key: .showOpenNotchHUDPercentage) {
-                    Text("Show percentage")
-                }
-                .disabled(!Defaults[.showOpenNotchHUD])
-            } header: {
-                HStack {
-                    Text("Open Notch")
-                    customBadge(text: "Beta")
-                }
             }
             .disabled(!hudReplacement)
             
@@ -599,14 +434,13 @@ struct Media: View {
     @Default(.enableSneakPeek) private var enableSneakPeek
     @Default(.sneakPeekStyles) var sneakPeekStyles
 
-    @Default(.enableLyrics) var enableLyrics
 
     var body: some View {
         Form {
             Section {
                 Picker("Music Source", selection: $mediaController) {
                     ForEach(availableMediaControllers) { controller in
-                        Text(controller.rawValue).tag(controller)
+                        Text(LocalizedStringKey(controller.rawValue)).tag(controller)
                     }
                 }
                 .onChange(of: mediaController) { _, _ in
@@ -647,7 +481,7 @@ struct Media: View {
                 Toggle("Show sneak peek on playback changes", isOn: $enableSneakPeek)
                 Picker("Sneak Peek Style", selection: $sneakPeekStyles) {
                     ForEach(SneakPeekStyle.allCases) { style in
-                        Text(style.rawValue).tag(style)
+                        Text(LocalizedStringKey(style.rawValue)).tag(style)
                     }
                 }
                 HStack {
@@ -660,17 +494,8 @@ struct Media: View {
                         }
                     }
                 }
-                Picker(
-                    selection: $hideNotchOption,
-                    label:
-                        HStack {
-                            Text("Full screen behavior")
-                            customBadge(text: "Beta")
-                        }
-                ) {
+                Picker("Full screen behavior", selection: $hideNotchOption) {
                     Text("Hide for all apps").tag(HideNotchOption.always)
-                    Text("Hide for media app only").tag(
-                        HideNotchOption.nowPlayingOnly)
                     Text("Never hide").tag(HideNotchOption.never)
                 }
             } header: {
@@ -679,12 +504,7 @@ struct Media: View {
             
             Section {
                 MusicSlotConfigurationView()
-                Defaults.Toggle(key: .enableLyrics) {
-                    HStack {
-                        Text("Show lyrics below artist name")
-                        customBadge(text: "Beta")
-                    }
-                }
+
             } header: {
                 Text("Media controls")
             }  footer: {
@@ -833,345 +653,43 @@ func lighterColor(from nsColor: NSColor, amount: CGFloat = 0.14) -> Color {
 }
 
 struct About: View {
-    @State private var showBuildNumber: Bool = false
     let updaterController: SPUStandardUpdaterController
-    @Environment(\.openWindow) var openWindow
     var body: some View {
-        VStack {
-            Form {
-                Section {
-                    HStack {
-                        Text("Release name")
-                        Spacer()
-                        Text(Defaults[.releaseName])
-                            .foregroundStyle(.secondary)
+        Form {
+            Section {
+                HStack(spacing: 16) {
+                    Image("logo2").resizable().scaledToFit()
+                        .frame(width: 64, height: 64).clipShape(RoundedRectangle(cornerRadius: 14))
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("QuotaNotch").font(.title2.weight(.semibold))
+                        Text("AI 额度、音乐与日历，留在刘海边上。")
+                            .font(.callout).foregroundStyle(.secondary)
+                        Text("\(Bundle.main.releaseVersionNumber ?? "—") (\(Bundle.main.buildVersionNumber ?? "—"))")
+                            .font(.caption).foregroundStyle(.secondary).monospacedDigit()
                     }
-                    HStack {
-                        Text("Version")
-                        Spacer()
-                        if showBuildNumber {
-                            Text("(\(Bundle.main.buildVersionNumber ?? ""))")
-                                .foregroundStyle(.secondary)
-                        }
-                        Text(Bundle.main.releaseVersionNumber ?? "unkown")
-                            .foregroundStyle(.secondary)
-                    }
-                    .onTapGesture {
-                        withAnimation {
-                            showBuildNumber.toggle()
-                        }
-                    }
-                } header: {
-                    Text("Version info")
-                }
-
-                UpdaterSettingsView(updater: updaterController.updater)
-
-                HStack(spacing: 30) {
-                    Spacer(minLength: 0)
-                    Button {
-                        if let url = URL(string: "https://github.com/TheBoredTeam/boring.notch") {
-                            NSWorkspace.shared.open(url)
-                        }
-                    } label: {
-                        VStack(spacing: 5) {
-                            Image("Github")
-                                .resizable()
-                                .aspectRatio(contentMode: .fit)
-                                .frame(width: 18)
-                            Text("GitHub")
-                        }
-                        .contentShape(Rectangle())
-                    }
-                    Spacer(minLength: 0)
-                }
-                .buttonStyle(PlainButtonStyle())
+                }.padding(.vertical, 8)
             }
-            VStack(spacing: 0) {
-                Divider()
-                Text("Made with 🫶🏻 by not so boring not.people")
-                    .foregroundStyle(.secondary)
-                    .padding(.top, 5)
-                    .padding(.bottom, 7)
-                    .multilineTextAlignment(.center)
-                    .padding(.horizontal, 10)
+            Section("更新与支持") {
+                Link("查看更新", destination: URL(string: "https://github.com/ApisXia/QuotaNotch/releases")!)
+                Link("GitHub", destination: URL(string: "https://github.com/ApisXia/QuotaNotch")!)
+                Text("当前通过 GitHub Releases 手动更新。")
+                    .font(.caption).foregroundStyle(.secondary)
             }
-            .frame(maxWidth: .infinity, alignment: .center)
-        }
-        .toolbar {
-            //            Button("Welcome window") {
-            //                openWindow(id: "onboarding")
-            //            }
-            //            .controlSize(.extraLarge)
-            CheckForUpdatesView(updater: updaterController.updater)
+            Section("致谢与许可") {
+                Text("QuotaNotch by ApisXia")
+                Link("基于 Boring Notch", destination: URL(string: "https://github.com/TheBoredTeam/boring.notch")!)
+                Link("GPL-3.0 许可证", destination: URL(string: "https://github.com/ApisXia/QuotaNotch/blob/main/LICENSE")!)
+                Link("第三方许可", destination: URL(string: "https://github.com/ApisXia/QuotaNotch/blob/main/THIRD_PARTY_LICENSES")!)
+            }
         }
         .navigationTitle("About")
     }
 }
 
-struct Shelf: View {
-    
-    @Default(.shelfTapToOpen) var shelfTapToOpen: Bool
-    @Default(.quickShareProvider) var quickShareProvider
-    @Default(.expandedDragDetection) var expandedDragDetection: Bool
-    @StateObject private var quickShareService = QuickShareService.shared
-
-    private var selectedProvider: QuickShareProvider? {
-        quickShareService.availableProviders.first(where: { $0.id == quickShareProvider })
-    }
-    
-    init() {
-        Task { await QuickShareService.shared.discoverAvailableProviders() }
-    }
-    
-    var body: some View {
-        Form {
-            Section {
-                Defaults.Toggle(key: .boringShelf) {
-                    Text("Enable shelf")
-                }
-                Defaults.Toggle(key: .openShelfByDefault) {
-                    Text("Open shelf by default if items are present")
-                }
-                Defaults.Toggle(key: .expandedDragDetection) {
-                    Text("Expanded drag detection area")
-                }
-                .onChange(of: expandedDragDetection) {
-                    NotificationCenter.default.post(
-                        name: Notification.Name.expandedDragDetectionChanged,
-                        object: nil
-                    )
-                }
-                Defaults.Toggle(key: .copyOnDrag) {
-                    Text("Copy items on drag")
-                }
-                Defaults.Toggle(key: .autoRemoveShelfItems) {
-                    Text("Remove from shelf after dragging")
-                }
-
-            } header: {
-                HStack {
-                    Text("General")
-                }
-            }
-            
-            Section {
-                Picker("Quick Share Service", selection: $quickShareProvider) {
-                    ForEach(quickShareService.availableProviders, id: \.id) { provider in
-                        HStack {
-                            Group {
-                                if let imgData = provider.imageData, let nsImg = NSImage(data: imgData) {
-                                    Image(nsImage: nsImg)
-                                        .resizable()
-                                        .aspectRatio(contentMode: .fit)
-                                } else {
-                                    Image(systemName: "square.and.arrow.up")
-                                }
-                            }
-                            .frame(width: 16, height: 16)
-                            .foregroundColor(.accentColor)
-                            Text(provider.id)
-                        }
-                        .tag(provider.id)
-                    }
-                }
-                .pickerStyle(.menu)
-                
-                if let selectedProvider = selectedProvider {
-                    HStack {
-                        Group {
-                            if let imgData = selectedProvider.imageData, let nsImg = NSImage(data: imgData) {
-                                Image(nsImage: nsImg)
-                                    .resizable()
-                                    .aspectRatio(contentMode: .fit)
-                            } else {
-                                Image(systemName: "square.and.arrow.up")
-                            }
-                        }
-                        .frame(width: 16, height: 16)
-                        .foregroundColor(.accentColor)
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text("Currently selected: \(selectedProvider.id)")
-                                .font(.caption)
-                                .foregroundColor(.secondary)
-                            Text("Files dropped on the shelf will be shared via this service")
-                                .font(.caption2)
-                                .foregroundColor(.secondary)
-                        }
-                    }
-                    .padding(.vertical, 4)
-                }
-                // Providers are always enabled; user can pick default service above.
-                
-            } header: {
-                HStack {
-                    Text("Quick Share")
-                }
-            } footer: {
-                Text("Choose which service to use when sharing files from the shelf. Click the shelf button to select files, or drag files onto it to share immediately.")
-                    .font(.caption)
-                    .foregroundColor(.secondary)
-            }
-        }
-        .accentColor(.effectiveAccent)
-        .navigationTitle("Shelf")
-    }
-}
-
-//struct Extensions: View {
-//    @State private var effectTrigger: Bool = false
-//    var body: some View {
-//        Form {
-//            Section {
-//                List {
-//                    ForEach(extensionManager.installedExtensions.indices, id: \.self) { index in
-//                        let item = extensionManager.installedExtensions[index]
-//                        HStack {
-//                            AppIcon(for: item.bundleIdentifier)
-//                                .resizable()
-//                                .frame(width: 24, height: 24)
-//                            Text(item.name)
-//                            ListItemPopover {
-//                                Text("Description")
-//                            }
-//                            Spacer(minLength: 0)
-//                            HStack(spacing: 6) {
-//                                Circle()
-//                                    .frame(width: 6, height: 6)
-//                                    .foregroundColor(
-//                                        isExtensionRunning(item.bundleIdentifier)
-//                                            ? .green : item.status == .disabled ? .gray : .red
-//                                    )
-//                                    .conditionalModifier(isExtensionRunning(item.bundleIdentifier))
-//                                { view in
-//                                    view
-//                                        .shadow(color: .green, radius: 3)
-//                                }
-//                                Text(
-//                                    isExtensionRunning(item.bundleIdentifier)
-//                                        ? "Running"
-//                                        : item.status == .disabled ? "Disabled" : "Stopped"
-//                                )
-//                                .contentTransition(.numericText())
-//                                .foregroundStyle(.secondary)
-//                                .font(.footnote)
-//                            }
-//                            .frame(width: 60, alignment: .leading)
-//
-//                            Menu(
-//                                content: {
-//                                    Button("Restart") {
-//                                        let ws = NSWorkspace.shared
-//
-//                                        if let ext = ws.runningApplications.first(where: {
-//                                            $0.bundleIdentifier == item.bundleIdentifier
-//                                        }) {
-//                                            ext.terminate()
-//                                        }
-//
-//                                        if let appURL = ws.urlForApplication(
-//                                            withBundleIdentifier: item.bundleIdentifier)
-//                                        {
-//                                            ws.openApplication(
-//                                                at: appURL, configuration: .init(),
-//                                                completionHandler: nil)
-//                                        }
-//                                    }
-//                                    .keyboardShortcut("R", modifiers: .command)
-//                                    Button("Disable") {
-//                                        if let ext = NSWorkspace.shared.runningApplications.first(
-//                                            where: { $0.bundleIdentifier == item.bundleIdentifier })
-//                                        {
-//                                            ext.terminate()
-//                                        }
-//                                        extensionManager.installedExtensions[index].status =
-//                                            .disabled
-//                                    }
-//                                    .keyboardShortcut("D", modifiers: .command)
-//                                    Divider()
-//                                    Button("Uninstall", role: .destructive) {
-//                                        //
-//                                    }
-//                                },
-//                                label: {
-//                                    Image(systemName: "ellipsis.circle")
-//                                        .foregroundStyle(.secondary)
-//                                }
-//                            )
-//                            .controlSize(.regular)
-//                        }
-//                        .buttonStyle(PlainButtonStyle())
-//                        .padding(.vertical, 5)
-//                    }
-//                }
-//                .frame(minHeight: 120)
-//                .actionBar {
-//                    Button {
-//                    } label: {
-//                        HStack(spacing: 3) {
-//                            Image(systemName: "plus")
-//                            Text("Add manually")
-//                        }
-//                        .foregroundStyle(.secondary)
-//                    }
-//                    .disabled(true)
-//                    Spacer()
-//                    Button {
-//                        withAnimation(.linear(duration: 1)) {
-//                            effectTrigger.toggle()
-//                        } completion: {
-//                            effectTrigger.toggle()
-//                        }
-//                        extensionManager.checkIfExtensionsAreInstalled()
-//                    } label: {
-//                        HStack(spacing: 3) {
-//                            Image(systemName: "arrow.triangle.2.circlepath")
-//                                .rotationEffect(effectTrigger ? .degrees(360) : .zero)
-//                        }
-//                        .foregroundStyle(.secondary)
-//                    }
-//                }
-//                .controlSize(.small)
-//                .buttonStyle(PlainButtonStyle())
-//                .overlay {
-//                    if extensionManager.installedExtensions.isEmpty {
-//                        Text("No extension installed")
-//                            .foregroundStyle(Color(.secondaryLabelColor))
-//                            .padding(.bottom, 22)
-//                    }
-//                }
-//            } header: {
-//                HStack(spacing: 0) {
-//                    Text("Installed extensions")
-//                    if !extensionManager.installedExtensions.isEmpty {
-//                        Text(" – \(extensionManager.installedExtensions.count)")
-//                            .foregroundStyle(.secondary)
-//                    }
-//                }
-//            }
-//        }
-//        .accentColor(.effectiveAccent)
-//        .navigationTitle("Extensions")
-//        // TipsView()
-//        // .padding(.horizontal, 19)
-//    }
-//}
-
 struct Appearance: View {
     @ObservedObject var coordinator = BoringViewCoordinator.shared
-    @Default(.mirrorShape) var mirrorShape
     @Default(.sliderColor) var sliderColor
-    @Default(.useMusicVisualizer) var useMusicVisualizer
-    @Default(.customVisualizers) var customVisualizers
-    @Default(.selectedVisualizer) var selectedVisualizer
 
-    let icons: [String] = ["logo2"]
-    @State private var selectedIcon: String = "logo2"
-    @State private var selectedListVisualizer: CustomVisualizer? = nil
-    @State private var isPresented: Bool = false
-    @State private var name: String = ""
-    @State private var url: String = ""
-    @State private var speed: CGFloat = 1.0
     var body: some View {
         Form {
             Section {
@@ -1195,7 +713,7 @@ struct Appearance: View {
                 }
                 Picker("Slider color", selection: $sliderColor) {
                     ForEach(SliderColorEnum.allCases, id: \.self) { option in
-                        Text(option.rawValue)
+                        Text(LocalizedStringKey(option.rawValue))
                     }
                 }
             } header: {
@@ -1203,190 +721,6 @@ struct Appearance: View {
             }
 
             Section {
-                Toggle(
-                    "Use music visualizer spectrogram",
-                    isOn: $useMusicVisualizer.animation()
-                )
-                .disabled(true)
-                if !useMusicVisualizer {
-                    if customVisualizers.count > 0 {
-                        Picker(
-                            "Selected animation",
-                            selection: $selectedVisualizer
-                        ) {
-                            ForEach(
-                                customVisualizers,
-                                id: \.self
-                            ) { visualizer in
-                                Text(visualizer.name)
-                                    .tag(visualizer)
-                            }
-                        }
-                    } else {
-                        HStack {
-                            Text("Selected animation")
-                            Spacer()
-                            Text("No custom animation available")
-                                .foregroundStyle(.secondary)
-                        }
-                    }
-                }
-            } header: {
-                HStack {
-                    Text("Custom music live activity animation")
-                    customBadge(text: "Coming soon")
-                }
-            }
-
-            Section {
-                List {
-                    ForEach(customVisualizers, id: \.self) { visualizer in
-                        HStack {
-                            LottieView(
-                                url: visualizer.url, speed: visualizer.speed,
-                                loopMode: .loop
-                            )
-                            .frame(width: 30, height: 30, alignment: .center)
-                            Text(visualizer.name)
-                            Spacer(minLength: 0)
-                            if selectedVisualizer == visualizer {
-                                Text("selected")
-                                    .font(.caption)
-                                    .fontWeight(.medium)
-                                    .foregroundStyle(.secondary)
-                                    .padding(.trailing, 8)
-                            }
-                        }
-                        .buttonStyle(PlainButtonStyle())
-                        .padding(.vertical, 2)
-                        .background(
-                            selectedListVisualizer != nil
-                                ? selectedListVisualizer == visualizer
-                                    ? Color.effectiveAccent : Color.clear : Color.clear,
-                            in: RoundedRectangle(cornerRadius: 5)
-                        )
-                        .contentShape(Rectangle())
-                        .onTapGesture {
-                            if selectedListVisualizer == visualizer {
-                                selectedListVisualizer = nil
-                                return
-                            }
-                            selectedListVisualizer = visualizer
-                        }
-                    }
-                }
-                .safeAreaPadding(
-                    EdgeInsets(top: 5, leading: 0, bottom: 5, trailing: 0)
-                )
-                .frame(minHeight: 120)
-                .actionBar {
-                    HStack(spacing: 5) {
-                        Button {
-                            name = ""
-                            url = ""
-                            speed = 1.0
-                            isPresented.toggle()
-                        } label: {
-                            Image(systemName: "plus")
-                                .foregroundStyle(.secondary)
-                                .contentShape(Rectangle())
-                        }
-                        Divider()
-                        Button {
-                            if selectedListVisualizer != nil {
-                                let visualizer = selectedListVisualizer!
-                                selectedListVisualizer = nil
-                                customVisualizers.remove(
-                                    at: customVisualizers.firstIndex(of: visualizer)!)
-                                if visualizer == selectedVisualizer && customVisualizers.count > 0 {
-                                    selectedVisualizer = customVisualizers[0]
-                                }
-                            }
-                        } label: {
-                            Image(systemName: "minus")
-                                .foregroundStyle(.secondary)
-                                .contentShape(Rectangle())
-                        }
-                    }
-                }
-                .controlSize(.small)
-                .buttonStyle(PlainButtonStyle())
-                .overlay {
-                    if customVisualizers.isEmpty {
-                        Text("No custom visualizer")
-                            .foregroundStyle(Color(.secondaryLabelColor))
-                            .padding(.bottom, 22)
-                    }
-                }
-                .sheet(isPresented: $isPresented) {
-                    VStack(alignment: .leading) {
-                        Text("Add new visualizer")
-                            .font(.largeTitle.bold())
-                            .padding(.vertical)
-                        TextField("Name", text: $name)
-                        TextField("Lottie JSON URL", text: $url)
-                        HStack {
-                            Text("Speed")
-                            Spacer(minLength: 80)
-                            Text("\(speed, specifier: "%.1f")s")
-                                .multilineTextAlignment(.trailing)
-                                .foregroundStyle(.secondary)
-                            Slider(value: $speed, in: 0...2, step: 0.1)
-                        }
-                        .padding(.vertical)
-                        HStack {
-                            Button {
-                                isPresented.toggle()
-                            } label: {
-                                Text("Cancel")
-                                    .frame(maxWidth: .infinity, alignment: .center)
-                            }
-
-                            Button {
-                                let visualizer: CustomVisualizer = .init(
-                                    UUID: UUID(),
-                                    name: name,
-                                    url: URL(string: url)!,
-                                    speed: speed
-                                )
-
-                                if !customVisualizers.contains(visualizer) {
-                                    customVisualizers.append(visualizer)
-                                }
-
-                                isPresented.toggle()
-                            } label: {
-                                Text("Add")
-                                    .frame(maxWidth: .infinity, alignment: .center)
-                            }
-                            .buttonStyle(BorderedProminentButtonStyle())
-                        }
-                    }
-                    .textFieldStyle(RoundedBorderTextFieldStyle())
-                    .controlSize(.extraLarge)
-                    .padding()
-                }
-            } header: {
-                HStack(spacing: 0) {
-                    Text("Custom vizualizers (Lottie)")
-                    if !Defaults[.customVisualizers].isEmpty {
-                        Text(" – \(Defaults[.customVisualizers].count)")
-                            .foregroundStyle(.secondary)
-                    }
-                }
-            }
-
-            Section {
-                Defaults.Toggle(key: .showMirror) {
-                    Text("Enable boring mirror")
-                }
-                    .disabled(!checkVideoInput())
-                Picker("Mirror shape", selection: $mirrorShape) {
-                    Text("Circle")
-                        .tag(MirrorShapeEnum.circle)
-                    Text("Square")
-                        .tag(MirrorShapeEnum.rectangle)
-                }
                 Defaults.Toggle(key: .showNotHumanFace) {
                     Text("Show cool face animation while inactive")
                 }
@@ -1400,13 +734,7 @@ struct Appearance: View {
         .navigationTitle("Appearance")
     }
 
-    func checkVideoInput() -> Bool {
-        if AVCaptureDevice.default(for: .video) != nil {
-            return true
-        }
 
-        return false
-    }
 }
 
 struct Advanced: View {
@@ -1569,50 +897,6 @@ struct Advanced: View {
             }
             
             Section {
-                HStack {
-                    ForEach(icons, id: \.self) { icon in
-                        Spacer()
-                        VStack {
-                            Image(icon)
-                                .resizable()
-                                .frame(width: 80, height: 80)
-                                .background(
-                                    RoundedRectangle(cornerRadius: 20, style: .circular)
-                                        .strokeBorder(
-                                            icon == selectedIcon ? Color.effectiveAccent : .clear,
-                                            lineWidth: 2.5
-                                        )
-                                )
-
-                            Text("Default")
-                                .fontWeight(.medium)
-                                .font(.caption)
-                                .foregroundStyle(icon == selectedIcon ? .white : .secondary)
-                                .padding(.horizontal, 10)
-                                .padding(.vertical, 3)
-                                .background(
-                                    Capsule()
-                                        .fill(icon == selectedIcon ? Color.effectiveAccent : .clear)
-                                )
-                        }
-                        .onTapGesture {
-                            withAnimation {
-                                selectedIcon = icon
-                            }
-                            NSApp.applicationIconImage = NSImage(named: icon)
-                        }
-                        Spacer()
-                    }
-                }
-                .disabled(true)
-            } header: {
-                HStack {
-                    Text("App icon")
-                    customBadge(text: "Coming soon")
-                }
-            }
-            
-            Section {
                 Defaults.Toggle(key: .extendHoverArea) {
                     Text("Extend hover area")
                 }
@@ -1719,78 +1003,6 @@ struct AccentCircleButton: View {
         }
         .buttonStyle(.plain)
         .help(isSystemDefault ? "Use your macOS system accent color" : "")
-    }
-}
-
-struct Shortcuts: View {
-    var body: some View {
-        Form {
-            Section {
-                KeyboardShortcuts.Recorder("Toggle Sneak Peek:", name: .toggleSneakPeek)
-            } header: {
-                Text("Media")
-            } footer: {
-                Text(
-                    "Sneak Peek shows the media title and artist under the notch for a few seconds."
-                )
-                .multilineTextAlignment(.trailing)
-                .foregroundStyle(.secondary)
-                .font(.caption)
-            }
-            Section {
-                KeyboardShortcuts.Recorder("Toggle Notch Open:", name: .toggleNotchOpen)
-            }
-        }
-        .accentColor(.effectiveAccent)
-        .navigationTitle("Shortcuts")
-    }
-}
-
-func proFeatureBadge() -> some View {
-    Text("Upgrade to Pro")
-        .foregroundStyle(Color(red: 0.545, green: 0.196, blue: 0.98))
-        .font(.footnote.bold())
-        .padding(.vertical, 3)
-        .padding(.horizontal, 6)
-        .background(
-            RoundedRectangle(cornerRadius: 4).stroke(
-                Color(red: 0.545, green: 0.196, blue: 0.98), lineWidth: 1))
-}
-
-func comingSoonTag() -> some View {
-    Text("Coming soon")
-        .foregroundStyle(.secondary)
-        .font(.footnote.bold())
-        .padding(.vertical, 3)
-        .padding(.horizontal, 6)
-        .background(Color(nsColor: .secondarySystemFill))
-        .clipShape(.capsule)
-}
-
-func customBadge(text: String) -> some View {
-    Text(text)
-        .foregroundStyle(.secondary)
-        .font(.footnote.bold())
-        .padding(.vertical, 3)
-        .padding(.horizontal, 6)
-        .background(Color(nsColor: .secondarySystemFill))
-        .clipShape(.capsule)
-}
-
-func warningBadge(_ text: String, _ description: String) -> some View {
-    Section {
-        HStack(spacing: 12) {
-            Image(systemName: "exclamationmark.triangle.fill")
-                .font(.system(size: 22))
-                .foregroundStyle(.yellow)
-            VStack(alignment: .leading) {
-                Text(text)
-                    .font(.headline)
-                Text(description)
-                    .foregroundStyle(.secondary)
-            }
-            Spacer()
-        }
     }
 }
 

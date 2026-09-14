@@ -16,24 +16,21 @@ import SwiftUIIntrospect
 @MainActor
 struct ContentView: View {
     @EnvironmentObject var vm: BoringViewModel
-    @ObservedObject var webcamManager = WebcamManager.shared
 
     @ObservedObject var coordinator = BoringViewCoordinator.shared
     @ObservedObject var musicManager = MusicManager.shared
+    @ObservedObject private var quotaStore = QuotaNotchStore.shared
     @ObservedObject var batteryModel = BatteryStatusViewModel.shared
     @ObservedObject var brightnessManager = BrightnessManager.shared
     @ObservedObject var volumeManager = VolumeManager.shared
     @State private var hoverTask: Task<Void, Never>?
     @State private var isHovering: Bool = false
-    @State private var anyDropDebounceTask: Task<Void, Never>?
 
-    @State private var gestureProgress: CGFloat = .zero
 
     @State private var haptics: Bool = false
 
     @Namespace var albumArtNamespace
 
-    @Default(.useMusicVisualizer) var useMusicVisualizer
 
     @Default(.showNotHumanFace) var showNotHumanFace
 
@@ -65,6 +62,8 @@ struct ContentView: View {
             && vm.notchState == .closed && Defaults[.showPowerStatusNotifications]
         {
             chinWidth = 640
+        } else if showQuotaWings {
+            chinWidth += QuotaCompactMetrics.chinAddition(height: vm.effectiveClosedNotchHeight)
         } else if (!coordinator.expandingView.show || coordinator.expandingView.type == .music)
             && vm.notchState == .closed && (musicManager.isPlaying || !musicManager.isPlayerIdle)
             && coordinator.musicLiveActivityEnabled && !vm.hideOnClosed
@@ -80,44 +79,24 @@ struct ContentView: View {
         return chinWidth
     }
 
+    private var quotaPresentation: QuotaPresentation {
+        guard vm.notchState == .closed else { return .none }
+        return quotaStore.pins.presentation(
+            enabled: quotaStore.enabled,
+            hidden: vm.hideOnClosed || vm.effectiveClosedNotchHeight <= 0,
+            transient: coordinator.expandingView.show || coordinator.sneakPeek.show || coordinator.helloAnimationRunning,
+            musicPlaying: (musicManager.isPlaying || !musicManager.isPlayerIdle) && coordinator.musicLiveActivityEnabled
+        )
+    }
+
+    private var showQuotaWings: Bool {
+        quotaPresentation == .quota || quotaPresentation == .combined
+    }
+
     var body: some View {
-        // Calculate scale based on gesture progress only
-        let gestureScale: CGFloat = {
-            guard gestureProgress != 0 else { return 1.0 }
-            let scaleFactor = 1.0 + gestureProgress * 0.01
-            return max(0.6, scaleFactor)
-        }()
-        
         ZStack(alignment: .top) {
             VStack(spacing: 0) {
-                let mainLayout = NotchLayout()
-                    .frame(alignment: .top)
-                    .padding(
-                        .horizontal,
-                        vm.notchState == .open
-                        ? Defaults[.cornerRadiusScaling]
-                        ? (cornerRadiusInsets.opened.top) : (cornerRadiusInsets.opened.bottom)
-                        : cornerRadiusInsets.closed.bottom
-                    )
-                    .padding([.horizontal, .bottom], vm.notchState == .open ? 12 : 0)
-                    .background(.black)
-                    .clipShape(currentNotchShape)
-                    .overlay(alignment: .top) {
-                        Rectangle()
-                            .fill(.black)
-                            .frame(height: 1)
-                            .padding(.horizontal, topCornerRadius)
-                    }
-                    .shadow(
-                        color: ((vm.notchState == .open || isHovering) && Defaults[.enableShadow])
-                            ? .black.opacity(0.7) : .clear, radius: Defaults[.cornerRadiusScaling] ? 6 : 4
-                    )
-                    .padding(
-                        .bottom,
-                        vm.effectiveClosedNotchHeight == 0 ? 10 : 0
-                    )
-                
-                mainLayout
+                styledNotch
                     .frame(height: vm.notchState == .open ? vm.notchSize.height : nil)
                     .conditionalModifier(true) { view in
                         let openAnimation = Animation.spring(response: 0.42, dampingFraction: 0.8, blendDuration: 0)
@@ -125,40 +104,13 @@ struct ContentView: View {
                         
                         return view
                             .animation(vm.notchState == .open ? openAnimation : closeAnimation, value: vm.notchState)
-                            .animation(.smooth, value: gestureProgress)
                     }
                     .contentShape(Rectangle())
                     .onHover { hovering in
                         handleHover(hovering)
                     }
                     .onTapGesture {
-                        doOpen()
-                    }
-                    .conditionalModifier(Defaults[.enableGestures]) { view in
-                        view
-                            .panGesture(direction: .down) { translation, phase in
-                                handleDownGesture(translation: translation, phase: phase)
-                            }
-                    }
-                    .conditionalModifier(Defaults[.closeGestureEnabled] && Defaults[.enableGestures]) { view in
-                        view
-                            .panGesture(direction: .up) { translation, phase in
-                                handleUpGesture(translation: translation, phase: phase)
-                            }
-                    }
-                    .onReceive(NotificationCenter.default.publisher(for: .sharingDidFinish)) { _ in
-                        if vm.notchState == .open && !isHovering && !vm.isBatteryPopoverActive {
-                            hoverTask?.cancel()
-                            hoverTask = Task {
-                                try? await Task.sleep(for: .milliseconds(100))
-                                guard !Task.isCancelled else { return }
-                                await MainActor.run {
-                                    if self.vm.notchState == .open && !self.isHovering && !self.vm.isBatteryPopoverActive && !SharingStateManager.shared.preventNotchClose {
-                                        self.vm.close()
-                                    }
-                                }
-                            }
-                        }
+                        openFromPointer()
                     }
                     .onChange(of: vm.notchState) { _, newState in
                         if newState == .closed && isHovering {
@@ -168,13 +120,13 @@ struct ContentView: View {
                         }
                     }
                     .onChange(of: vm.isBatteryPopoverActive) {
-                        if !vm.isBatteryPopoverActive && !isHovering && vm.notchState == .open && !SharingStateManager.shared.preventNotchClose {
+                        if !vm.isBatteryPopoverActive && !isHovering && vm.notchState == .open {
                             hoverTask?.cancel()
                             hoverTask = Task {
                                 try? await Task.sleep(for: .milliseconds(100))
                                 guard !Task.isCancelled else { return }
                                 await MainActor.run {
-                                    if !self.vm.isBatteryPopoverActive && !self.isHovering && self.vm.notchState == .open && !SharingStateManager.shared.preventNotchClose {
+                                    if !self.vm.isBatteryPopoverActive && !self.isHovering && self.vm.notchState == .open {
                                         self.vm.close()
                                     }
                                 }
@@ -205,41 +157,40 @@ struct ContentView: View {
         .padding(.bottom, 8)
         .frame(maxWidth: windowSize.width, maxHeight: windowSize.height, alignment: .top)
         .compositingGroup()
-        .scaleEffect(
-            x: gestureScale,
-            y: gestureScale,
-            anchor: .top
-        )
-        .animation(.smooth, value: gestureProgress)
-        .background(dragDetector)
         .preferredColorScheme(.dark)
+        .environment(\.locale, QuotaLanguage.locale)
         .environmentObject(vm)
-        .onChange(of: vm.anyDropZoneTargeting) { _, isTargeted in
-            anyDropDebounceTask?.cancel()
+        .task { quotaStore.start() }
+    }
 
-            if isTargeted {
-                if vm.notchState == .closed {
-                    coordinator.currentView = .shelf
-                    doOpen()
-                }
-                return
-            }
-
-            anyDropDebounceTask = Task { @MainActor in
-                try? await Task.sleep(for: .milliseconds(500))
-                guard !Task.isCancelled else { return }
-
-                if vm.dropEvent {
-                    vm.dropEvent = false
-                    return
-                }
-
-                vm.dropEvent = false
-                if !SharingStateManager.shared.preventNotchClose {
-                    vm.close()
-                }
-            }
-        }
+    private var styledNotch: some View {
+         NotchLayout()
+                    .frame(alignment: .top)
+                    .padding(
+                        .horizontal,
+                        vm.notchState == .open
+                        ? Defaults[.cornerRadiusScaling]
+                        ? (cornerRadiusInsets.opened.top) : (cornerRadiusInsets.opened.bottom)
+                        : cornerRadiusInsets.closed.bottom
+                    )
+                    .padding([.horizontal, .bottom], vm.notchState == .open ? 12 : 0)
+                    .background(.black)
+                    .clipShape(currentNotchShape)
+                    .overlay(alignment: .top) {
+                        Rectangle()
+                            .fill(.black)
+                            .frame(height: 1)
+                            .padding(.horizontal, topCornerRadius)
+                    }
+                    .shadow(
+                        color: ((vm.notchState == .open || isHovering) && Defaults[.enableShadow])
+                            ? .black.opacity(0.7) : .clear, radius: Defaults[.cornerRadiusScaling] ? 6 : 4
+                    )
+                    .padding(
+                        .bottom,
+                        vm.effectiveClosedNotchHeight == 0 ? 10 : 0
+                    )
+                
     }
 
     @ViewBuilder
@@ -285,8 +236,21 @@ struct ContentView: View {
                         }
                         .frame(height: vm.effectiveClosedNotchHeight, alignment: .center)
                       } else if coordinator.sneakPeek.show && Defaults[.inlineHUD] && (coordinator.sneakPeek.type != .music) && (coordinator.sneakPeek.type != .battery) && vm.notchState == .closed {
-                          InlineHUD(type: $coordinator.sneakPeek.type, value: $coordinator.sneakPeek.value, icon: $coordinator.sneakPeek.icon, hoverAnimation: $isHovering, gestureProgress: $gestureProgress)
+                          InlineHUD(type: $coordinator.sneakPeek.type, value: $coordinator.sneakPeek.value, icon: $coordinator.sneakPeek.icon, hoverAnimation: $isHovering)
                               .transition(.opacity)
+                      } else if showQuotaWings {
+                          QuotaPinnedWings(centerWidth: vm.closedNotchSize.width - cornerRadiusInsets.closed.top,
+                                           height: vm.effectiveClosedNotchHeight,
+                                           showsMusic: quotaPresentation == .combined,
+                                           albumArtNamespace: albumArtNamespace) { provider in
+                              quotaStore.selectedProvider = provider
+                              coordinator.currentView = .aiUsage
+                              doOpen()
+                          } onMusic: {
+                              coordinator.currentView = .home
+                              doOpen()
+                          }
+                          .transition(.opacity)
                       } else if (!coordinator.expandingView.show || coordinator.expandingView.type == .music) && vm.notchState == .closed && (musicManager.isPlaying || !musicManager.isPlayerIdle) && coordinator.musicLiveActivityEnabled && !vm.hideOnClosed {
                           MusicLiveActivity()
                               .frame(alignment: .center)
@@ -295,7 +259,6 @@ struct ContentView: View {
                        } else if vm.notchState == .open {
                            BoringHeader()
                                .frame(height: max(24, vm.effectiveClosedNotchHeight))
-                               .opacity(gestureProgress != 0 ? 1.0 - min(abs(gestureProgress) * 0.1, 0.3) : 1.0)
                        } else {
                            Rectangle().fill(.clear).frame(width: vm.closedNotchSize.width - 20, height: vm.effectiveClosedNotchHeight)
                        }
@@ -347,8 +310,8 @@ struct ContentView: View {
                     switch coordinator.currentView {
                     case .home:
                         NotchHomeView(albumArtNamespace: albumArtNamespace)
-                    case .shelf:
-                        ShelfView()
+                    case .aiUsage:
+                        QuotaNotchView()
                     }
                 }
                 .transition(
@@ -358,10 +321,8 @@ struct ContentView: View {
                 )
                 .zIndex(1)
                 .allowsHitTesting(vm.notchState == .open)
-                .opacity(gestureProgress != 0 ? 1.0 - min(abs(gestureProgress) * 0.1, 0.3) : 1.0)
             }
         }
-        .onDrop(of: [.fileURL, .url, .utf8PlainText, .plainText, .data], delegate: GeneralDropTargetDelegate(isTargeted: $vm.generalDropTargeting))
     }
 
     @ViewBuilder
@@ -387,7 +348,7 @@ struct ContentView: View {
 
     @ViewBuilder
     func MusicLiveActivity() -> some View {
-        HStack {
+        HStack(spacing: QuotaCompactMetrics.spacing) {
             Image(nsImage: musicManager.albumArt)
                 .resizable()
                 .clipped()
@@ -449,7 +410,6 @@ struct ContentView: View {
                 )
 
             HStack {
-                if useMusicVisualizer {
                     Rectangle()
                         .fill(
                             Defaults[.coloredSpectrogram]
@@ -462,16 +422,11 @@ struct ContentView: View {
                             AudioSpectrumView(isPlaying: $musicManager.isPlaying)
                                 .frame(width: 16, height: 12)
                         }
-                } else {
-                    LottieAnimationContainer()
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
-                }
             }
             .frame(
                 width: max(
                     0,
                     vm.effectiveClosedNotchHeight - 12
-                        + gestureProgress / 2
                 ),
                 height: max(
                     0,
@@ -486,26 +441,35 @@ struct ContentView: View {
         )
     }
 
-    @ViewBuilder
-    var dragDetector: some View {
-        if Defaults[.boringShelf] && vm.notchState == .closed {
-            Color.clear
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .contentShape(Rectangle())
-        .onDrop(of: [.fileURL, .url, .utf8PlainText, .plainText, .data], isTargeted: $vm.dragDetectorTargeting) { providers in
-            vm.dropEvent = true
-            ShelfStateViewModel.shared.load(providers)
-            return true
-        }
-        } else {
-            EmptyView()
-        }
-    }
-
     private func doOpen() {
         withAnimation(animationSpring) {
             vm.open()
         }
+    }
+
+    private func openFromPointer() {
+        guard vm.notchState == .closed else { return }
+        var presentation = quotaPresentation
+        // Album artwork remains visible briefly after playback pauses.
+        if presentation == .none && !vm.hideOnClosed && vm.effectiveClosedNotchHeight > 0
+            && !coordinator.expandingView.show && !coordinator.sneakPeek.show
+            && !coordinator.helloAnimationRunning && coordinator.musicLiveActivityEnabled
+            && (musicManager.isPlaying || !musicManager.isPlayerIdle) {
+            presentation = .music
+        }
+        let screen = vm.screenUUID.flatMap { NSScreen.screen(withUUID: $0) } ?? NSScreen.main
+        let midpoint = screen?.frame.midX ?? NSEvent.mouseLocation.x
+        let target = presentation.openingPage(pointerX: Double(NSEvent.mouseLocation.x),
+                                               midpointX: Double(midpoint), isOpen: false)
+        // Commit selection before open(), so the first expanded frame has the right content.
+        switch target {
+        case .home: coordinator.currentView = .home
+        case .quota:
+            if let provider = quotaStore.pins.selected?.provider { quotaStore.selectedProvider = provider }
+            coordinator.currentView = .aiUsage
+        case nil: break
+        }
+        doOpen()
     }
 
     // MARK: - Hover Management
@@ -536,7 +500,7 @@ struct ContentView: View {
                           self.isHovering,
                           !self.coordinator.sneakPeek.show else { return }
                     
-                    self.doOpen()
+                    self.openFromPointer()
                 }
             }
         } else {
@@ -549,7 +513,7 @@ struct ContentView: View {
                         self.isHovering = false
                     }
                     
-                    if self.vm.notchState == .open && !self.vm.isBatteryPopoverActive && !SharingStateManager.shared.preventNotchClose {
+                    if self.vm.notchState == .open && !self.vm.isBatteryPopoverActive {
                         self.vm.close()
                     }
                 }
@@ -557,98 +521,7 @@ struct ContentView: View {
         }
     }
 
-    // MARK: - Gesture Handling
 
-    private func handleDownGesture(translation: CGFloat, phase: NSEvent.Phase) {
-        guard vm.notchState == .closed else { return }
-
-        if phase == .ended {
-            withAnimation(animationSpring) { gestureProgress = .zero }
-            return
-        }
-
-        withAnimation(animationSpring) {
-            gestureProgress = (translation / Defaults[.gestureSensitivity]) * 20
-        }
-
-        if translation > Defaults[.gestureSensitivity] {
-            if Defaults[.enableHaptics] {
-                haptics.toggle()
-            }
-            withAnimation(animationSpring) {
-                gestureProgress = .zero
-            }
-            doOpen()
-        }
-    }
-
-    private func handleUpGesture(translation: CGFloat, phase: NSEvent.Phase) {
-        guard vm.notchState == .open && !vm.isHoveringCalendar else { return }
-
-        withAnimation(animationSpring) {
-            gestureProgress = (translation / Defaults[.gestureSensitivity]) * -20
-        }
-
-        if phase == .ended {
-            withAnimation(animationSpring) {
-                gestureProgress = .zero
-            }
-        }
-
-        if translation > Defaults[.gestureSensitivity] {
-            withAnimation(animationSpring) {
-                isHovering = false
-            }
-            if !SharingStateManager.shared.preventNotchClose { 
-                gestureProgress = .zero
-                vm.close()
-            }
-
-            if Defaults[.enableHaptics] {
-                haptics.toggle()
-            }
-        }
-    }
-}
-
-struct FullScreenDropDelegate: DropDelegate {
-    @Binding var isTargeted: Bool
-    let onDrop: () -> Void
-
-    func dropEntered(info _: DropInfo) {
-        isTargeted = true
-    }
-
-    func dropExited(info _: DropInfo) {
-        isTargeted = false
-    }
-
-    func performDrop(info _: DropInfo) -> Bool {
-        isTargeted = false
-        onDrop()
-        return true
-    }
-
-}
-
-struct GeneralDropTargetDelegate: DropDelegate {
-    @Binding var isTargeted: Bool
-
-    func dropEntered(info: DropInfo) {
-        isTargeted = true
-    }
-
-    func dropExited(info: DropInfo) {
-        isTargeted = false
-    }
-
-    func dropUpdated(info: DropInfo) -> DropProposal? {
-        return DropProposal(operation: .cancel)
-    }
-
-    func performDrop(info: DropInfo) -> Bool {
-        return false
-    }
 }
 
 #Preview {

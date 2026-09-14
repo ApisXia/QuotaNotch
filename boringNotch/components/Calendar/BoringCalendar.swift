@@ -173,6 +173,7 @@ struct WheelPicker: View {
 
     private func dateToString(for date: Date) -> String {
         let formatter = DateFormatter()
+        formatter.locale = QuotaLanguage.locale
         formatter.dateFormat = "E"
         return formatter.string(from: date)
     }
