@@ -69,6 +69,8 @@ struct SettingsPreviewRunner {
             s.projectRoot = "/Users/demo/Projects/\(index % 3)"
             s.projectName = ["QuotaNotch", "A project with a deliberately long name", "Website"][index % 3]
             s.state = state; s.surface = index % 2 == 0 ? .desktop : .vscode
+            s.tool = index % 2 == 0 ? "apply_patch" : "exec_command"
+            if state == .waiting && index == 0 { s.waitingCallID = "preview-question" }
             s.turnID = "one"; s.startedAt = now.addingTimeInterval(-Double(150 + index * 90))
             s.updatedAt = now.addingTimeInterval(-Double(index * 40))
             if !state.isActive { s.finishedAt = now.addingTimeInterval(-30) }
@@ -86,8 +88,13 @@ struct SettingsPreviewRunner {
                             name: "Tasks-\(Int(width))-\(dark ? "dark" : "light")", output: output)
             }
         }
-        try capture(AgentNotchView().padding(18).background(.black).preferredColorScheme(.dark), width: 640,
-                    name: "Tasks-notch", output: output, height: 170)
+        try captureNotchSwitching(output: output)
+        var recent = fixtures[2]
+        recent.updatedAt = now; recent.tool = "apply_patch"
+        precondition(AgentText.activity(recent, now: now).contains(AgentText.t("修改文件", "file edit")))
+        precondition(AgentText.activity(recent, now: now.addingTimeInterval(121)) == AgentText.t("暂时无新活动", "No recent activity"))
+        recent.state = .completed
+        precondition(!AgentText.activity(recent, now: now).contains(AgentText.t("修改文件", "file edit")))
         for width: CGFloat in [165, 280, 430] {
             try capture(PrimaryNotchLayout {
                 Color.black.frame(width: width, height: 32)
@@ -98,6 +105,48 @@ struct SettingsPreviewRunner {
         activity.configurePreview([])
         try capture(AgentActivityView(), width: 760, name: "Tasks-empty", output: output)
         print("Rendered real settings and task monitor in English/Chinese, narrow/wide and light/dark layouts: \(language)")
+    }
+
+    /// Exercise the same window and painted shell while switching real tabs.
+    /// A standalone task-view screenshot cannot catch a vertically centered shell.
+    @MainActor private static func captureNotchSwitching(output: URL) throws {
+        let vm = BoringViewModel()
+        vm.hideOnClosed = false
+        let coordinator = BoringViewCoordinator.shared
+        coordinator.helloAnimationRunning = false
+        QuotaNotchStore.shared.configureSettingsPreview(paused: false)
+        QuotaNotchStore.shared.menuOpen = true // Keep the fixture open without simulating pointer input.
+        defer { QuotaNotchStore.shared.menuOpen = false }
+        let host = NSHostingView(rootView: ContentView().environmentObject(vm)
+            .transaction { $0.animation = nil; $0.disablesAnimations = true }
+            .background(Color(red: 0.25, green: 0.15, blue: 0.35)))
+        let window = NSWindow(contentRect: NSRect(origin: .zero, size: windowSize),
+                              styleMask: [.borderless], backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false
+        window.contentView = host
+        window.setContentSize(windowSize)
+        window.orderFront(nil)
+        vm.open()
+        for headerHeight: CGFloat in [24, 32, 38] {
+            vm.closedNotchSize.height = headerHeight
+            for (index, tab) in [NotchViews.home, .activity, .aiUsage, .activity].enumerated() {
+                coordinator.currentView = tab
+                settle()
+                host.layoutSubtreeIfNeeded()
+                guard let bitmap = host.bitmapImageRepForCachingDisplay(in: host.bounds) else { fatalError("Missing notch bitmap") }
+                host.cacheDisplay(in: host.bounds, to: bitmap)
+                // All three interior columns must touch the screen top. Purple means a gap.
+                for fraction in [0.25, 0.5, 0.75] {
+                    let color = bitmap.colorAt(x: Int(Double(bitmap.pixelsWide) * fraction), y: 2)!.usingColorSpace(.deviceRGB)!
+                    precondition(max(color.redComponent, max(color.greenComponent, color.blueComponent)) < 0.06,
+                                 "Notch detached after switching tab \(index), header \(headerHeight)")
+                }
+                let png = bitmap.representation(using: .png, properties: [:])!
+                try png.write(to: output.appendingPathComponent("Notch-switch-\(Int(headerHeight))-\(index).png"))
+            }
+        }
+        window.orderOut(nil); window.contentView = nil; window.close()
+        vm.destroy()
     }
 
     @MainActor private static func capture<V: View>(_ view: V, width: CGFloat, name: String, output: URL, height: CGFloat = 600) throws {

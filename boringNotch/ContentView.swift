@@ -88,7 +88,6 @@ struct ContentView: View {
         ZStack(alignment: .top) {
             VStack(spacing: 0) {
                 styledNotch
-                    .frame(height: vm.notchState == .open ? vm.notchSize.height : nil)
                     .conditionalModifier(true) { view in
                         let openAnimation = Animation.spring(response: 0.42, dampingFraction: 0.8, blendDuration: 0)
                         let closeAnimation = Animation.spring(response: 0.45, dampingFraction: 1.0, blendDuration: 0)
@@ -176,6 +175,11 @@ struct ContentView: View {
                         : cornerRadiusInsets.closed.bottom
                     )
                     .padding([.horizontal, .bottom], vm.notchState == .open ? 12 : 0)
+                    // Size the painted shell, not a transparent wrapper around it.
+                    // Short tabs must never center the entire notch away from the screen edge.
+                    .frame(width: vm.notchState == .open ? vm.notchSize.width : nil,
+                           height: vm.notchState == .open ? vm.notchSize.height : nil,
+                           alignment: .top)
                     .background(.black)
                     .clipShape(currentNotchShape)
                     .overlay(alignment: .top) {

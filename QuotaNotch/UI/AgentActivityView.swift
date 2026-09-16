@@ -36,32 +36,97 @@ struct AgentAccessoryView: View {
 struct AgentNotchView: View {
     @ObservedObject private var store = AgentActivityStore.shared
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack {
-                Text(AgentText.t("任务", "Tasks")).font(.headline)
-                Text("\(store.running) " + AgentText.state(.running) + " · \(store.waiting) " + AgentText.state(.waiting))
-                    .font(.caption).foregroundStyle(.secondary)
-                Spacer()
-                Button(AgentText.t("全部项目", "All projects")) { AgentActivityWindow.shared.show() }.buttonStyle(.plain).foregroundStyle(.cyan)
-            }
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 8) {
+                Text(AgentText.t("任务", "Tasks")).font(.system(size: 12, weight: .semibold))
+                Text(AgentText.t("\(store.running) 个进行中", "\(store.running) working"))
+                    .font(.system(size: 11)).foregroundStyle(.secondary)
+                if store.waiting > 0 {
+                    Text(AgentText.t("\(store.waiting) 个等你处理", "\(store.waiting) need you"))
+                        .font(.system(size: 11, weight: .medium)).foregroundStyle(.orange)
+                }
+                Spacer(minLength: 4)
+                Button { AgentActivityWindow.shared.show() } label: {
+                    HStack(spacing: 4) {
+                        Text(AgentText.t("全部 \(store.visible.count) 项", "All \(store.visible.count) tasks"))
+                        Image(systemName: "chevron.right").font(.system(size: 8, weight: .semibold))
+                    }.font(.system(size: 11))
+                }.buttonStyle(.plain).foregroundStyle(.cyan)
+            }.frame(height: 18)
             if store.visible.isEmpty {
                 Text(store.enabled ? AgentText.t("在 Codex 或 VS Code 中开始任务后，会显示在这里。", "Start a task in Codex or VS Code to see it here.") : AgentText.t("任务监控已暂停。", "Task monitoring is paused."))
                     .font(.callout).foregroundStyle(.secondary).frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
-                ForEach(Array(store.visible.prefix(3))) { session in
-                    Button { store.open(session) } label: {
-                        HStack(spacing: 8) {
-                            Image(systemName: AgentText.symbol(session.state)).foregroundStyle(AgentText.color(session.state)).frame(width: 16)
-                            Text(session.projectName).fontWeight(.semibold).lineLimit(1).frame(width: 125, alignment: .leading)
-                            Text(session.displayTitle).lineLimit(1).foregroundStyle(.white.opacity(0.7))
-                            Spacer(minLength: 4)
-                            Text(AgentText.state(session.state)).font(.caption).foregroundStyle(AgentText.color(session.state))
-                        }.font(.system(size: 12)).contentShape(Rectangle())
-                    }.buttonStyle(.plain).help(session.projectRoot + "\n" + session.displayTitle)
+                VStack(spacing: 4) {
+                    ForEach(Array(store.visible.prefix(3))) { session in
+                        AgentNotchTaskRow(session: session, now: store.now) { store.open(session) }
+                    }
                 }
             }
         }
-        .padding(.horizontal, 5).frame(height: 112, alignment: .top)
+        .padding(.horizontal, 5).frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+    }
+}
+
+private struct AgentNotchTaskRow: View {
+    let session: AgentSession
+    let now: Date
+    let open: () -> Void
+    @State private var hovering = false
+    var body: some View {
+        Button(action: open) {
+            HStack(spacing: 8) {
+                RoundedRectangle(cornerRadius: 2).fill(AgentText.color(session.state)).frame(width: 3, height: 24)
+                identity
+                status
+            }
+            .padding(.horizontal, 7).frame(height: 34)
+            .background(hovering ? Color.white.opacity(0.10) : Color.white.opacity(0.045), in: RoundedRectangle(cornerRadius: 6))
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain).onHover { hovering = $0 }
+        .help(tooltip)
+        .accessibilityLabel(accessibilitySummary)
+    }
+    private var tooltip: String {
+        [session.projectName, session.projectRoot, session.displayTitle, AgentText.activity(session, now: now)].joined(separator: "\n")
+    }
+    private var accessibilitySummary: String {
+        [session.projectName, session.displayTitle, AgentText.state(session.state)].joined(separator: ", ")
+    }
+    private var identity: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            HStack(spacing: 6) {
+                Text(session.projectName).font(.system(size: 12, weight: .semibold)).lineLimit(1).truncationMode(.middle)
+                Text(AgentText.source(session.surface)).font(.system(size: 9)).foregroundStyle(.secondary).fixedSize()
+            }
+            Text(session.displayTitle).font(.system(size: 10)).foregroundStyle(.white.opacity(0.65)).lineLimit(1)
+        }.frame(maxWidth: .infinity, alignment: .leading)
+    }
+    private var status: some View {
+        VStack(alignment: .trailing, spacing: 2) {
+            Label(AgentText.state(session.state), systemImage: AgentText.symbol(session.state))
+                .font(.system(size: 10, weight: .medium)).foregroundStyle(AgentText.color(session.state))
+            Text(AgentText.activity(session, now: now)).font(.system(size: 9)).foregroundStyle(.secondary).lineLimit(1)
+        }.frame(width: 142, alignment: .trailing)
+    }
+}
+
+private enum AgentTaskSection: CaseIterable {
+    case attention, working, recent
+    var title: String {
+        switch self {
+        case .attention: return AgentText.t("需要处理", "Needs attention")
+        case .working: return AgentText.t("正在进行", "Working")
+        case .recent: return AgentText.t("最近结果", "Recent results")
+        }
+    }
+    func contains(_ state: AgentRunState) -> Bool {
+        switch self {
+        case .attention: return state == .waiting || state == .failed
+        case .working: return state == .running
+        case .recent: return !state.isActive && state != .failed
+        }
     }
 }
 
@@ -98,10 +163,12 @@ struct AgentActivityView: View {
             return $0.name.localizedStandardCompare($1.name) == .orderedAscending
         }
     }
+    private var projectSessions: [AgentSession] {
+        store.visible.filter { selectedProject == "all" || $0.groupID == selectedProject }
+    }
     private var filtered: [AgentSession] {
-        store.visible.filter { session in
-            (selectedProject == "all" || session.groupID == selectedProject)
-            && (filter == .all || (filter == .active && session.state.isActive) || (filter == .unread && store.isUnread(session)))
+        projectSessions.filter { session in
+            (filter == .all || (filter == .active && session.state.isActive) || (filter == .unread && store.isUnread(session)))
             && (query.isEmpty || [session.displayTitle, session.projectName, session.cwd, session.projectRoot].contains { $0.localizedCaseInsensitiveContains(query) })
         }
     }
@@ -141,9 +208,19 @@ struct AgentActivityView: View {
                 } else {
                     ScrollView {
                         LazyVStack(spacing: 0) {
-                            ForEach(filtered) { session in
-                                AgentTaskRow(session: session, store: store)
-                                Divider().padding(.leading, 38)
+                            ForEach(AgentTaskSection.allCases, id: \.self) { section in
+                                let tasks = filtered.filter { section.contains($0.state) }
+                                if !tasks.isEmpty {
+                                    HStack {
+                                        Text(section.title)
+                                        Text("\(tasks.count)").monospacedDigit().foregroundStyle(.secondary)
+                                        Spacer()
+                                    }.font(.system(size: 11, weight: .semibold)).padding(.top, 14).padding(.bottom, 4)
+                                    ForEach(tasks) { session in
+                                        AgentTaskRow(session: session, store: store)
+                                        Divider().padding(.leading, 38)
+                                    }
+                                }
                             }
                         }.padding(.horizontal, 18).padding(.vertical, 6)
                     }
@@ -167,13 +244,21 @@ struct AgentActivityView: View {
         .task { store.start() }
     }
 
+    private var projectSummary: String {
+        let working = projectSessions.filter { $0.state == .running }.count
+        let waiting = projectSessions.filter { $0.state == .waiting }.count
+        let unread = projectSessions.filter { store.isUnread($0) }.count
+        return ["\(working) " + AgentText.state(.running), "\(waiting) " + AgentText.state(.waiting),
+                "\(unread) " + AgentText.t("未读", "unread")].joined(separator: "   ·   ")
+    }
+
     private var header: some View {
         VStack(alignment: .leading, spacing: 14) {
             HStack(alignment: .firstTextBaseline) {
                 VStack(alignment: .leading, spacing: 5) {
                     Text(selectedProject == "all" ? AgentText.t("Codex 任务", "Codex tasks") : (groups.first { $0.id == selectedProject }?.name ?? "Codex"))
                         .font(.system(size: 21, weight: .semibold)).lineLimit(1)
-                    Text("\(store.running) " + AgentText.state(.running) + "   ·   \(store.waiting) " + AgentText.state(.waiting) + "   ·   \(store.unread.count) " + AgentText.t("未读", "unread"))
+                    Text(projectSummary)
                         .font(.system(size: 12)).foregroundStyle(.secondary)
                 }
                 Spacer()
@@ -242,14 +327,14 @@ struct AgentTaskRow: View {
                 .frame(width: 20).padding(.top, 3)
             VStack(alignment: .leading, spacing: 7) {
                 HStack(spacing: 6) {
-                    Text(session.displayTitle).font(.system(size: 13, weight: .medium)).lineLimit(2)
+                    Text(session.projectName).font(.system(size: 13, weight: .semibold)).lineLimit(1).truncationMode(.middle)
                     if store.isUnread(session) { Circle().fill(.cyan).frame(width: 5, height: 5) }
                 }.frame(maxWidth: .infinity, alignment: .leading)
+                Text(session.displayTitle).font(.system(size: 12)).lineLimit(2)
                 HStack(spacing: 6) {
-                    Text(session.projectName).lineLimit(1).truncationMode(.middle)
-                    Text("·")
                     Text(AgentText.source(session.surface)).fixedSize()
-                    if session.isQuiet(at: store.now) { Text("· " + AgentText.t("暂时无新活动", "No recent activity")).lineLimit(1) }
+                    Text("·")
+                    Text(AgentText.activity(session, now: store.now)).lineLimit(1)
                 }.font(.system(size: 11)).foregroundStyle(.secondary)
             }
             VStack(alignment: .trailing, spacing: 7) {

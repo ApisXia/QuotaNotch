@@ -2,6 +2,13 @@
 
 This preview is built from the `future` branch. It adds multi-project task monitoring to QuotaNotch 1.02. The stable 1.02 release is unchanged.
 
+## Build 281 changes
+
+- Fix the screen-top attachment across music, quota and task tabs: the painted notch shell now owns its fixed size and top alignment.
+- Show each compact task on two lines: project and source above, task title below, with a consistent status column and observed recent activity.
+- Group the full monitor into Needs attention, Working and Recent results. Project names lead each task; recent tool activity is described in plain language without inferring progress or success.
+- Exercise repeated switches between actual full notch tabs at 24, 32 and 38-point header heights in the same preview window; assert that the painted top edge stays attached.
+
 ## 使用
 
 - 安装 DMG 中的 QuotaNotch，替换原应用并重新打开。

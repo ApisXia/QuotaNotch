@@ -165,7 +165,11 @@ import UserNotifications
 
     #if SETTINGS_PREVIEW
     func configurePreview(_ sessions: [AgentSession]) {
-        self.sessions = sessions; ready = true; connected = true; baseline = true
+        self.sessions = sessions.sorted {
+            if $0.state.priority != $1.state.priority { return $0.state.priority < $1.state.priority }
+            return $0.updatedAt > $1.updatedAt
+        }
+        ready = true; connected = true; baseline = true
         acknowledged = [:]; dismissed = [:]
     }
     #endif
@@ -203,6 +207,35 @@ enum AgentText {
         case .failed: return t("出错", "Error")
         case .unknown: return t("状态待确认", "Unconfirmed")
         }
+    }
+    /// Only describe observed activity; tool names are never interpreted as success or progress.
+    static func activity(_ session: AgentSession, now: Date) -> String {
+        switch session.state {
+        case .waiting:
+            return session.waitingCallID == nil ? t("打开任务查看请求", "Open task to review") : t("等待你的回答", "Waiting for your answer")
+        case .failed: return t("打开任务查看错误", "Open task to review error")
+        case .completed: return t("可查看本轮结果", "Response ready to review")
+        case .interrupted: return t("本轮已停止", "This turn was stopped")
+        case .unknown: return t("等待新活动确认", "Awaiting fresh activity")
+        case .running: break
+        }
+        if session.isQuiet(at: now) { return t("暂时无新活动", "No recent activity") }
+        // A completed tool call may be followed by reasoning. Label this as recent,
+        // rather than suggesting an old command is still executing.
+        let tool = session.tool.components(separatedBy: "__").last?.components(separatedBy: ".").last ?? ""
+        let label: String
+        switch tool {
+        case "exec_command", "shell", "shell_command", "write_stdin": label = t("执行命令", "command")
+        case "apply_patch": label = t("修改文件", "file edit")
+        case "web", "search_query": label = t("查询资料", "web lookup")
+        case "view_image": label = t("查看图片", "image review")
+        case "request_user_input_async", "request_user_input": label = t("发送提问", "question")
+        case "spawn_agent", "wait_agent": label = t("协作任务", "agent coordination")
+        case "update_plan": label = t("更新计划", "plan update")
+        case "": return t("正在处理任务", "Task in progress")
+        default: label = t("工具活动", "tool activity")
+        }
+        return t("最近：", "Recent: ") + label
     }
     static func source(_ source: AgentSurface) -> String {
         switch source { case .desktop: return "Codex"; case .vscode: return "VS Code"; case .cli: return "CLI"; case .unknown: return "Codex" }
