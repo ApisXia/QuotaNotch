@@ -234,11 +234,12 @@ struct QuotaPinnedWings: View {
     @AppStorage("quotaComfortable") private var comfortable = false
     private var iconSize: CGFloat { QuotaCompactMetrics.iconSize(height: height, comfortable: comfortable) }
 
+    private var tasksExpanded: Bool { showsMusic && activity.compactExpanded && activity.showAccessory }
     private var metrics: NotchModuleMetrics { NotchModuleMetrics(widgetWidth: iconSize) }
     private var leftWidth: CGFloat { iconSize }
     private var rightPrimaryWidth: CGFloat {
         guard activity.showAccessory else { return iconSize }
-        return showsMusic ? iconSize : 0
+        return showsMusic ? (tasksExpanded ? metrics.minimalWidth : iconSize) : 0
     }
 
     var body: some View {
@@ -276,7 +277,8 @@ struct QuotaPinnedWings: View {
                             onSelect(provider)
                         } label: {
                             Group {
-                                quotaIndicator(pin, provider: provider)
+                                if tasksExpanded { minimalQuota(pin, provider: provider) }
+                                else { quotaIndicator(pin, provider: provider) }
                             }
                             .frame(width: rightPrimaryWidth, height: height)
                             .contentShape(Rectangle())
@@ -290,7 +292,21 @@ struct QuotaPinnedWings: View {
             }
             .frame(height: height)
             .animation(reduceMotion ? nil : .smooth(duration: 0.32), value: showsMusic)
+            .animation(reduceMotion ? nil : .smooth(duration: 0.32), value: tasksExpanded)
         }
+    }
+
+    private func minimalQuota(_ pin: QuotaPin, provider: QuotaProvider) -> some View {
+        NotchMinimalLabel(metrics: metrics,
+                          number: store.window(for: pin).map { QuotaText.percent($0.remainingPercent) } ?? "—") {
+            QuotaBrandMark(brand: provider.brand)
+                .frame(width: metrics.minimalIconSize, height: metrics.minimalIconSize)
+        }
+        .foregroundStyle(store.isStale(provider) ? .secondary : .primary)
+        .frame(width: metrics.minimalWidth, height: height)
+        .auditNotchModule("quota", mode: "minimal")
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(provider.title + " · " + reading(for: pin))
     }
 
     private var albumWithActivity: some View {

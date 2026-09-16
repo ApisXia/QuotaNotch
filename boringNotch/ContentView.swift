@@ -500,7 +500,8 @@ struct ContentView: View {
     private func openFromPointer(explicit: Bool = false) {
         guard vm.notchState == .closed else { return }
         agentStore.notchReadEnabled = explicit
-        if agentStore.showAccessory && compactPresentation == .none {
+        if agentStore.showAccessory && (compactPresentation == .none ||
+            (compactPresentation == .combined && agentStore.compactExpanded)) {
             coordinator.currentView = .activity; doOpen(); return
         }
         let presentation = compactPresentation

@@ -237,10 +237,10 @@ struct SettingsPreviewRunner {
                 settle(); host.layoutSubtreeIfNeeded()
                 let shared = scenario.quota && scenario.music && scenario.tasks
                 var expected: [String: String] = [:]
-                if scenario.quota { expected["quota"] = "widget" }
+                if scenario.quota { expected["quota"] = shared && expanded ? "minimal" : "widget" }
                 if scenario.music { expected["music"] = "widget" }
-                if scenario.tasks { expected["task"] = shared ? "minimal" : "widget" }
-                if shared { expected["divider"] = "static" }
+                if scenario.tasks { expected["task"] = shared && !expanded ? "minimal" : "widget" }
+                if shared { expected["divider"] = "switchable" }
                 verifyPresentation(renderedModules == expected,
                     "Wrong presentation in \(layout), height \(headerHeight), selection \(expanded): \(renderedModules), expected \(expected)")
                 modeAudit.append(["case": layout, "height": headerHeight, "taskSelected": expanded, "rendered": renderedModules])
@@ -281,8 +281,8 @@ struct SettingsPreviewRunner {
                     settle(); host.layoutSubtreeIfNeeded()
                     let expected = playback == "idle"
                         ? ["quota": "widget", "task": "widget"]
-                        : ["music": "widget", "quota": "widget",
-                           "task": "minimal", "divider": "static"]
+                        : ["music": "widget", "quota": expanded ? "minimal" : "widget",
+                           "task": expanded ? "widget" : "minimal", "divider": "switchable"]
                     verifyPresentation(renderedModules == expected, "Playback transition \(playback) retained the wrong presentation: \(renderedModules)")
                     modeAudit.append(["case": playback, "height": headerHeight, "taskSelected": expanded, "rendered": renderedModules])
                     let bitmap = host.bitmapImageRepForCachingDisplay(in: host.bounds)!

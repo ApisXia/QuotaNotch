@@ -70,12 +70,13 @@ struct AgentCompactDock<Primary: View>: View {
     @ViewBuilder let primary: () -> Primary
     @ObservedObject private var store = AgentActivityStore.shared
     @Environment(\.accessibilityReduceMotion) private var reduced
+    @State private var dividerHovered = false
     private var summary: AgentAttentionSummary { store.attention }
     private var visible: Bool { store.enabled && summary.isVisible }
     private var metrics: NotchModuleMetrics { NotchModuleMetrics(widgetWidth: widgetWidth ?? max(0, height - 12)) }
     // A task only yields space when quota actually shares this wing (all three modules present).
     private var sharesWing: Bool { hasPrimary && primaryWidth > 0 }
-    private var showsTaskWidget: Bool { !sharesWing }
+    private var showsTaskWidget: Bool { !sharesWing || store.compactExpanded }
     private var separator: CGFloat { sharesWing && visible ? metrics.dividerWidth : 0 }
     private var taskWidth: CGFloat { visible ? (showsTaskWidget ? metrics.widgetWidth : metrics.minimalWidth) : 0 }
     private var extra: CGFloat { separator + taskWidth }
@@ -85,10 +86,16 @@ struct AgentCompactDock<Primary: View>: View {
             if sharesWing { primary().frame(width: primaryWidth, height: height) }
             if visible {
                 if sharesWing {
-                    Color.clear.frame(width: separator, height: height)
-                        .overlay { Capsule().fill(Color.white.opacity(0.38)).frame(width: 1, height: min(14, height - 12)) }
-                        .auditNotchModule("divider", mode: "static")
-                        .accessibilityHidden(true)
+                    Button { withAnimation(motion) { store.compactExpanded.toggle() } } label: {
+                        AgentDividerChevron(amount: dividerHovered ? 1 : 0, direction: store.compactExpanded ? -1 : 1)
+                            .stroke(Color.white.opacity(dividerHovered ? 0.82 : 0.42), style: StrokeStyle(lineWidth: 1, lineCap: .round, lineJoin: .round))
+                            .frame(width: separator, height: min(14, height - 12))
+                            .frame(width: separator, height: height).contentShape(Rectangle())
+                            .auditNotchModule("divider", mode: "switchable")
+                    }
+                    .buttonStyle(.plain)
+                    .onHover { value in withAnimation(motion) { dividerHovered = value } }
+                    .help(store.compactExpanded ? AgentText.t("切换到额度", "Show quota widget") : AgentText.t("切换到任务", "Show task widget"))
                 }
                 taskButton
             }
@@ -97,6 +104,7 @@ struct AgentCompactDock<Primary: View>: View {
         .contentShape(Rectangle())
         .animation(motion, value: extra)
         .animation(motion, value: primaryWidth)
+        .modifier(AgentModuleSwitchGesture(enabled: visible && sharesWing))
         .preference(key: AgentWingOffsetKey.self, value: (primaryWidth + extra - (anchorWidth ?? primaryWidth)) / 2)
     }
     private var taskButton: some View {
@@ -149,6 +157,69 @@ struct NotchMinimalLabel<Icon: View>: View {
                 .frame(width: metrics.minimalWidth, height: metrics.minimalNumberHeight)
         }
         .frame(width: metrics.minimalWidth, height: metrics.minimalContentHeight)
+    }
+}
+
+private struct AgentDividerChevron: Shape {
+    var amount: CGFloat
+    var direction: CGFloat
+    var animatableData: AnimatablePair<CGFloat, CGFloat> {
+        get { AnimatablePair(amount, direction) }
+        set { amount = newValue.first; direction = newValue.second }
+    }
+    func path(in rect: CGRect) -> Path {
+        let spread = 2.5 * amount * direction
+        var path = Path()
+        path.move(to: CGPoint(x: rect.midX - spread, y: rect.minY))
+        path.addLine(to: CGPoint(x: rect.midX + spread, y: rect.midY))
+        path.addLine(to: CGPoint(x: rect.midX - spread, y: rect.maxY))
+        return path
+    }
+}
+
+struct AgentModuleSwitchGesture: ViewModifier {
+    let enabled: Bool
+    @ObservedObject private var store = AgentActivityStore.shared
+    @Environment(\.accessibilityReduceMotion) private var reduced
+    private func select(_ expanded: Bool) {
+        guard enabled else { return }
+        withAnimation(reduced ? nil : .smooth(duration: 0.32)) { store.compactExpanded = expanded }
+    }
+    func body(content: Content) -> some View {
+        content
+            .simultaneousGesture(DragGesture(minimumDistance: 12).onEnded { value in
+                guard abs(value.translation.width) > abs(value.translation.height) else { return }
+                select(value.translation.width > 0)
+            }, including: enabled ? .all : .none)
+            .background {
+                if enabled { AgentHorizontalScroll { right in select(right) } }
+            }
+    }
+}
+
+/// A local event monitor only observes horizontal gestures inside its own window rectangle.
+private struct AgentHorizontalScroll: NSViewRepresentable {
+    let action: (Bool) -> Void
+    func makeNSView(context: Context) -> ScrollRegion { let view = ScrollRegion(); view.action = action; return view }
+    func updateNSView(_ view: ScrollRegion, context: Context) { view.action = action }
+    final class ScrollRegion: NSView {
+        var action: ((Bool) -> Void)?
+        var monitor: Any?
+        var last: TimeInterval = 0
+        override func hitTest(_ point: NSPoint) -> NSView? { nil }
+        override func viewDidMoveToWindow() {
+            super.viewDidMoveToWindow()
+            if let monitor { NSEvent.removeMonitor(monitor); self.monitor = nil }
+            guard window != nil else { return }
+            monitor = NSEvent.addLocalMonitorForEvents(matching: .scrollWheel) { [weak self] event in
+                guard let self, self.window === event.window,
+                      self.bounds.contains(self.convert(event.locationInWindow, from: nil)),
+                      abs(event.scrollingDeltaX) > abs(event.scrollingDeltaY), abs(event.scrollingDeltaX) > 4 else { return event }
+                if event.timestamp - self.last > 0.45 { self.last = event.timestamp; self.action?(event.scrollingDeltaX < 0) }
+                return nil
+            }
+        }
+        deinit { if let monitor { NSEvent.removeMonitor(monitor) } }
     }
 }
 

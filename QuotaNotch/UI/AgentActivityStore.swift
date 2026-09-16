@@ -24,10 +24,7 @@ import UserNotifications
     }
     @Published private var acknowledged: [String: String]
     @Published private var dismissed: [String: String]
-    #if SETTINGS_PREVIEW
-    // Regression input: stale selections must have no influence on the fixed layout.
     @Published var compactExpanded = false
-    #endif
     @Published var notchReadEnabled = false
     @Published var filter: AgentFilter = .all
     @Published var panelExpanded = false
