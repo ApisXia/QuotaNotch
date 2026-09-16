@@ -246,6 +246,14 @@ final class ClaudeUsageScreenTests: XCTestCase {
         XCTAssertNil(result.windows[1].resetsAt)
     }
 
+    func testPromotionalRateLimitTextIsNotAnError() throws {
+        let result = try ClaudeUsageScreen.parse("Rate limits are 2x higher this week\nCurrent session\n25% used", now: instant)
+        XCTAssertEqual(result.windows.first?.remainingPercent, 75)
+        XCTAssertEqual(ClaudeUsageScreen.failure(in: "Error fetching usage: HTTP 429", now: instant),
+                       .rateLimited(instant.addingTimeInterval(900)))
+        XCTAssertThrowsError(try ClaudeUsageScreen.parse("Current session\n25% used\nauthentication_error", now: instant))
+    }
+
     func testMissingSessionDoesNotBorrowWeeklyPercentage() {
         XCTAssertThrowsError(try ClaudeUsageScreen.parse("Current session\nCurrent week (all models)\n40% used", now: instant))
         XCTAssertThrowsError(try ClaudeUsageScreen.parse("Current session\nLoading usage data\n20% used", now: instant))
@@ -298,6 +306,36 @@ final class ClaudeCLIProcessTests: XCTestCase {
         do { _ = try await task.value; XCTFail("Expected cancellation") }
         catch { XCTAssertTrue(error is CancellationError) }
         XCTAssertLessThan(Date().timeIntervalSince(start), 5)
+    }
+}
+#endif
+
+#if os(macOS)
+final class ClaudeCredentialFileTests: XCTestCase {
+    func testAtomicFileWriteIsPrivateAndRejectsStaleReplacement() throws {
+        let folder = FileManager.default.temporaryDirectory.appendingPathComponent("quotanotch-credentials-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let file = folder.appendingPathComponent("fixture.json")
+        let old = credentialJSON("old", expiry: -1), fresh = credentialJSON("fresh", expiry: 3600)
+        try old.write(to: file)
+        let io = SystemClaudeCredentialIO()
+        XCTAssertEqual(try io.replace(.file(file), expected: old, updated: fresh), fresh)
+        let mode = try FileManager.default.attributesOfItem(atPath: file.path)[.posixPermissions] as? NSNumber
+        XCTAssertEqual(mode?.intValue, 0o600)
+        XCTAssertEqual(try io.replace(.file(file), expected: old, updated: old), fresh)
+        XCTAssertEqual(try Data(contentsOf: file), fresh)
+    }
+
+    func testCustomCredentialSymlinkTargetsOriginalFile() throws {
+        let folder = FileManager.default.temporaryDirectory.appendingPathComponent("quotanotch-symlink-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let target = folder.appendingPathComponent("fixture.json")
+        try credentialJSON("fixture", expiry: 3600).write(to: target)
+        try FileManager.default.createSymbolicLink(at: folder.appendingPathComponent(".credentials.json"), withDestinationURL: target)
+        let repo = ClaudeCredentialRepository(io: MemoryCredentialIO(), environment: ["CLAUDE_CONFIG_DIR": folder.path])
+        XCTAssertEqual(repo.locations.first, .file(target.resolvingSymlinksInPath()))
     }
 }
 #endif

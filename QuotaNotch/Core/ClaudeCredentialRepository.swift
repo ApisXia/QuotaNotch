@@ -26,7 +26,8 @@ struct ClaudeCredentialRepository: Sendable {
         let base = environment["CLAUDE_CONFIG_DIR"].flatMap {
             $0.hasPrefix("/") ? URL(fileURLWithPath: $0, isDirectory: true) : nil
         } ?? home.appendingPathComponent(".claude", isDirectory: true)
-        return [.file(base.appendingPathComponent(".credentials.json")), .keychain("Claude Code-credentials")]
+        return [.file(base.appendingPathComponent(".credentials.json").resolvingSymlinksInPath()),
+                .keychain("Claude Code-credentials")]
     }
 
     func load() throws -> QuotaCredential {
@@ -125,7 +126,20 @@ struct SystemClaudeCredentialIO: ClaudeCredentialIO {
             guard latest == expected else { return latest }
             guard rename(temporary.path, url.path) == 0 else { throw QuotaFailure.credentialsUnavailable }
         case .keychain(let service):
-            let status = SecItemUpdate(keychainQuery(service) as CFDictionary,
+            // Update exactly the item we read, even if the service has multiple accounts.
+            var query = keychainQuery(service)
+            query[kSecReturnData as String] = true
+            query[kSecReturnPersistentRef as String] = true
+            query[kSecMatchLimit as String] = kSecMatchLimitOne
+            var item: CFTypeRef?
+            guard SecItemCopyMatching(query as CFDictionary, &item) == errSecSuccess,
+                  let values = item as? [String: Any],
+                  let reference = values[kSecValuePersistentRef as String] as? Data,
+                  let latest = values[kSecValueData as String] as? Data else {
+                throw QuotaFailure.credentialsUnavailable
+            }
+            guard latest == expected else { return latest }
+            let status = SecItemUpdate([kSecValuePersistentRef as String: reference] as CFDictionary,
                 [kSecValueData as String: updated] as CFDictionary)
             guard status == errSecSuccess else { throw QuotaFailure.credentialsUnavailable }
         }

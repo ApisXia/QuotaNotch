@@ -57,6 +57,7 @@ struct ClaudeCLIQuotaFallback: ClaudeQuotaFallback {
         process.executableURL = binary
         process.arguments = ["/usage", "--tools", "", "--strict-mcp-config", "--mcp-config", "{\"mcpServers\":{}}",
             "--settings", "{\"disableAllHooks\":true}"]
+        process.qualityOfService = .utility
         process.environment = env
         process.currentDirectoryURL = directory
         process.standardInput = input
@@ -88,9 +89,7 @@ struct ClaudeCLIQuotaFallback: ClaudeQuotaFallback {
                 guard output.count <= 512 * 1024 else { throw QuotaFailure.invalidResponse }
                 let screen = ClaudeUsageScreen.render(String(decoding: output, as: UTF8.self))
                 let lower = screen.lowercased()
-                if lower.contains("rate limit") || lower.contains("too many requests") || lower.contains("error: 429") {
-                    throw QuotaFailure.rateLimited(now.addingTimeInterval(900))
-                }
+                if let failure = ClaudeUsageScreen.failure(in: screen, now: now) { throw failure }
                 // Acknowledge only the dedicated empty probe directory's trust prompt, once.
                 if !acceptedTrust && (lower.contains("yes, i trust this folder") || lower.contains("trust this workspace")) {
                     _ = "\r".withCString { write(master, $0, 1) }
@@ -117,6 +116,7 @@ private final class ClaudeCLICancellation: @unchecked Sendable {
 
 enum ClaudeUsageScreen {
     static func parse(_ screen: String, now: Date) throws -> QuotaSnapshot {
+        if let failure = failure(in: screen, now: now) { throw failure }
         let lower = screen.lowercased()
         guard !lower.contains("loading usage"), !lower.contains("failed to load usage") else {
             throw QuotaFailure.invalidResponse
@@ -148,6 +148,17 @@ enum ClaudeUsageScreen {
         guard windows["five_hour"] != nil else { throw QuotaFailure.invalidResponse }
         let order = ["five_hour", "seven_day", "seven_day_sonnet", "seven_day_opus"]
         return QuotaSnapshot(windows: order.compactMap { windows[$0] }, fetchedAt: now)
+    }
+
+    static func failure(in screen: String, now: Date) -> QuotaFailure? {
+        let lower = screen.lowercased()
+        if lower.contains("rate limited") || lower.contains("rate_limit_error") || lower.contains("rate limit exceeded") ||
+            lower.contains("too many requests") || lower.range(of: #"(?:error|http|status)[^\n]*\b429\b"#, options: .regularExpression) != nil {
+            return .rateLimited(now.addingTimeInterval(900))
+        }
+        if lower.contains("not logged in") || lower.contains("please log in") || lower.contains("token_expired") ||
+            lower.contains("token has expired") || lower.contains("authentication_error") { return .expired }
+        return nil
     }
 
     private static func relativeReset(_ text: String, now: Date) -> Date? {
