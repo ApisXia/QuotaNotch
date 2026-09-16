@@ -260,6 +260,13 @@ struct SettingsPreviewRunner {
                 try bitmap.representation(using: .png, properties: [:])!.write(to: output.appendingPathComponent("Notch-closed-\(Int(headerHeight))-\(expanded)\(suffix).png"))
                 let color = bitmap.colorAt(x: bitmap.pixelsWide / 2, y: 2)!.usingColorSpace(.deviceRGB)!
                 precondition(max(color.redComponent, max(color.greenComponent, color.blueComponent)) < 0.06, "Closed notch detached")
+                if layout == "tasks" {
+                    let scale = CGFloat(bitmap.pixelsWide) / host.bounds.width
+                    let budget = NotchModuleMetrics(widgetWidth: QuotaCompactMetrics.iconSize(height: headerHeight)).additionalWidth
+                    let widgetPairWidth = compactWidths["music" + String(Int(headerHeight))]!
+                    verifyPresentation(CGFloat(blackWidth(bitmap) - widgetPairWidth) <= budget * scale + 2,
+                                       "Task-only list exceeded the widget plus minimal width budget")
+                }
                 if scenario.tasks {
                     let key = layout + String(Int(headerHeight))
                     if !expanded { compactWidths[key] = blackWidth(bitmap) }

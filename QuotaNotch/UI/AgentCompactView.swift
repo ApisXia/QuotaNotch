@@ -241,52 +241,52 @@ extension View {
     }
 }
 
-/// Task-only layout: the task glyph and a two-line summary flank the physical camera.
+/// Task-only layout uses the existing widget/minimal footprint, with dots in the camera-side gap.
 struct AgentTaskOnlyWings: View {
     let centerWidth: CGFloat
     let height: CGFloat
     let open: () -> Void
     @ObservedObject private var store = AgentActivityStore.shared
-    @State private var selectedID: String?
-    @State private var selectedAt = Date.distantPast
-    private var iconWidth: CGFloat { max(0, height - 12) }
-    private var textWidth: CGFloat { 112 }
-    private var candidates: [AgentSession] {
-        store.visible.filter { $0.state.isActive || store.isUnread($0) }.sorted {
-            if $0.state.priority != $1.state.priority { return $0.state.priority < $1.state.priority }
-            return $0.updatedAt > $1.updatedAt
-        }
-    }
-    private var selected: AgentSession? { candidates.first { $0.identity == selectedID } ?? candidates.first }
+    private var iconWidth: CGFloat { QuotaCompactMetrics.iconSize(height: height) }
+    private var textWidth: CGFloat { iconWidth + NotchModuleMetrics(widgetWidth: iconWidth).additionalWidth }
+    private var candidates: [AgentSession] { store.visible.filter { $0.state.isActive || store.isUnread($0) } }
+    private var recent: [AgentSession] { AgentTaskOnlySummary.recent(candidates) }
+    private var emphasis: AgentSession? { AgentTaskOnlySummary.emphasis(candidates) }
     var body: some View {
         HStack(spacing: QuotaCompactMetrics.spacing) {
-            AgentCompactDock(primaryWidth: 0, height: height, anchorWidth: iconWidth, widgetWidth: iconWidth, open: open) { EmptyView() }
+            Button(action: open) {
+                Group {
+                    if let session = emphasis {
+                        AgentPaperGlyph(kind: AgentPaperGlyph.kind(session.state), running: session.state == .running,
+                                        accent: AgentText.color(session.state))
+                            .scaleEffect(iconWidth / 16)
+                    }
+                }
+                .frame(width: iconWidth, height: height).contentShape(Rectangle())
+                .auditNotchModule("task")
+            }.buttonStyle(.plain)
+                .accessibilityLabel(AgentText.t("任务", "Tasks") + " · " + AgentText.state(emphasis?.state ?? .unknown))
             Color.clear.frame(width: centerWidth, height: height)
             Button(action: open) {
                 VStack(alignment: .leading, spacing: 1) {
-                    if let session = selected {
-                        Text(session.projectName.isEmpty ? session.displayTitle : session.projectName)
-                            .font(.system(size: height < 28 ? 9 : 10, weight: .medium)).foregroundStyle(.white)
-                        Text(AgentText.activity(session, now: store.now))
-                            .font(.system(size: height < 28 ? 8 : 9)).foregroundStyle(AgentText.color(session.state))
+                    ForEach(recent, id: \.identity) { session in
+                        Text(session.displayTitle.replacingOccurrences(of: "\n", with: " "))
+                            .font(.system(size: height < 28 ? 8 : 9, weight: .medium))
+                            .foregroundStyle(.white.opacity(0.9))
+                            .lineLimit(1).truncationMode(.tail)
+                            .frame(width: textWidth, alignment: .leading)
+                            .overlay(alignment: .leading) {
+                                Circle().fill(AgentText.color(session.state)).frame(width: 2.5, height: 2.5)
+                                    .offset(x: -5.25).accessibilityHidden(true)
+                            }
                     }
                 }
-                .lineLimit(1).truncationMode(.tail)
                 .frame(width: textWidth, height: height, alignment: .leading)
                 .contentShape(Rectangle()).auditNotchModule("task-summary")
             }.buttonStyle(.plain)
+                .accessibilityLabel(recent.map { $0.displayTitle + " · " + AgentText.state($0.state) }.joined(separator: "; "))
         }
         .frame(height: height)
         .preference(key: AgentWingOffsetKey.self, value: (textWidth - iconWidth) / 2)
-        .onAppear { selectSummary() }
-        .onChange(of: store.now) { _, _ in selectSummary() }
-        .onChange(of: candidates.map(\.eventID)) { _, _ in selectSummary() }
-    }
-    private func selectSummary() {
-        guard let next = candidates.first else { selectedID = nil; return }
-        let current = candidates.first { $0.identity == selectedID }
-        if current == nil || next.state.priority < current!.state.priority || Date().timeIntervalSince(selectedAt) >= 4 {
-            if selectedID != next.identity { selectedID = next.identity; selectedAt = Date() }
-        }
     }
 }

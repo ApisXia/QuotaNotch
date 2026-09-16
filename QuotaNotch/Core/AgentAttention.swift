@@ -58,3 +58,23 @@ enum AgentCurrentSessions {
             || retained[session.identity] == session.eventID
     }
 }
+
+/// The left symbol communicates urgency; the right list independently follows recency.
+enum AgentTaskOnlySummary {
+    static func recent(_ sessions: [AgentSession]) -> [AgentSession] {
+        Array(AgentCurrentSessions.latest(sessions).sorted {
+            if $0.updatedAt != $1.updatedAt { return $0.updatedAt > $1.updatedAt }
+            return $0.identity < $1.identity
+        }.prefix(2))
+    }
+    static func emphasis(_ sessions: [AgentSession]) -> AgentSession? {
+        func priority(_ state: AgentRunState) -> Int {
+            switch state { case .failed: return 0; case .running: return 1; default: return 2 }
+        }
+        return AgentCurrentSessions.latest(sessions).min {
+            if priority($0.state) != priority($1.state) { return priority($0.state) < priority($1.state) }
+            if $0.updatedAt != $1.updatedAt { return $0.updatedAt > $1.updatedAt }
+            return $0.identity < $1.identity
+        }
+    }
+}

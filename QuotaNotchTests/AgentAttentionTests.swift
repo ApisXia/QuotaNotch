@@ -136,3 +136,22 @@ final class AgentCurrentSessionsTests: XCTestCase {
         XCTAssertFalse(AgentCurrentSessions.includes(session, acknowledged: newRead, retained: read), "An old reading receipt cannot retain a later read event")
     }
 }
+
+final class AgentTaskOnlySummaryTests: XCTestCase {
+    func testIconPriorityAndRecentListAreIndependent() {
+        let failed = AgentSession(id: "error", state: .failed, updatedAt: Date(timeIntervalSince1970: 1))
+        let running = AgentSession(id: "working", state: .running, updatedAt: Date(timeIntervalSince1970: 2))
+        let waiting = AgentSession(id: "waiting", state: .waiting, updatedAt: Date(timeIntervalSince1970: 3))
+        let done = AgentSession(id: "done", state: .completed, updatedAt: Date(timeIntervalSince1970: 4))
+        XCTAssertEqual(AgentTaskOnlySummary.emphasis([done, waiting, running, failed]), failed)
+        XCTAssertEqual(AgentTaskOnlySummary.emphasis([done, waiting, running]), running)
+        XCTAssertEqual(AgentTaskOnlySummary.emphasis([waiting, done]), done)
+        XCTAssertEqual(AgentTaskOnlySummary.recent([failed, running, waiting, done]), [done, waiting])
+    }
+    func testRecentListHasOnlyCurrentRecordPerConversation() {
+        let old = AgentSession(id: "one", state: .completed, updatedAt: Date(timeIntervalSince1970: 1))
+        var new = old; new.state = .running; new.updatedAt = Date(timeIntervalSince1970: 2)
+        XCTAssertEqual(AgentTaskOnlySummary.recent([old, new]), [new])
+        XCTAssertTrue(AgentTaskOnlySummary.recent([]).isEmpty)
+    }
+}
