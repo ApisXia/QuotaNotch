@@ -56,13 +56,13 @@ private struct FixtureSheet: View {
             .background(.white.opacity(0.055), in: RoundedRectangle(cornerRadius: 10))
             Divider()
             Text("4× detail — badge remains inside the 28pt box").font(.system(size: 12))
-            HStack(spacing: 70) {
-                QuotaBrandMark(brand: .claude).frame(width: size, height: size).scaleEffect(4)
-                QuotaBrandMark(brand: .codex).frame(width: size, height: size).scaleEffect(4)
-                CompactQuotaGauge(brand: .claude, percent: 58, showsBrand: true, showsNumbers: true, size: size).scaleEffect(4)
-                CompactQuotaGauge(brand: .codex, percent: 100, showsBrand: true, showsNumbers: true, size: size).scaleEffect(4)
+            HStack(spacing: 22) {
+                QuotaBrandMark(brand: .claude).frame(width: size, height: size).scaleEffect(4).frame(width: size * 4, height: size * 4)
+                QuotaBrandMark(brand: .codex).frame(width: size, height: size).scaleEffect(4).frame(width: size * 4, height: size * 4)
+                CompactQuotaGauge(brand: .claude, percent: 58, showsBrand: true, showsNumbers: true, size: size).scaleEffect(4).frame(width: size * 4, height: size * 4)
+                CompactQuotaGauge(brand: .codex, percent: 100, showsBrand: true, showsNumbers: true, size: size).scaleEffect(4).frame(width: size * 4, height: size * 4)
             }
-            .padding(.horizontal, 30).frame(height: 86)
+            .frame(height: 120)
             Text("Album artwork and bars are placeholders. Real notch positioning / animation needs Mac testing.")
                 .font(.system(size: 10)).foregroundStyle(.secondary)
         }

@@ -16,7 +16,7 @@ struct QuotaAlertState: Codable {
 
     enum Event: Equatable { case low, recovered }
     mutating func observe(_ window: QuotaWindow, threshold: Double) -> [Event] {
-        let newCycle = cycle != nil && window.resetsAt != nil && cycle != window.resetsAt
+        let newCycle = cycle.flatMap { old in window.resetsAt.map { $0.timeIntervalSince(old) > 60 } } ?? false
         let recovered = lowSent && !recoverySent && window.remainingPercent > threshold
         if newCycle { lowSent = false; recoverySent = false }
         var events: [Event] = []

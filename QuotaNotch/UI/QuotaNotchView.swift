@@ -160,9 +160,13 @@ final class QuotaNotchStore: ObservableObject {
         guard enabled, !refreshing else { return }
         let requestGeneration = generation
         now = Date()
+        let providers = QuotaProvider.allCases.filter {
+            providerEnabled($0) && (providerOnly == nil || providerOnly == $0)
+                && (results[$0]?.nextAttempt ?? .distantPast) <= now
+        }
+        guard !providers.isEmpty else { return }
         refreshing = true
         defer { refreshing = false }
-        let providers = QuotaProvider.allCases.filter { providerEnabled($0) && (providerOnly == nil || providerOnly == $0) }
         await withTaskGroup(of: (QuotaProvider, QuotaResult).self) { group in
             for provider in providers {
                 group.addTask { [client] in (provider, await client.refresh(provider)) }

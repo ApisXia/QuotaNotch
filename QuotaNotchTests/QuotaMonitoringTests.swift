@@ -21,6 +21,12 @@ final class QuotaMonitoringTests: XCTestCase {
         XCTAssertEqual(state.observe(window(15, reset: reset), threshold: 20), [])
         XCTAssertEqual(state.observe(window(15, reset: reset.addingTimeInterval(3600)), threshold: 20), [.low])
     }
+    func testSmallResetTimestampDriftDoesNotRepeatAlert() {
+        var state = QuotaAlertState()
+        let reset = now.addingTimeInterval(3600)
+        XCTAssertEqual(state.observe(window(15, reset: reset), threshold: 20), [.low])
+        XCTAssertEqual(state.observe(window(14, reset: reset.addingTimeInterval(1)), threshold: 20), [])
+    }
     func testAutomaticSelectionExcludesStaleReadings() {
         let a = QuotaPin(providerID: "claude", windowID: "primary")
         let b = QuotaPin(providerID: "codex", windowID: "primary")

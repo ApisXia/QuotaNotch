@@ -193,10 +193,13 @@ struct QuotaNotchView: View {
             } label: { Image(systemName: "gearshape") }
             .menuStyle(.borderlessButton).fixedSize()
             .help("显示设置与状态说明").accessibilityLabel("额度显示设置")
-            Button { Task { await store.refresh(providerOnly: provider) } } label: {
-                Label("刷新", systemImage: "arrow.clockwise")
+            TimelineView(.periodic(from: .now, by: 1)) { context in
+                Button { Task { await store.refresh(providerOnly: provider) } } label: {
+                    Label("刷新", systemImage: "arrow.clockwise")
+                }
+                .disabled(store.refreshing || (store.results[provider]?.nextAttempt ?? .distantPast) > context.date)
+                .help("刷新（遵守查询冷却）")
             }
-            .disabled(store.refreshing || (store.results[provider]?.nextAttempt ?? .distantPast) > store.now).help("刷新（遵守查询冷却）")
             .fixedSize()
             Button { store.setEnabled(false) } label: {
                 Label("暂停", systemImage: "pause")

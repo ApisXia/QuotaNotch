@@ -82,7 +82,9 @@ struct QuotaPreferences: View {
                 if !store.notificationStatus.isEmpty { Text(store.notificationStatus).font(.caption) }
             }
             Section("连接诊断") {
-                Button(copied ? "已复制" : "复制诊断信息") { store.copyDiagnostics(); copied = true }
+                Button { store.copyDiagnostics(); copied = true } label: {
+                    Text(LocalizedStringKey(copied ? "已复制" : "复制诊断信息"))
+                }
                 Text("仅包含应用、系统版本、连接状态与更新时间，不包含令牌、账户或本机路径。")
                     .font(.caption).foregroundStyle(.secondary)
             }
