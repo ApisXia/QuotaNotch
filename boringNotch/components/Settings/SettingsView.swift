@@ -254,6 +254,7 @@ struct HUD: View {
 }
 
 struct Media: View {
+    @ObservedObject private var musicManager = MusicManager.shared
     @Default(.waitInterval) private var waitInterval
     @Default(.mediaController) private var mediaController
     @Default(.enableSneakPeek) private var enableSneakPeek
@@ -265,12 +266,18 @@ struct Media: View {
         Form {
             Section("Media Source") {
                 SettingsField("Music Source") {
-                    Picker("Music Source", selection: $mediaController) {
+                    Picker("Music Source", selection: Binding(
+                        get: { musicManager.isNowPlayingDeprecated && mediaController == .nowPlaying ? .appleMusic : mediaController },
+                        set: { mediaController = $0 }
+                    )) {
                         ForEach(availableMediaControllers) { Text(LocalizedStringKey($0.rawValue)).tag($0) }
                     }
                 }
                 .onChange(of: mediaController) { _, _ in
                     NotificationCenter.default.post(name: .mediaControllerChanged, object: nil)
+                }
+                if musicManager.isNowPlayingDeprecated && mediaController == .nowPlaying {
+                    SettingsHint("Now Playing is unavailable. Apple Music is used instead.")
                 }
                 if mediaController == .youtubeMusic {
                     SettingsHint("YouTube Music requires Pear Desktop.")
@@ -315,7 +322,7 @@ struct Media: View {
         .navigationTitle("Media")
     }
     private var availableMediaControllers: [MediaControllerType] {
-        MusicManager.shared.isNowPlayingDeprecated ? MediaControllerType.allCases.filter { $0 != .nowPlaying } : MediaControllerType.allCases
+        musicManager.isNowPlayingDeprecated ? MediaControllerType.allCases.filter { $0 != .nowPlaying } : MediaControllerType.allCases
     }
 }
 

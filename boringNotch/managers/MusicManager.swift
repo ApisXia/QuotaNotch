@@ -22,7 +22,7 @@ class MusicManager: ObservableObject {
     private var debounceIdleTask: Task<Void, Never>?
 
     // Helper to check if macOS has removed support for NowPlayingController
-    public private(set) var isNowPlayingDeprecated: Bool = false
+    @Published public private(set) var isNowPlayingDeprecated: Bool = false
     private let mediaChecker = MediaChecker()
 
     // Active controller
@@ -68,6 +68,7 @@ class MusicManager: ObservableObject {
     // MARK: - Initialization
     init() {
         #if SETTINGS_PREVIEW
+        isNowPlayingDeprecated = true
         return // Fixture build never starts media controllers or permission helpers.
         #endif
         // Listen for changes to the default controller preference

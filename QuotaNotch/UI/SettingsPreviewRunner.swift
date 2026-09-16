@@ -43,6 +43,9 @@ struct SettingsPreviewRunner {
                             name: "\(page)-\(Int(width))", output: output)
             }
         }
+        Defaults[.mediaController] = .nowPlaying
+        try capture(Media().formStyle(.grouped).environment(\.locale, Locale(identifier: language)), width: 500,
+                    name: "Media-fallback", output: output)
         QuotaNotchStore.shared.configureSettingsPreview(paused: true)
         try capture(QuotaPreferences().formStyle(.grouped).environment(\.locale, Locale(identifier: language)), width: 500,
                     name: "Quota-paused", output: output)

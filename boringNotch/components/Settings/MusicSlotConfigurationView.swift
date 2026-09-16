@@ -37,6 +37,9 @@ struct MusicSlotConfigurationView: View {
         .onAppear {
             ensureSlotCapacity(fixedSlotCount)
         }
+        .onChange(of: musicControlSlots) { _, slots in
+            if slots.contains(.none) { pendingControl = nil }
+        }
     }
 
     private var previewSection: some View {

@@ -25392,6 +25392,23 @@
           }
         }
       }
+    },
+    "Now Playing is unavailable. Apple Music is used instead." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Now Playing is unavailable. Apple Music is used instead."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "当前无法使用系统播放信息，已改用 Apple Music。"
+          }
+        }
+      }
     }
   },
   "version" : "1.0"
