@@ -39,8 +39,8 @@ body:
         - v1.0.0
         - v1.02
         - v1.01
+        - future-preview-283
         - future-preview-282
-        - future-preview-281
     validations:
       required: true
   - type: input
