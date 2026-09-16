@@ -17,8 +17,8 @@ struct AgentPaperGlyph: View {
             let drift = running && !reduced ? sin(timeline.date.timeIntervalSinceReferenceDate * 1.6) * 0.8 : 0
             let spread: CGFloat = kind == .completed ? 1 : kind == .waiting ? 4 : kind == .mixed ? 3 : 2.5
             ZStack {
-                RoundedRectangle(cornerRadius: 2.2).strokeBorder(lineWidth: 0.9)
-                    .frame(width: 10, height: 12).offset(x: -spread / 2, y: -spread / 2).opacity(0.38)
+                RoundedRectangle(cornerRadius: 2.2).strokeBorder(lineWidth: 1.1)
+                    .frame(width: 10, height: 12).offset(x: -spread / 2, y: -spread / 2).opacity(0.78)
                 RoundedRectangle(cornerRadius: 2.2).fill(Color(nsColor: .windowBackgroundColor))
                     .frame(width: 10, height: 12).opacity(0.15)
                 RoundedRectangle(cornerRadius: 2.2).strokeBorder(lineWidth: 1.05)
@@ -39,6 +39,7 @@ struct AgentCompactDock<Primary: View>: View {
     let primaryWidth: CGFloat
     let height: CGFloat
     var hasPrimary = true
+    var anchorWidth: CGFloat? = nil
     let open: () -> Void
     @ViewBuilder let primary: () -> Primary
     @ObservedObject private var store = AgentActivityStore.shared
@@ -47,8 +48,8 @@ struct AgentCompactDock<Primary: View>: View {
     @State private var retained = AgentAttentionSummary()
     private var summary: AgentAttentionSummary { hovering && !store.attention.isVisible ? retained : store.attention }
     private var visible: Bool { store.enabled && summary.isVisible }
-    private var separator: CGFloat { hasPrimary && visible ? (hovering ? 22 : 12) : 0 }
-    private var taskWidth: CGFloat { visible ? (store.compactExpanded ? 82 : 28) : 0 }
+    private var separator: CGFloat { hasPrimary && visible ? (hovering ? 16 : 8) : 0 }
+    private var taskWidth: CGFloat { visible ? (store.compactExpanded ? 82 : 20) : 0 }
     private var extra: CGFloat { separator + taskWidth }
     private var motion: Animation? { reduced ? nil : .smooth(duration: 0.32) }
     var body: some View {
@@ -66,6 +67,7 @@ struct AgentCompactDock<Primary: View>: View {
         }
         .frame(height: height)
         .animation(motion, value: extra)
+        .animation(motion, value: primaryWidth)
         .onChange(of: visible) { _, value in if !value { store.compactExpanded = false } }
         .onHover { value in
             if value { retained = store.attention }
@@ -79,7 +81,7 @@ struct AgentCompactDock<Primary: View>: View {
         .background(AgentHorizontalScroll { right in
             if visible { withAnimation(motion) { store.compactExpanded = right } }
         })
-        .preference(key: AgentWingOffsetKey.self, value: extra / 2)
+        .preference(key: AgentWingOffsetKey.self, value: (primaryWidth + extra - (anchorWidth ?? primaryWidth)) / 2)
     }
     private var taskButton: some View {
         Button { store.notchReadEnabled = true; open() } label: {

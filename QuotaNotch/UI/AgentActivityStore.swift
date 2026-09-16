@@ -164,27 +164,9 @@ import UserNotifications
     }
     var isMonitorVisible: Bool { AgentActivityWindow.shared.window?.isKeyWindow == true }
 
-    func open(_ session: AgentSession, inVSCode: Bool? = nil) {
-        guard UUID(uuidString: session.id) != nil else { actionMessage = AgentText.t("无法识别此任务的链接。", "This task has no valid session link."); return }
-        if session.provider == .claude {
-            // Claude has no documented universal deep link for an existing local Code session.
-            // Show the exact session and resume command rather than opening a new task.
-            AgentSessionDetailsWindow.show(session)
-            markRead(session)
-            return
-        }
-        let vscode = inVSCode ?? (session.surface == .vscode)
-        let raw = vscode ? "vscode://openai.chatgpt/local/\(session.id)" : "codex://threads/\(session.id)"
-        guard let url = URL(string: raw), NSWorkspace.shared.urlForApplication(toOpen: url) != nil else {
-            actionMessage = AgentText.t("没有找到对应应用。可从任务菜单复制会话 ID 或打开项目文件夹。", "The app is unavailable. Use the task menu to copy its session ID or open the project folder.")
-            return
-        }
-        NSWorkspace.shared.open(url, configuration: NSWorkspace.OpenConfiguration()) { _, error in
-            Task { @MainActor in
-                if let error { self.actionMessage = error.localizedDescription }
-                else { self.markRead(session) }
-            }
-        }
+    func showDetails(_ session: AgentSession) {
+        AgentSessionDetailsWindow.show(session)
+        markRead(session)
     }
 
     #if SETTINGS_PREVIEW
@@ -209,7 +191,7 @@ final class AgentNotificationDelegate: NSObject, UNUserNotificationCenterDelegat
         Task { @MainActor in
             if let id {
                 let store = AgentActivityStore.shared
-                if let session = store.sessions.first(where: { (identity != nil ? $0.identity == identity : $0.id == id) }) { store.open(session) }
+                if let session = store.sessions.first(where: { (identity != nil ? $0.identity == identity : $0.id == id) }) { store.showDetails(session) }
                 else { AgentActivityWindow.shared.show() }
             }
             completionHandler()
@@ -238,8 +220,8 @@ enum AgentText {
     static func activity(_ session: AgentSession, now: Date) -> String {
         switch session.state {
         case .waiting:
-            return session.waitingCallID == nil ? t("打开任务查看请求", "Open task to review") : t("等待你的回答", "Waiting for your answer")
-        case .failed: return t("打开任务查看错误", "Open task to review error")
+            return session.waitingCallID == nil ? t("查看等待详情", "Review waiting details") : t("等待你的回答", "Waiting for your answer")
+        case .failed: return t("查看状态详情", "Review status details")
         case .completed: return t("可查看本轮结果", "Response ready to review")
         case .interrupted: return t("本轮已停止", "This turn was stopped")
         case .unknown: return t("等待新活动确认", "Awaiting fresh activity")

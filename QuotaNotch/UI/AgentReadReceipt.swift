@@ -53,7 +53,10 @@ struct AgentReadReceipt: NSViewRepresentable {
 }
 
 struct AgentSessionDetails: View {
-    let session: AgentSession
+    private let initialSession: AgentSession
+    @ObservedObject private var store = AgentActivityStore.shared
+    init(session: AgentSession) { initialSession = session }
+    private var session: AgentSession { store.sessions.first { $0.identity == initialSession.identity } ?? initialSession }
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 14) {
@@ -69,15 +72,7 @@ struct AgentSessionDetails: View {
                     Text(session.activityDetail).font(.system(size: 12)).textSelection(.enabled)
                 }
                 Text(session.cwd).font(.caption).foregroundStyle(.secondary).textSelection(.enabled)
-                if session.provider == .claude {
-                    Text(AgentText.t("此来源暂不支持直接跳回同一会话。可在原项目的终端恢复这个 Claude Code 会话。", "This source does not yet support returning directly to the exact session. Resume this Claude Code session in a terminal at its project."))
-                        .font(.callout).foregroundStyle(.secondary)
-                    Button(AgentText.t("复制恢复命令", "Copy resume command")) {
-                        guard UUID(uuidString: session.id) != nil else { return }
-                        NSPasteboard.general.clearContents()
-                        NSPasteboard.general.setString("claude --resume " + session.id, forType: .string)
-                    }
-                }
+
             }.frame(maxWidth: .infinity, alignment: .leading).padding(20)
         }
     }

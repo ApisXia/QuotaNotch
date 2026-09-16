@@ -29,7 +29,7 @@ struct AgentNotchView: View {
             } else {
                 VStack(spacing: 3) {
                     ForEach(Array(store.visible.filter { store.filter.contains($0.state) }.prefix(3)), id: \.identity) { session in
-                        AgentNotchTaskRow(session: session, now: store.now) { store.open(session) }
+                        AgentNotchTaskRow(session: session, now: store.now) { store.showDetails(session) }
                     }
                 }
             }
@@ -297,7 +297,6 @@ struct AgentActivityView: View {
 struct AgentTaskRow: View {
     let session: AgentSession
     @ObservedObject var store: AgentActivityStore
-    @State private var details = false
     var body: some View {
         HStack(alignment: .top, spacing: 10) {
             AgentPaperGlyph(kind: AgentPaperGlyph.kind(session.state), running: session.state == .running).foregroundStyle(AgentText.color(session.state))
@@ -319,35 +318,17 @@ struct AgentTaskRow: View {
                 Text(AgentText.duration(session.startedAt, now: session.finishedAt ?? store.now)).font(.system(size: 10)).monospacedDigit().foregroundStyle(.secondary)
             }.frame(width: 94, alignment: .trailing)
             Menu {
-                Button(AgentText.t("打开任务", "Open task")) { store.open(session, inVSCode: false) }
-                if session.provider == .codex { Button(AgentText.t("在 VS Code 中打开", "Open in VS Code")) { store.open(session, inVSCode: true) } }
                 Button(AgentText.t("标为已读", "Mark as read")) { store.markRead(session) }
                 Divider()
-                Button(AgentText.t("任务详情", "Task details")) { details = true }
-                Button(AgentText.t("打开根目录", "Open root folder")) { NSWorkspace.shared.open(URL(fileURLWithPath: session.projectRoot)) }
+                Button(AgentText.t("任务详情", "Task details")) { store.showDetails(session) }
+                Button(AgentText.t("复制根目录", "Copy root folder")) { NSPasteboard.general.clearContents(); NSPasteboard.general.setString(session.projectRoot, forType: .string) }
                 Button(AgentText.t("复制会话 ID", "Copy session ID")) { NSPasteboard.general.clearContents(); NSPasteboard.general.setString(session.id, forType: .string) }
             } label: { Image(systemName: "ellipsis") }.menuStyle(.borderlessButton).menuIndicator(.hidden).frame(width: 18).padding(.top, 2)
         }
         .padding(.vertical, 14).contentShape(Rectangle())
         .background(AgentReadReceipt(session: session))
-        .onTapGesture { store.open(session) }
+        .onTapGesture { store.showDetails(session) }
         .help(session.projectName + "\n" + session.projectRoot + "\n" + session.displayTitle)
-        .popover(isPresented: $details) {
-            ScrollView { VStack(alignment: .leading, spacing: 12) {
-                Text(session.displayTitle).font(.headline).fixedSize(horizontal: false, vertical: true)
-                if !session.userPrompt.isEmpty { detail(AgentText.t("本轮输入", "Latest request"), String(session.userPrompt.prefix(700))) }
-                detail(AgentText.t("项目", "Project"), session.projectName)
-                detail(AgentText.t("根目录", "Root folder"), session.projectRoot)
-                detail(AgentText.t("工作目录", "Working folder"), session.cwd)
-                detail(AgentText.t("来源", "Source"), AgentText.source(session))
-                detail(AgentText.t("最近活动", "Last activity"), session.updatedAt.formatted(date: .abbreviated, time: .standard))
-                Text(AgentText.t("“本轮完成”表示 AI 停止本轮回复，不代表构建或测试通过。", "“Turn finished” means the agent ended its response; it does not certify build or test success."))
-                    .font(.caption).foregroundStyle(.secondary)
-            }.padding(20).textSelection(.enabled) }.frame(width: 390, height: 420)
-        }
-    }
-    private func detail(_ label: String, _ value: String) -> some View {
-        VStack(alignment: .leading, spacing: 3) { Text(label).font(.caption).foregroundStyle(.secondary); Text(value).font(.system(size: 12)).fixedSize(horizontal: false, vertical: true) }
     }
 }
 

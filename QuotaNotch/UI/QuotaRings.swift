@@ -218,12 +218,13 @@ struct QuotaNotchView: View {
     }
 }
 
-/// One selection shares the physical cutout with music. Equal wings keep it centered.
+/// One quota selection shares the cutout with music and temporary task activity.
 @MainActor
 struct QuotaPinnedWings: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @ObservedObject private var store = QuotaNotchStore.shared
     @ObservedObject private var music = MusicManager.shared
+    @ObservedObject private var activity = AgentActivityStore.shared
     let centerWidth: CGFloat
     let height: CGFloat
     let showsMusic: Bool
@@ -233,6 +234,10 @@ struct QuotaPinnedWings: View {
     @AppStorage("quotaComfortable") private var comfortable = false
     private var iconSize: CGFloat { QuotaCompactMetrics.iconSize(height: height, comfortable: comfortable) }
 
+    private var tasksExpanded: Bool { activity.compactExpanded && activity.showAccessory }
+    private var leftWidth: CGFloat { tasksExpanded && !showsMusic ? max(18, iconSize) : iconSize }
+    private var rightPrimaryWidth: CGFloat { tasksExpanded ? (showsMusic ? 18 : 0) : iconSize }
+
     var body: some View {
         if let pin = store.activePin, let provider = pin.provider {
             HStack(spacing: QuotaCompactMetrics.spacing) {
@@ -241,12 +246,13 @@ struct QuotaPinnedWings: View {
                 } label: {
                     Group {
                         if showsMusic { albumWithActivity }
+                        else if tasksExpanded { minimalQuota(pin, provider: provider) }
                         else {
                             QuotaBrandMark(brand: provider.brand)
                                 .frame(width: iconSize, height: iconSize)
                         }
                     }
-                    .frame(width: iconSize, height: height)
+                    .frame(width: leftWidth, height: height)
                     .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
@@ -255,25 +261,42 @@ struct QuotaPinnedWings: View {
 
                 Color.clear.frame(width: centerWidth, height: height)
 
-                AgentCompactDock(primaryWidth: iconSize, height: height, open: {
+                AgentCompactDock(primaryWidth: rightPrimaryWidth, height: height, anchorWidth: leftWidth, open: {
                     BoringViewCoordinator.shared.currentView = .activity
                     // The hosting notch commits its open state through the action below.
                     NotificationCenter.default.post(name: .agentOpenNotch, object: nil)
                 }) {
-                Button { onSelect(provider) } label: {
-                    quotaIndicator(pin, provider: provider)
-                        .frame(width: iconSize, height: height)
-                        .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-                .help("\(provider.title) · \(store.window(for: pin)?.localizedTitle ?? QuotaText.localized("等待额度")) · \(reading(for: pin))")
-                .accessibilityLabel("\(provider.title) \(store.window(for: pin)?.localizedTitle ?? QuotaText.localized("额度"))")
-                .accessibilityValue(reading(for: pin))
+                    if !tasksExpanded || showsMusic {
+                        Button { onSelect(provider) } label: {
+                            Group {
+                                if tasksExpanded { minimalQuota(pin, provider: provider) }
+                                else { quotaIndicator(pin, provider: provider) }
+                            }
+                            .frame(width: rightPrimaryWidth, height: height)
+                            .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                        .help("\(provider.title) · \(reading(for: pin))")
+                        .accessibilityLabel("\(provider.title) \(store.window(for: pin)?.localizedTitle ?? QuotaText.localized("额度"))")
+                        .accessibilityValue(reading(for: pin))
+                    }
                 }
             }
             .frame(height: height)
-            .animation(reduceMotion ? nil : .smooth(duration: 0.25), value: showsMusic)
+            .animation(reduceMotion ? nil : .smooth(duration: 0.32), value: showsMusic)
+            .animation(reduceMotion ? nil : .smooth(duration: 0.32), value: tasksExpanded)
         }
+    }
+
+    private func minimalQuota(_ pin: QuotaPin, provider: QuotaProvider) -> some View {
+        VStack(spacing: 1) {
+            QuotaBrandMark(brand: provider.brand).frame(width: 10, height: 10)
+            Text(store.window(for: pin).map { QuotaText.percent($0.remainingPercent) } ?? "—")
+                .font(.system(size: 9, weight: .medium)).monospacedDigit()
+                .foregroundStyle(store.isStale(provider) ? .secondary : .primary)
+        }.frame(width: 18, height: height)
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel(provider.title + " · " + reading(for: pin))
     }
 
     private var albumWithActivity: some View {

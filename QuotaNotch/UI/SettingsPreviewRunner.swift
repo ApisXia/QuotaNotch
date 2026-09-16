@@ -90,6 +90,10 @@ struct SettingsPreviewRunner {
                             name: "Tasks-\(Int(width))-\(dark ? "dark" : "light")", output: output)
             }
         }
+        for session in fixtures.prefix(2) {
+            try capture(AgentSessionDetails(session: session), width: 520,
+                        name: "Task-details-\(session.provider.rawValue)", output: output, height: 430)
+        }
         try captureNotchSwitching(output: output)
         var recent = fixtures[2]
         recent.updatedAt = now; recent.tool = "apply_patch"
