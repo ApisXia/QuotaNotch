@@ -101,7 +101,7 @@ jobs:
           if-no-files-found: error
           retention-days: 30
 
-  publish-first-release:
+  publish-release:
     needs: build
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
@@ -115,8 +115,8 @@ jobs:
         with:
           name: QuotaNotch-macOS-${{ github.sha }}
           path: release-files
-      - name: Publish QuotaNotch 1.0.0 from the verified main build
+      - name: Publish QuotaNotch 1.01 from the verified main build
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
-        run: bash scripts/publish-first-release.sh
+        run: bash scripts/publish-release.sh

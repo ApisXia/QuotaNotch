@@ -1,6 +1,6 @@
 # Development build: readable quota display
 
-Version remains 1.0.0. Built from dev, without publishing a release.
+These changes were developed on dev and are included in release 1.01.
 
 - Compact display is the default again: a 32 pt notch uses the original 20 pt icons, with corrected ring inset and gently clearer digits. Optional larger display uses 22 pt icons. Existing show-number preferences are preserved. The oversized development default is reset once.
 - Expanded percentages use 22 pt (originally 21 pt), with reset countdowns in the existing date line. The original 640 × 190 pt panel and single-row toolbar are restored. Refresh details remain available on hover.
