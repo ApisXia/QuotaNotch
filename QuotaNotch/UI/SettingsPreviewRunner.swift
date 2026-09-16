@@ -227,7 +227,7 @@ struct SettingsPreviewRunner {
                 if scenario.music { expected["music"] = "widget" }
                 if scenario.tasks { expected["task"] = shared && !expanded ? "minimal" : "widget" }
                 if shared { expected["switcher"] = "enabled" }
-                precondition(renderedModules == expected,
+                verifyPresentation(renderedModules == expected,
                     "Wrong presentation in \(layout), height \(headerHeight), selection \(expanded): \(renderedModules), expected \(expected)")
                 modeAudit.append(["case": layout, "height": headerHeight, "taskSelected": expanded, "rendered": renderedModules])
                 let bitmap = host.bitmapImageRepForCachingDisplay(in: host.bounds)!
@@ -269,7 +269,7 @@ struct SettingsPreviewRunner {
                         ? ["quota": "widget", "task": "widget"]
                         : ["music": "widget", "quota": expanded ? "minimal" : "widget",
                            "task": expanded ? "widget" : "minimal", "switcher": "enabled"]
-                    precondition(renderedModules == expected, "Playback transition \(playback) retained the wrong presentation: \(renderedModules)")
+                    verifyPresentation(renderedModules == expected, "Playback transition \(playback) retained the wrong presentation: \(renderedModules)")
                     modeAudit.append(["case": playback, "height": headerHeight, "taskSelected": expanded, "rendered": renderedModules])
                     let bitmap = host.bitmapImageRepForCachingDisplay(in: host.bounds)!
                     host.cacheDisplay(in: host.bounds, to: bitmap)
@@ -315,6 +315,15 @@ struct SettingsPreviewRunner {
         window.contentView = nil
         window.close()
     }
+    private static func verifyPresentation(_ condition: Bool, _ message: @autoclosure () -> String) {
+        guard condition else {
+            let diagnostic = message()
+            // Release optimization can omit precondition diagnostics; retain the failing scenario in CI.
+            FileHandle.standardError.write(Data((diagnostic + "\n").utf8))
+            fatalError(diagnostic)
+        }
+    }
+
     @MainActor private static func settle() {
         RunLoop.current.run(until: Date().addingTimeInterval(0.25))
     }

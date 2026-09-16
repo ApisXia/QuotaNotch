@@ -367,11 +367,11 @@ struct ContentView: View {
                     .frame(width: size, height: size)
                     .clipShape(RoundedRectangle(cornerRadius: MusicPlayerImageSizes.cornerRadiusInset.closed))
                     .frame(width: size, height: height)
+                    .auditNotchModule("music")
             }.buttonStyle(.plain)
             Color.clear.frame(width: vm.closedNotchSize.width - cornerRadiusInsets.closed.top, height: height)
             AgentCompactDock(primaryWidth: 0, height: height, anchorWidth: size, widgetWidth: size, open: openTasks) { EmptyView() }
         }.frame(height: height)
-        .auditNotchModule("music")
     }
 
     func MusicLiveActivity() -> some View {
