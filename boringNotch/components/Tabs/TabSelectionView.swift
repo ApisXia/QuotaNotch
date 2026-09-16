@@ -30,6 +30,7 @@ struct TabSelectionView: View {
                     TabButton(label: QuotaText.localized(tab.label), icon: tab.icon, selected: coordinator.currentView == tab.view) {
                         withAnimation(.smooth) {
                             coordinator.currentView = tab.view
+                            AgentActivityStore.shared.notchReadEnabled = tab.view == .activity
                         }
                     }
                     .frame(height: 26)

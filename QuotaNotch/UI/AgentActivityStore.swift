@@ -24,14 +24,18 @@ import UserNotifications
     }
     @Published private var acknowledged: [String: String]
     @Published private var dismissed: [String: String]
-    @Published private var pinned: Set<String>
+    @Published var compactExpanded = false
+    @Published var notchReadEnabled = false
+    @Published var filter: AgentFilter = .all
     private var polling: Task<Void, Never>?
     private var repository: AgentActivityRepository
+    private var claudeRepository: ClaudeActivityRepository
     private var baseline = false
     private let monitoringStartedAt = Date()
     private var lastEvents: [String: String] = [:]
     private var lastNotificationSound = Date.distantPast
     private var wakeObserver: NSObjectProtocol?
+    let claudeHome: URL
     let home: URL
     static var support: URL {
         FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Library/Application Support/QuotaNotch/Activity")
@@ -43,37 +47,35 @@ import UserNotifications
         notifications = defaults.bool(forKey: "agentMonitorNotifications")
         acknowledged = defaults.dictionary(forKey: "agentMonitorAcknowledged") as? [String: String] ?? [:]
         dismissed = defaults.dictionary(forKey: "agentMonitorDismissed") as? [String: String] ?? [:]
-        pinned = Set(defaults.stringArray(forKey: "agentMonitorPinnedProjects") ?? [])
+        lastEvents = defaults.dictionary(forKey: "agentMonitorObserved") as? [String: String] ?? [:]
         let path = defaults.string(forKey: "agentMonitorCodexHome") ?? ProcessInfo.processInfo.environment["CODEX_HOME"]
         home = path.map { URL(fileURLWithPath: $0) } ?? FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".codex")
         repository = AgentActivityRepository(home: home, hookDirectory: Self.support.appendingPathComponent("events"))
+        claudeHome = ProcessInfo.processInfo.environment["CLAUDE_CONFIG_DIR"].map { URL(fileURLWithPath: $0) } ?? FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".claude")
+        claudeRepository = ClaudeActivityRepository(home: claudeHome, hooks: Self.support.appendingPathComponent("claude-events"))
         #if !SETTINGS_PREVIEW
         wakeObserver = NSWorkspace.shared.notificationCenter.addObserver(forName: NSWorkspace.didWakeNotification,
             object: nil, queue: .main) { [weak self] _ in Task { @MainActor in await self?.refresh(force: true) } }
         #endif
     }
 
-    var visible: [AgentSession] { sessions.filter { dismissed[$0.id] != $0.eventID || $0.state.isActive } }
+    var visible: [AgentSession] { sessions.filter { dismissed[$0.identity] != $0.eventID || $0.state.isActive } }
     var running: Int { visible.filter { $0.state == .running }.count }
     var waiting: Int { visible.filter { $0.state == .waiting }.count }
     var unread: [AgentSession] {
-        visible.filter { [.completed, .failed, .waiting].contains($0.state) && acknowledged[$0.id] != $0.eventID }
+        visible.filter { $0.state.isUnreadEvent && acknowledged[$0.identity] != $0.eventID }
     }
     var spotlight: AgentSession? { visible.first { $0.state == .waiting } ?? unread.first ?? visible.first { $0.state == .running } }
-    var showAccessory: Bool { enabled && (running > 0 || waiting > 0 || !unread.isEmpty) }
-    func isUnread(_ session: AgentSession) -> Bool { unread.contains { $0.id == session.id } }
-    func isPinned(_ id: String) -> Bool { pinned.contains(id) }
-    func pin(_ id: String) {
-        if !pinned.insert(id).inserted { pinned.remove(id) }
-        UserDefaults.standard.set(Array(pinned), forKey: "agentMonitorPinnedProjects")
-    }
+    var attention: AgentAttentionSummary { AgentAttentionSummary.make(visible, acknowledged: acknowledged) }
+    var showAccessory: Bool { enabled && attention.isVisible }
+    func isUnread(_ session: AgentSession) -> Bool { session.state.isUnreadEvent && acknowledged[session.identity] != session.eventID }
     func markRead(_ session: AgentSession) {
-        acknowledged[session.id] = session.eventID; saveReadState()
+        acknowledged[session.identity] = session.eventID; saveReadState()
     }
-    func markAllRead() { for session in sessions { acknowledged[session.id] = session.eventID }; saveReadState() }
+    func markAllRead() { for session in sessions { acknowledged[session.identity] = session.eventID }; saveReadState() }
     func dismissFinished() {
         for session in sessions where !session.state.isActive {
-            dismissed[session.id] = session.eventID; acknowledged[session.id] = session.eventID
+            dismissed[session.identity] = session.eventID; acknowledged[session.identity] = session.eventID
         }
         UserDefaults.standard.set(dismissed, forKey: "agentMonitorDismissed"); saveReadState()
     }
@@ -94,7 +96,19 @@ import UserNotifications
 
     func refresh(force: Bool = false) async {
         guard enabled else { return }
-        let snapshot = await repository.scan(force: force)
+        async let codex = repository.scan(force: force)
+        async let claude = claudeRepository.scan(force: force)
+        let (codexSnapshot, claudeSnapshot) = await (codex, claude)
+        var snapshot = codexSnapshot
+        snapshot.sessions += claudeSnapshot.sessions
+        snapshot.sessions.sort {
+            if $0.state.priority != $1.state.priority { return $0.state.priority < $1.state.priority }
+            return $0.updatedAt > $1.updatedAt
+        }
+        snapshot.truncated = codexSnapshot.truncated || claudeSnapshot.truncated
+        snapshot.hasSessionDirectory = snapshot.hasSessionDirectory || claudeSnapshot.hasSessionDirectory
+        snapshot.issue = [codexSnapshot.issue, claudeSnapshot.issue].compactMap { $0 }.joined(separator: "\n")
+        if snapshot.issue?.isEmpty == true { snapshot.issue = nil }
         guard enabled, !Task.isCancelled else { return }
         now = Date(); issue = snapshot.issue.map { message in
             switch message {
@@ -106,20 +120,23 @@ import UserNotifications
         connected = snapshot.hasDatabase || snapshot.hasSessionDirectory
         sessions = snapshot.sessions; ready = true
         for session in sessions {
-            if !baseline {
+            if !baseline && lastEvents[session.identity] == nil {
                 // Starting the app must not replay yesterday's completions.
-                if session.state != .waiting { acknowledged[session.id] = session.eventID }
-            } else if lastEvents[session.id] != session.eventID,
-                      (lastEvents[session.id] != nil || (session.startedAt ?? .distantPast) > monitoringStartedAt),
-                      [.waiting, .completed, .failed].contains(session.state),
+                if session.state != .waiting { acknowledged[session.identity] = session.eventID }
+            } else if lastEvents[session.identity] != session.eventID,
+                      (lastEvents[session.identity] != nil || (session.startedAt ?? .distantPast) > monitoringStartedAt),
+                      session.state.isUnreadEvent,
                       now.timeIntervalSince(session.updatedAt) < 60 {
                 sendNotification(session)
             }
-            lastEvents[session.id] = session.eventID
+            lastEvents[session.identity] = session.eventID
         }
         if !baseline { saveReadState(); baseline = true }
-        let ids = Set(sessions.map(\.id))
+        let ids = Set(sessions.map(\.identity))
         lastEvents = lastEvents.filter { ids.contains($0.key) }
+        if UserDefaults.standard.dictionary(forKey: "agentMonitorObserved") as? [String: String] != lastEvents {
+            UserDefaults.standard.set(lastEvents, forKey: "agentMonitorObserved")
+        }
         // Bound persisted metadata without storing conversation text.
         if acknowledged.count > 3000 { acknowledged = acknowledged.filter { ids.contains($0.key) }; saveReadState() }
         if dismissed.count > 3000 { dismissed = dismissed.filter { ids.contains($0.key) }; UserDefaults.standard.set(dismissed, forKey: "agentMonitorDismissed") }
@@ -139,7 +156,7 @@ import UserNotifications
         content.title = session.projectName + " · " + AgentText.state(session.state)
         content.body = session.displayTitle
         content.threadIdentifier = session.groupID
-        content.userInfo = ["quotaNotchAgentID": session.id]
+        content.userInfo = ["quotaNotchAgentID": session.id, "quotaNotchAgentIdentity": session.identity]
         if Date().timeIntervalSince(lastNotificationSound) > 8 {
             content.sound = .default; lastNotificationSound = Date()
         }
@@ -149,6 +166,13 @@ import UserNotifications
 
     func open(_ session: AgentSession, inVSCode: Bool? = nil) {
         guard UUID(uuidString: session.id) != nil else { actionMessage = AgentText.t("无法识别此任务的链接。", "This task has no valid session link."); return }
+        if session.provider == .claude {
+            // Claude has no documented universal deep link for an existing local Code session.
+            // Show the exact session and resume command rather than opening a new task.
+            AgentSessionDetailsWindow.show(session)
+            markRead(session)
+            return
+        }
         let vscode = inVSCode ?? (session.surface == .vscode)
         let raw = vscode ? "vscode://openai.chatgpt/local/\(session.id)" : "codex://threads/\(session.id)"
         guard let url = URL(string: raw), NSWorkspace.shared.urlForApplication(toOpen: url) != nil else {
@@ -179,11 +203,13 @@ final class AgentNotificationDelegate: NSObject, UNUserNotificationCenterDelegat
     static let shared = AgentNotificationDelegate()
     func userNotificationCenter(_ center: UNUserNotificationCenter, didReceive response: UNNotificationResponse,
                                 withCompletionHandler completionHandler: @escaping () -> Void) {
-        let id = response.notification.request.content.userInfo["quotaNotchAgentID"] as? String
+        let info = response.notification.request.content.userInfo
+        let id = info["quotaNotchAgentID"] as? String
+        let identity = info["quotaNotchAgentIdentity"] as? String
         Task { @MainActor in
             if let id {
                 let store = AgentActivityStore.shared
-                if let session = store.sessions.first(where: { $0.id == id }) { store.open(session) }
+                if let session = store.sessions.first(where: { (identity != nil ? $0.identity == identity : $0.id == id) }) { store.open(session) }
                 else { AgentActivityWindow.shared.show() }
             }
             completionHandler()
@@ -220,13 +246,17 @@ enum AgentText {
         case .running: break
         }
         if session.isQuiet(at: now) { return t("暂时无新活动", "No recent activity") }
+        if !session.activityDetail.isEmpty {
+            let verb = session.toolIsRunning ? t("当前：", "Now: ") : t("最近：", "Recent: ")
+            return verb + session.activityDetail
+        }
         // A completed tool call may be followed by reasoning. Label this as recent,
         // rather than suggesting an old command is still executing.
         let tool = session.tool.components(separatedBy: "__").last?.components(separatedBy: ".").last ?? ""
         let label: String
         switch tool {
-        case "exec_command", "shell", "shell_command", "write_stdin": label = t("执行命令", "command")
-        case "apply_patch": label = t("修改文件", "file edit")
+        case "exec_command", "shell", "shell_command", "write_stdin", "Bash": label = t("执行命令", "command")
+        case "apply_patch", "Write", "Edit": label = t("修改文件", "file edit")
         case "web", "search_query": label = t("查询资料", "web lookup")
         case "view_image": label = t("查看图片", "image review")
         case "request_user_input_async", "request_user_input": label = t("发送提问", "question")
@@ -241,23 +271,27 @@ enum AgentText {
         switch source { case .desktop: return "Codex"; case .vscode: return "VS Code"; case .cli: return "CLI"; case .unknown: return "Codex" }
     }
     static func color(_ state: AgentRunState) -> Color {
-        if state == .interrupted || state == .unknown { return .secondary }
-        return Color(nsColor: NSColor(name: nil) { appearance in
-            let dark = appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
-            switch state {
-            case .running: return dark ? .systemCyan : NSColor(srgbRed: 0, green: 0.38, blue: 0.58, alpha: 1)
-            case .waiting: return dark ? .systemOrange : NSColor(srgbRed: 0.65, green: 0.30, blue: 0, alpha: 1)
-            case .completed: return dark ? .systemGreen : NSColor(srgbRed: 0, green: 0.43, blue: 0.18, alpha: 1)
-            case .failed: return dark ? .systemRed : NSColor(srgbRed: 0.76, green: 0.14, blue: 0.13, alpha: 1)
-            default: return .secondaryLabelColor
-            }
-        })
+        if state == .waiting || state == .failed {
+            return Color(nsColor: NSColor(name: nil) { appearance in
+                appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
+                    ? NSColor(srgbRed: 0.83, green: 0.70, blue: 0.49, alpha: 1)
+                    : NSColor(srgbRed: 0.48, green: 0.32, blue: 0.12, alpha: 1)
+            })
+        }
+        return .primary
     }
-    static func symbol(_ state: AgentRunState) -> String {
-        switch state { case .running: return "circle.dotted"; case .waiting: return "hand.raised.fill"
-        case .completed: return "checkmark.circle.fill"; case .interrupted: return "stop.circle"
-        case .failed: return "exclamationmark.circle.fill"; case .unknown: return "questionmark.circle" }
+    static func source(_ session: AgentSession) -> String {
+        let name = session.provider == .claude ? "Claude Code" : "Codex"
+        let host: String
+        switch session.surface {
+        case .desktop: host = t("桌面", "Desktop")
+        case .vscode: host = "VS Code"
+        case .cli: host = "Terminal"
+        case .unknown: host = t("来源待确认", "Source unconfirmed")
+        }
+        return name + " · " + host
     }
+    static func symbol(_ state: AgentRunState) -> String { "square.on.square" }
     static func duration(_ from: Date?, now: Date) -> String {
         guard let from else { return "—" }
         let seconds = max(0, Int(now.timeIntervalSince(from)))

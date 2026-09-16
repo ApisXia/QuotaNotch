@@ -255,6 +255,11 @@ struct QuotaPinnedWings: View {
 
                 Color.clear.frame(width: centerWidth, height: height)
 
+                AgentCompactDock(primaryWidth: iconSize, height: height, open: {
+                    BoringViewCoordinator.shared.currentView = .activity
+                    // The hosting notch commits its open state through the action below.
+                    NotificationCenter.default.post(name: .agentOpenNotch, object: nil)
+                }) {
                 Button { onSelect(provider) } label: {
                     quotaIndicator(pin, provider: provider)
                         .frame(width: iconSize, height: height)
@@ -264,6 +269,7 @@ struct QuotaPinnedWings: View {
                 .help("\(provider.title) · \(store.window(for: pin)?.localizedTitle ?? QuotaText.localized("等待额度")) · \(reading(for: pin))")
                 .accessibilityLabel("\(provider.title) \(store.window(for: pin)?.localizedTitle ?? QuotaText.localized("额度"))")
                 .accessibilityValue(reading(for: pin))
+                }
             }
             .frame(height: height)
             .animation(reduceMotion ? nil : .smooth(duration: 0.25), value: showsMusic)

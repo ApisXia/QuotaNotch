@@ -9,7 +9,7 @@ guard input.count < 1024 * 1024,
       let event = (try? JSONSerialization.jsonObject(with: input)) as? [String: Any],
       let id = event["session_id"] as? String, UUID(uuidString: id) != nil,
       let name = event["hook_event_name"] as? String,
-      ["UserPromptSubmit", "PermissionRequest", "PreToolUse", "PostToolUse", "Stop", "Interrupt"].contains(name) else { exit(0) }
+      ["UserPromptSubmit", "PermissionRequest", "PreToolUse", "PostToolUse", "Stop", "Interrupt", "SessionEnd"].contains(name) else { exit(0) }
 let directory = URL(fileURLWithPath: CommandLine.arguments[1], isDirectory: true)
 do {
     try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700])
@@ -19,5 +19,5 @@ do {
     let url = directory.appendingPathComponent(id + ".json")
     try data.write(to: url, options: [.atomic])
     try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: url.path)
-} catch { /* Monitoring failure must never block Codex. */ }
+} catch { /* Monitoring failure must never block the agent. */ }
 exit(0)

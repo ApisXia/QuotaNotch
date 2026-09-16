@@ -68,6 +68,8 @@ struct SettingsPreviewRunner {
             s.cwd = "/Users/demo/Projects/\(index % 3)/src"
             s.projectRoot = "/Users/demo/Projects/\(index % 3)"
             s.projectName = ["QuotaNotch", "A project with a deliberately long name", "Website"][index % 3]
+            s.provider = index % 3 == 1 ? .claude : .codex
+            s.userPrompt = AgentText.t("检查英文布局和并行任务状态", "Check English layout and parallel task states")
             s.state = state; s.surface = index % 2 == 0 ? .desktop : .vscode
             s.tool = index % 2 == 0 ? "apply_patch" : "exec_command"
             if state == .waiting && index == 0 { s.waitingCallID = "preview-question" }
@@ -95,13 +97,16 @@ struct SettingsPreviewRunner {
         precondition(AgentText.activity(recent, now: now.addingTimeInterval(121)) == AgentText.t("暂时无新活动", "No recent activity"))
         recent.state = .completed
         precondition(!AgentText.activity(recent, now: now).contains(AgentText.t("修改文件", "file edit")))
-        for width: CGFloat in [165, 280, 430] {
-            try capture(PrimaryNotchLayout {
-                Color.black.frame(width: width, height: 32)
-                AgentAccessoryView(open: {})
-            }.background(.black).preferredColorScheme(.dark), width: width,
-                name: "Tasks-accessory-\(Int(width))", output: output, height: 64)
+        for height: CGFloat in [24, 32, 38] {
+            for expanded in [false, true] {
+                activity.compactExpanded = expanded
+                try capture(AgentCompactDock(primaryWidth: 24, height: height, open: {}) {
+                    Text("62%").font(.system(size: 10)).foregroundStyle(.white)
+                }.padding(.horizontal, 14).background(.black).preferredColorScheme(.dark), width: 180,
+                    name: "Tasks-dock-\(Int(height))-\(expanded)", output: output, height: height)
+            }
         }
+        activity.compactExpanded = false
         activity.configurePreview([])
         try capture(AgentActivityView(), width: 760, name: "Tasks-empty", output: output)
         print("Rendered real settings and task monitor in English/Chinese, narrow/wide and light/dark layouts: \(language)")
@@ -147,6 +152,20 @@ struct SettingsPreviewRunner {
                 }
             }
         }
+        vm.close()
+        for headerHeight: CGFloat in [24, 32, 38] {
+            vm.closedNotchSize.height = headerHeight
+            for expanded in [false, true] {
+                AgentActivityStore.shared.compactExpanded = expanded
+                settle(); host.layoutSubtreeIfNeeded()
+                let bitmap = host.bitmapImageRepForCachingDisplay(in: host.bounds)!
+                host.cacheDisplay(in: host.bounds, to: bitmap)
+                try bitmap.representation(using: .png, properties: [:])!.write(to: output.appendingPathComponent("Notch-closed-\(Int(headerHeight))-\(expanded).png"))
+                let color = bitmap.colorAt(x: bitmap.pixelsWide / 2, y: 2)!.usingColorSpace(.deviceRGB)!
+                precondition(max(color.redComponent, max(color.greenComponent, color.blueComponent)) < 0.06, "Closed notch detached")
+            }
+        }
+        AgentActivityStore.shared.compactExpanded = false
         window.orderOut(nil); window.contentView = nil; window.close()
         vm.destroy()
     }

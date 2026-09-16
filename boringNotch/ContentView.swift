@@ -34,6 +34,8 @@ struct ContentView: View {
 
 
     @State private var measuredClosedWidth: CGFloat = 0
+    @State private var taskWingOffset: CGFloat = 0
+    @ObservedObject private var agentStore = AgentActivityStore.shared
 
     // Shared interactive spring for movement/resizing to avoid conflicting animations
     private var animationSpring: Animation? {
@@ -97,7 +99,7 @@ struct ContentView: View {
                     }
                     .contentShape(Rectangle())
                     .onHover { hovering in
-                        handleHover(hovering)
+                        if vm.notchState == .open { handleHover(hovering) }
                     }
                     .onGeometryChange(for: CGFloat.self) { geometry in
                         geometry.size.width
@@ -148,6 +150,20 @@ struct ContentView: View {
                         .frame(width: computedChinWidth, height: vm.chinHeight)
                 }
             }
+            if vm.notchState == .closed {
+                Color.clear.frame(width: vm.closedNotchSize.width, height: vm.effectiveClosedNotchHeight)
+                    .contentShape(Rectangle())
+                    .onHover { handleHover($0) }
+                    .onTapGesture { openFromPointer() }
+            }
+        }
+        .onPreferenceChange(AgentWingOffsetKey.self) { taskWingOffset = $0 }
+        .onReceive(NotificationCenter.default.publisher(for: .agentOpenNotch)) { _ in
+            guard vm.notchState == .closed else { return }
+            coordinator.currentView = .activity; agentStore.notchReadEnabled = true; doOpen()
+        }
+        .onChange(of: vm.notchState) { _, state in
+            if state == .closed { agentStore.notchReadEnabled = false }
         }
         .padding(.bottom, 8)
         .frame(maxWidth: windowSize.width, maxHeight: windowSize.height, alignment: .top)
@@ -196,6 +212,7 @@ struct ContentView: View {
                         .bottom,
                         vm.effectiveClosedNotchHeight == 0 ? 10 : 0
                     )
+                    .offset(x: vm.notchState == .closed ? taskWingOffset : 0)
                 
     }
 
@@ -212,13 +229,7 @@ struct ContentView: View {
                 } else if vm.notchState == .closed {
                     PrimaryNotchLayout {
                         closedPrimaryContent
-                            .contentShape(Rectangle())
-                            .onTapGesture { openFromPointer() }
                         closedAccessoryContent
-                        AgentAccessoryView {
-                            coordinator.currentView = .activity
-                            doOpen()
-                        }
                     }
                 } else {
                     BoringHeader().frame(height: max(24, vm.effectiveClosedNotchHeight))
@@ -290,9 +301,17 @@ struct ContentView: View {
             }
             .transition(.opacity)
         } else if compactPresentation == .music {
-            MusicLiveActivity().frame(alignment: .center)
+            HStack(spacing: 0) {
+                MusicLiveActivity().contentShape(Rectangle()).onTapGesture { coordinator.currentView = .home; doOpen() }
+                AgentCompactDock(primaryWidth: 0, height: vm.effectiveClosedNotchHeight, open: openTasks) { EmptyView() }
+            }
         } else {
-            Color.clear.frame(width: vm.closedNotchSize.width - 20, height: vm.effectiveClosedNotchHeight)
+            HStack(spacing: 0) {
+                Color.clear.frame(width: vm.closedNotchSize.width - 20, height: vm.effectiveClosedNotchHeight)
+                if vm.effectiveClosedNotchHeight > 0 && !eventPresentation.replacesPrimary {
+                    AgentCompactDock(primaryWidth: 0, height: vm.effectiveClosedNotchHeight, hasPrimary: false, open: openTasks) { EmptyView() }
+                }
+            }
         }
     }
 
@@ -431,6 +450,12 @@ struct ContentView: View {
         )
     }
 
+    private func openTasks() {
+        agentStore.notchReadEnabled = true
+        coordinator.currentView = .activity
+        doOpen()
+    }
+
     private func doOpen() {
         withAnimation(animationSpring) {
             vm.open()
@@ -439,6 +464,10 @@ struct ContentView: View {
 
     private func openFromPointer() {
         guard vm.notchState == .closed else { return }
+        agentStore.notchReadEnabled = false
+        if agentStore.compactExpanded && agentStore.showAccessory {
+            coordinator.currentView = .activity; doOpen(); return
+        }
         let presentation = compactPresentation
         let screen = vm.screenUUID.flatMap { NSScreen.screen(withUUID: $0) } ?? NSScreen.main
         let midpoint = screen?.frame.midX ?? NSEvent.mouseLocation.x
