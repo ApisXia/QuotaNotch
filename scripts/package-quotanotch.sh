@@ -20,6 +20,10 @@ ditto -c -k --sequesterRsrc --keepParent "$app" "$dist/QuotaNotch.app.zip"
 ditto "$app" "$staging/QuotaNotch.app"
 ln -s /Applications "$staging/Applications"
 cp README.zh-CN.md "$staging/安装与使用.md"
+if [[ "${GITHUB_REF_NAME:-}" == future ]]; then
+  cp docs/Future-preview.md "$staging/Future-试用说明.md"
+  cp docs/Future-preview.md "$dist/Future-preview.md"
+fi
 cp LICENSE "$staging/LICENSE"
 git archive --format=zip --prefix=QuotaNotch-source/ -o "$dist/QuotaNotch-source.zip" HEAD
 cp "$dist/QuotaNotch-source.zip" "$staging/QuotaNotch-source.zip"

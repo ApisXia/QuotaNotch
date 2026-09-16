@@ -57,7 +57,7 @@ struct AgentActivitySettings: View {
         defer { busy = false }
         do {
             let fm = FileManager.default
-            let config = store.home.appendingPathComponent("hooks.json")
+            let config = store.home.appendingPathComponent("hooks.json").resolvingSymlinksInPath()
             let previous = fm.fileExists(atPath: config.path) ? try Data(contentsOf: config) : nil
             guard previous == nil || previous!.count < 4 * 1024 * 1024 else { throw CocoaError(.fileReadTooLarge) }
             let support = AgentActivityStore.support

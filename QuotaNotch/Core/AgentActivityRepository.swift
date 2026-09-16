@@ -52,6 +52,7 @@ struct AgentMetadataDatabase {
             session.cwd = row["cwd"] ?? ""; session.rolloutPath = row["rollout_path"] ?? ""
             session.title = row["name"].flatMap { $0.isEmpty ? nil : $0 } ?? row["title"] ?? ""
             session.projectID = row["project_id"]
+            session.hasProjectAssignment = columns.contains("project_id")
             session.archived = row["archived"] == "1"
             let source = row["source"] ?? ""
             let originator = row["originator"] ?? ""
@@ -117,6 +118,10 @@ actor AgentActivityRepository {
                         let head = try handle.read(upToCount: 64 * 1024) ?? Data()
                         var header = AgentLogCursor()
                         header.consume(head) { AgentEventParser.apply($0, to: &session) }
+                        // Identity survives the gap; an old turn at the head must not veto
+                        // the latest completion in the tail of a long conversation.
+                        session.state = .unknown; session.turnID = ""; session.updatedAt = .distantPast
+                        session.startedAt = nil; session.finishedAt = nil; session.waitingCallID = nil; session.tool = ""
                         cursor.offset = size - 2 * 1024 * 1024
                         cursor.skipping = true
                     }
@@ -142,7 +147,7 @@ actor AgentActivityRepository {
             // Keep active/attention sessions and one day of recent results; no startup alert replay.
             if !session.state.isActive && now.timeIntervalSince(session.updatedAt) > 86400 { continue }
             var assignment = record.projectID
-            if assignment == nil,
+            if !record.hasProjectAssignment, assignment == nil,
                let assignments = global["thread-project-assignments"] as? [String: [String: String]],
                let legacy = assignments[session.id]?["projectId"] {
                 let maps = global["app-server-project-id-by-legacy-project-id-by-host"] as? [String: [String: String]] ?? [:]
@@ -151,7 +156,8 @@ actor AgentActivityRepository {
             let hints = global["thread-workspace-root-hints"] as? [String: String] ?? [:]
             let base = hints[session.id] ?? session.cwd
             if rootCache[base] == nil { rootCache[base] = AgentProjectResolver.repositoryRoot(for: base) }
-            let projectless = (global["projectless-thread-ids"] as? [String] ?? []).contains(session.id)
+            let projectless = record.hasProjectAssignment ? record.projectID == nil
+                : (global["projectless-thread-ids"] as? [String] ?? []).contains(session.id)
             session = AgentProjectResolver.resolve(session, projects: projects, assignedID: assignment,
                 rootHint: rootCache[base], projectless: projectless)
             result.sessions.append(session)

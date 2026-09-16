@@ -30,6 +30,7 @@ import UserNotifications
     private var baseline = false
     private let monitoringStartedAt = Date()
     private var lastEvents: [String: String] = [:]
+    private var lastNotificationSound = Date.distantPast
     private var wakeObserver: NSObjectProtocol?
     let home: URL
     static var support: URL {
@@ -95,7 +96,13 @@ import UserNotifications
         guard enabled else { return }
         let snapshot = await repository.scan(force: force)
         guard enabled, !Task.isCancelled else { return }
-        now = Date(); issue = snapshot.issue; truncated = snapshot.truncated
+        now = Date(); issue = snapshot.issue.map { message in
+            switch message {
+            case "Some task records could not be read. Retrying automatically.": return AgentText.t("部分任务记录暂时无法读取，正在自动重试。", message)
+            case "Codex metadata is unavailable. Using local task records.": return AgentText.t("Codex 项目资料暂时不可用，正在使用本地任务记录。", message)
+            default: return message
+            }
+        }; truncated = snapshot.truncated
         connected = snapshot.hasDatabase || snapshot.hasSessionDirectory
         sessions = snapshot.sessions; ready = true
         for session in sessions {
@@ -131,8 +138,11 @@ import UserNotifications
         let content = UNMutableNotificationContent()
         content.title = session.projectName + " · " + AgentText.state(session.state)
         content.body = session.displayTitle
+        content.threadIdentifier = session.groupID
         content.userInfo = ["quotaNotchAgentID": session.id]
-        content.sound = .default
+        if Date().timeIntervalSince(lastNotificationSound) > 8 {
+            content.sound = .default; lastNotificationSound = Date()
+        }
         UNUserNotificationCenter.current().add(UNNotificationRequest(identifier: "agent-" + session.eventID, content: content, trigger: nil))
     }
     var isMonitorVisible: Bool { AgentActivityWindow.shared.window?.isKeyWindow == true }
@@ -140,7 +150,7 @@ import UserNotifications
     func open(_ session: AgentSession, inVSCode: Bool? = nil) {
         guard UUID(uuidString: session.id) != nil else { actionMessage = AgentText.t("无法识别此任务的链接。", "This task has no valid session link."); return }
         let vscode = inVSCode ?? (session.surface == .vscode)
-        let raw = vscode ? "vscode://openai.chatgpt/threads/\(session.id)" : "codex://threads/\(session.id)"
+        let raw = vscode ? "vscode://openai.chatgpt/local/\(session.id)" : "codex://threads/\(session.id)"
         guard let url = URL(string: raw), NSWorkspace.shared.urlForApplication(toOpen: url) != nil else {
             actionMessage = AgentText.t("没有找到对应应用。可从任务菜单复制会话 ID 或打开项目文件夹。", "The app is unavailable. Use the task menu to copy its session ID or open the project folder.")
             return
@@ -198,8 +208,17 @@ enum AgentText {
         switch source { case .desktop: return "Codex"; case .vscode: return "VS Code"; case .cli: return "CLI"; case .unknown: return "Codex" }
     }
     static func color(_ state: AgentRunState) -> Color {
-        switch state { case .running: return .cyan; case .waiting: return .orange; case .completed: return .green
-        case .failed: return .red; case .interrupted, .unknown: return .secondary }
+        if state == .interrupted || state == .unknown { return .secondary }
+        return Color(nsColor: NSColor(name: nil) { appearance in
+            let dark = appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
+            switch state {
+            case .running: return dark ? .systemCyan : NSColor(srgbRed: 0, green: 0.38, blue: 0.58, alpha: 1)
+            case .waiting: return dark ? .systemOrange : NSColor(srgbRed: 0.65, green: 0.30, blue: 0, alpha: 1)
+            case .completed: return dark ? .systemGreen : NSColor(srgbRed: 0, green: 0.43, blue: 0.18, alpha: 1)
+            case .failed: return dark ? .systemRed : NSColor(srgbRed: 0.76, green: 0.14, blue: 0.13, alpha: 1)
+            default: return .secondaryLabelColor
+            }
+        })
     }
     static func symbol(_ state: AgentRunState) -> String {
         switch state { case .running: return "circle.dotted"; case .waiting: return "hand.raised.fill"

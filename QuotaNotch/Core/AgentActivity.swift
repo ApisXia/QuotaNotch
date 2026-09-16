@@ -17,6 +17,7 @@ struct AgentSession: Identifiable, Equatable, Codable {
     var title = ""
     var cwd = ""
     var projectID: String?
+    var hasProjectAssignment = false
     var projectName = ""
     var projectRoot = ""
     var surface: AgentSurface = .unknown
@@ -124,6 +125,7 @@ enum AgentEventParser {
         }
         if kind == "turn_context" {
             if let cwd = payload["cwd"] as? String { session.cwd = cwd }
+            if session.turnID.isEmpty { session.turnID = payload["turn_id"] as? String ?? "" }
             return
         }
         guard at >= session.updatedAt else { return }
@@ -136,6 +138,7 @@ enum AgentEventParser {
                 session.tool = ""; session.waitingCallID = nil
             case "task_complete", "turn_aborted":
                 if let turn = payload["turn_id"] as? String, !session.turnID.isEmpty, turn != session.turnID { return }
+                if session.turnID.isEmpty { session.turnID = payload["turn_id"] as? String ?? "" }
                 session.state = event == "task_complete" ? .completed : .interrupted
                 session.finishedAt = at; session.waitingCallID = nil; session.tool = ""
             case "error":
@@ -146,6 +149,9 @@ enum AgentEventParser {
             default: return
             }
         } else if kind == "response_item" {
+            if session.state == .unknown && ["function_call", "custom_tool_call", "reasoning"].contains(event) {
+                session.state = .running
+            }
             if event == "function_call" || event == "custom_tool_call" {
                 let tool = payload["name"] as? String ?? ""
                 session.tool = String(tool.prefix(100))

@@ -199,6 +199,12 @@ final class AgentRepositoryTests: XCTestCase {
         XCTAssertEqual(first.sessions.first?.projectRoot, "/work/root"); XCTAssertEqual(first.sessions.first?.title, "New title")
         XCTAssertEqual(sqlite3_exec(db, "UPDATE projects SET name='Renamed'", nil, nil, nil), SQLITE_OK)
         let renamed = await repository.scan(force: true); XCTAssertEqual(renamed.sessions.first?.projectName, "Renamed")
+        try JSONSerialization.data(withJSONObject: ["thread-project-assignments": [id: ["projectId": "p"]]])
+            .write(to: root.appendingPathComponent(".codex-global-state.json"))
+        XCTAssertEqual(sqlite3_exec(db, "UPDATE threads SET project_id=NULL", nil, nil, nil), SQLITE_OK)
+        let unassigned = await repository.scan(force: true)
+        XCTAssertNil(unassigned.sessions.first?.projectID)
+        XCTAssertNotEqual(unassigned.sessions.first?.projectName, "Renamed")
         XCTAssertEqual(sqlite3_exec(db, "UPDATE threads SET archived=1", nil, nil, nil), SQLITE_OK)
         let archived = await repository.scan(force: true); XCTAssertTrue(archived.sessions.isEmpty)
     }
@@ -222,5 +228,16 @@ final class AgentRepositoryTests: XCTestCase {
         let repository = AgentActivityRepository(home: root, hookDirectory: root.appendingPathComponent("events"))
         let snapshot = await repository.scan(force: true)
         XCTAssertEqual(snapshot.sessions.count, 60); XCTAssertEqual(Set(snapshot.sessions.map(\.groupID)).count, 12)
+    }
+    func testLargeConversationTailDoesNotReuseOldTurn() async throws {
+        let file = root.appendingPathComponent("sessions/long.jsonl"); let id = UUID().uuidString
+        try append(line("session_meta", ["id": id, "cwd": "/projects/long", "source": "vscode"]), file: file)
+        try append(line("event_msg", ["type": "task_started", "turn_id": "old"]), file: file)
+        try append(String(repeating: "x", count: 3 * 1024 * 1024) + "\n", file: file)
+        try append(line("event_msg", ["type": "task_complete", "turn_id": "new"]), file: file)
+        let repository = AgentActivityRepository(home: root, hookDirectory: root.appendingPathComponent("events"))
+        let snapshot = await repository.scan(force: true)
+        XCTAssertEqual(snapshot.sessions.first?.state, .completed)
+        XCTAssertEqual(snapshot.sessions.first?.turnID, "new")
     }
 }
