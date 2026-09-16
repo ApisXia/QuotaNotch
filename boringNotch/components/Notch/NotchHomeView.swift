@@ -31,7 +31,7 @@ struct AlbumArtView: View {
 
     var body: some View {
         ZStack(alignment: .bottomTrailing) {
-            if Defaults[.lightingEffect] {
+            if NotchStyle.albumGlow {
                 albumArtBackground
             }
             albumArtButton
@@ -44,7 +44,7 @@ struct AlbumArtView: View {
             .clipped()
             .clipShape(
                 RoundedRectangle(
-                    cornerRadius: Defaults[.cornerRadiusScaling]
+                    cornerRadius: NotchStyle.scalesCorners
                         ? MusicPlayerImageSizes.cornerRadiusInset.opened
                         : MusicPlayerImageSizes.cornerRadiusInset.closed)
             )
@@ -89,7 +89,7 @@ struct AlbumArtView: View {
             .clipped()
             .clipShape(
                 RoundedRectangle(
-                    cornerRadius: Defaults[.cornerRadiusScaling]
+                    cornerRadius: NotchStyle.scalesCorners
                         ? MusicPlayerImageSizes.cornerRadiusInset.opened
                         : MusicPlayerImageSizes.cornerRadiusInset.closed)
             )
@@ -146,7 +146,7 @@ struct MusicControlsView: View {
                 $musicManager.artistName,
                 font: .headline,
                 nsFont: .headline,
-                textColor: Defaults[.playerColorTinting]
+                textColor: NotchStyle.playerTinting
                     ? Color(nsColor: musicManager.avgColor)
                         .ensureMinimumBrightness(factor: 0.6) : .gray,
                 frameWidth: width
@@ -434,9 +434,7 @@ struct MusicSliderView: View {
             CustomSlider(
                 value: $sliderValue,
                 range: 0...duration,
-                color: Defaults[.sliderColor] == SliderColorEnum.albumArt
-                    ? Color(nsColor: color).ensureMinimumBrightness(factor: 0.8)
-                    : Defaults[.sliderColor] == SliderColorEnum.accent ? .effectiveAccent : .white,
+                color: .white,
                 dragging: $dragging,
                 lastDragged: $lastDragged,
                 onValueChange: onValueChange
@@ -450,7 +448,7 @@ struct MusicSliderView: View {
             }
             .fontWeight(.medium)
             .foregroundColor(
-                Defaults[.playerColorTinting]
+                NotchStyle.playerTinting
                     ? Color(nsColor: color).ensureMinimumBrightness(factor: 0.6) : .gray
             )
             .font(.caption)

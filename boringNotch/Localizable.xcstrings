@@ -25409,6 +25409,23 @@
           }
         }
       }
+    },
+    "Controls" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Controls"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "控制与显示"
+          }
+        }
+      }
     }
   },
   "version" : "1.0"

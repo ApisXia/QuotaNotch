@@ -67,14 +67,8 @@ struct GeneralSettings: View {
     private let startingLanguage = QuotaLanguage.atLaunch
     @State private var screens: [(uuid: String, name: String)] = []
     @ObservedObject private var coordinator = BoringViewCoordinator.shared
-    @Default(.minimumHoverDuration) private var minimumHoverDuration
-    @Default(.nonNotchHeight) private var nonNotchHeight
-    @Default(.nonNotchHeightMode) private var nonNotchHeightMode
-    @Default(.notchHeight) private var notchHeight
-    @Default(.notchHeightMode) private var notchHeightMode
     @Default(.showOnAllDisplays) private var showOnAllDisplays
     @Default(.automaticallySwitchDisplay) private var automaticallySwitchDisplay
-    @Default(.openNotchOnHover) private var openNotchOnHover
     @Default(.hideNotchOption) private var hideNotchOption
 
     var body: some View {
@@ -130,38 +124,8 @@ struct GeneralSettings: View {
                 }
                 SettingsHint("Applies to the entire notch, including music and AI usage.")
             }
-            Section("Notch sizing") {
-                SettingsField("Notch height on notch displays") {
-                    Picker("Notch height on notch displays", selection: $notchHeightMode) {
-                        Text("Match real notch height").tag(WindowHeightMode.matchRealNotchSize)
-                        Text("Match menu bar height").tag(WindowHeightMode.matchMenuBar)
-                        Text("Custom height").tag(WindowHeightMode.custom)
-                    }
-                }
-                .onChange(of: notchHeightMode) { notifySizeChange() }
-                if notchHeightMode == .custom {
-                    SettingsSlider("Custom height", value: $notchHeight, range: 15...45, step: 1, suffix: "pt")
-                        .onChange(of: notchHeight) { notifySizeChange() }
-                }
-                SettingsField("Notch height on non-notch displays") {
-                    Picker("Notch height on non-notch displays", selection: $nonNotchHeightMode) {
-                        Text("Match menu bar height").tag(WindowHeightMode.matchMenuBar)
-                        Text("Standard height").tag(WindowHeightMode.matchRealNotchSize)
-                        Text("Custom height").tag(WindowHeightMode.custom)
-                    }
-                }
-                .onChange(of: nonNotchHeightMode) { notifySizeChange() }
-                if nonNotchHeightMode == .custom {
-                    SettingsSlider("Custom height", value: $nonNotchHeight, range: 0...40, step: 1, suffix: "pt")
-                        .onChange(of: nonNotchHeight) { notifySizeChange() }
-                }
-                SettingsHint("Custom heights are remembered when switching modes.")
-            }
             Section("Notch behavior") {
                 Defaults.Toggle(key: .openNotchOnHover) { Text("Open notch on hover").fixedSize(horizontal: false, vertical: true) }
-                if openNotchOnHover {
-                    SettingsSlider("Hover delay", value: $minimumHoverDuration, range: 0...1, step: 0.1, suffix: "s", decimals: 1)
-                }
                 Defaults.Toggle(key: .enableHaptics) { Text("Enable haptic feedback").fixedSize(horizontal: false, vertical: true) }
                 Toggle("Remember last tab", isOn: $coordinator.openLastTabByDefault)
                 Defaults.Toggle(key: .extendHoverArea) { Text("Extend hover area").fixedSize(horizontal: false, vertical: true) }
@@ -185,13 +149,10 @@ struct GeneralSettings: View {
             screen.displayUUID.map { (uuid: $0, name: screen.localizedName) }
         }
     }
-    private func notifySizeChange() {
-        NotificationCenter.default.post(name: .notchHeightChanged, object: nil)
-    }
+
 }
 
 struct HUD: View {
-    @Default(.enableGradient) private var enableGradient
     @Default(.optionKeyAction) private var optionKeyAction
     @Default(.hudReplacement) private var hudReplacement
     @Default(.showBatteryIndicator) private var showBatteryIndicator
@@ -214,20 +175,12 @@ struct HUD: View {
                     SettingsHint("Preferences are saved and apply when this feature is enabled.")
                 }
             }
-            Section("Indicator Appearance") {
+            Section("Controls") {
                 SettingsField("Option key behaviour") {
                     Picker("Option key behaviour", selection: $optionKeyAction) {
                         ForEach(OptionKeyAction.allCases) { Text(LocalizedStringKey($0.rawValue)).tag($0) }
                     }
                 }
-                SettingsField("Progress bar style") {
-                    Picker("Progress bar style", selection: $enableGradient) {
-                        Text("Hierarchical").tag(false)
-                        Text("Gradient").tag(true)
-                    }
-                }
-                Defaults.Toggle(key: .systemEventIndicatorShadow) { Text("Enable glowing effect").fixedSize(horizontal: false, vertical: true) }
-                Defaults.Toggle(key: .systemEventIndicatorUseAccent) { Text("Tint progress bar with accent color").fixedSize(horizontal: false, vertical: true) }
                 Defaults.Toggle(key: .showClosedNotchHUDPercentage) { Text("Show percentage").fixedSize(horizontal: false, vertical: true) }
             }
             .disabled(!hudReplacement || !accessibilityAuthorized)
@@ -259,7 +212,6 @@ struct Media: View {
     @Default(.mediaController) private var mediaController
     @Default(.enableSneakPeek) private var enableSneakPeek
     @Default(.sneakPeekStyles) private var sneakPeekStyles
-    @Default(.sliderColor) private var sliderColor
     @ObservedObject private var coordinator = BoringViewCoordinator.shared
 
     var body: some View {
@@ -287,10 +239,11 @@ struct Media: View {
             Section("Media playback live activity") {
                 Toggle("Show music live activity", isOn: $coordinator.musicLiveActivityEnabled)
                 SettingsHint("Shows album art and playback activity in the closed notch.")
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("Media inactivity timeout").fixedSize(horizontal: false, vertical: true)
-                    Stepper(value: $waitInterval, in: 0...10, step: 1) {
-                        Text("\(waitInterval, specifier: "%.0f") seconds")
+                SettingsField("Media inactivity timeout") {
+                    HStack(spacing: 8) {
+                        Text("\(waitInterval, specifier: "%.0f") seconds").foregroundStyle(.secondary).monospacedDigit()
+                        Stepper("Media inactivity timeout", value: $waitInterval, in: 0...10, step: 1).labelsHidden()
+                            .fixedSize()
                     }
                 }
                 .disabled(!coordinator.musicLiveActivityEnabled)
@@ -308,16 +261,7 @@ struct Media: View {
             Section("Media controls") {
                 MusicSlotConfigurationView()
             }
-            Section("Player Appearance") {
-                Defaults.Toggle(key: .coloredSpectrogram) { Text("Colored spectrogram").fixedSize(horizontal: false, vertical: true) }
-                Defaults.Toggle(key: .playerColorTinting) { Text("Player tinting").fixedSize(horizontal: false, vertical: true) }
-                Defaults.Toggle(key: .lightingEffect) { Text("Enable blur effect behind album art").fixedSize(horizontal: false, vertical: true) }
-                SettingsField("Slider color") {
-                    Picker("Slider color", selection: $sliderColor) {
-                        ForEach(SliderColorEnum.allCases, id: \.self) { Text(LocalizedStringKey($0.rawValue)).tag($0) }
-                    }
-                }
-            }
+
         }
         .navigationTitle("Media")
     }
@@ -600,17 +544,7 @@ struct Appearance: View {
                 Toggle("Always show tabs", isOn: $coordinator.alwaysShowTabs)
                 Defaults.Toggle(key: .settingsIconInNotch) { Text("Show settings icon in notch").fixedSize(horizontal: false, vertical: true) }
             }
-            Section {
-                Defaults.Toggle(key: .enableShadow) {
-                    Text("Enable window shadow")
-                }
-                Defaults.Toggle(key: .cornerRadiusScaling) {
-                    Text("Corner radius scaling")
-                }
-            } header: {
-                Text("Window Appearance")
-            }
-            
+
 
         }
         .accentColor(.effectiveAccent)

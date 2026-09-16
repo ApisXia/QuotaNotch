@@ -14,10 +14,13 @@ struct SettingsPreviewRunner {
         let language = UserDefaults.standard.stringArray(forKey: "AppleLanguages")?.first ?? "en"
         let output = URL(fileURLWithPath: "build/Settings-previews/\(language)")
         try FileManager.default.createDirectory(at: output, withIntermediateDirectories: true)
-        Defaults[.notchHeightMode] = .custom
-        Defaults[.nonNotchHeightMode] = .custom
-        Defaults[.notchHeight] = 35
-        Defaults[.nonNotchHeight] = 29
+        // Old manual sizing preferences must no longer affect the actual screen layout.
+        UserDefaults.standard.set(15, forKey: "notchHeight")
+        UserDefaults.standard.set(10, forKey: "nonNotchHeight")
+        let automaticSize = getClosedNotchSize()
+        UserDefaults.standard.set(45, forKey: "notchHeight")
+        UserDefaults.standard.set(40, forKey: "nonNotchHeight")
+        precondition(getClosedNotchSize() == automaticSize, "Legacy manual heights changed automatic sizing")
         Defaults[.showCalendar] = true
         Defaults[.useCustomAccentColor] = true
         Defaults[.enableSneakPeek] = true
@@ -69,15 +72,6 @@ struct SettingsPreviewRunner {
         NSApp.activate(ignoringOtherApps: true)
         window.makeKeyAndOrderFront(nil)
         settle()
-        if name.hasPrefix("General") {
-            Defaults[.notchHeightMode] = .matchMenuBar
-            Defaults[.nonNotchHeightMode] = .matchRealNotchSize
-            settle()
-            Defaults[.notchHeightMode] = .custom
-            Defaults[.nonNotchHeightMode] = .custom
-            settle()
-            precondition(Defaults[.notchHeight] == 35 && Defaults[.nonNotchHeight] == 29, "Switching sizing modes lost custom heights")
-        }
         let scrollViews = descendants(host).compactMap { $0 as? NSScrollView }
         // The sidebar has its own scroll view; select the widest one for page content.
         let scroll = scrollViews.max { $0.frame.width < $1.frame.width }

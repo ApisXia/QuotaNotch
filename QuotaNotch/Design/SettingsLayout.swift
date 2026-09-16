@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 import SwiftUI
 
-/// Long labels get their own line; controls receive the entire available width.
+/// A shared control column keeps pickers, shortcuts and toggles visually aligned.
 struct SettingsField<Content: View>: View {
     let title: LocalizedStringKey
     @ViewBuilder var content: () -> Content
@@ -10,9 +10,11 @@ struct SettingsField<Content: View>: View {
         self.content = content
     }
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        LabeledContent {
+            content().labelsHidden().frame(width: 180, alignment: .trailing)
+        } label: {
             Text(title).fixedSize(horizontal: false, vertical: true)
-            content().labelsHidden().frame(maxWidth: .infinity, alignment: .leading)
+                .frame(maxWidth: .infinity, alignment: .leading)
         }
         .padding(.vertical, 3)
     }
@@ -25,34 +27,6 @@ struct SettingsHint: View {
         Text(text).font(.caption).foregroundStyle(.secondary)
             .fixedSize(horizontal: false, vertical: true)
             .frame(maxWidth: .infinity, alignment: .leading)
-    }
-}
-
-struct SettingsSlider: View {
-    let title: LocalizedStringKey
-    @Binding var value: Double
-    let range: ClosedRange<Double>
-    let step: Double
-    let suffix: String
-    var decimals: Int = 0
-    init<Value: BinaryFloatingPoint>(_ title: LocalizedStringKey, value: Binding<Value>, range: ClosedRange<Double>, step: Double, suffix: String, decimals: Int = 0) {
-        self.title = title
-        self._value = Binding(get: { Double(value.wrappedValue) }, set: { value.wrappedValue = Value($0) })
-        self.range = range
-        self.step = step
-        self.suffix = suffix
-        self.decimals = decimals
-    }
-    var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack(alignment: .firstTextBaseline) {
-                Text(title).fixedSize(horizontal: false, vertical: true)
-                Spacer(minLength: 12)
-                Text(value.formatted(.number.precision(.fractionLength(decimals))) + " " + suffix)
-                    .monospacedDigit().foregroundStyle(.secondary).fixedSize()
-            }
-            Slider(value: $value, in: range, step: step) { Text(title) }.labelsHidden()
-        }.padding(.vertical, 3)
     }
 }
 

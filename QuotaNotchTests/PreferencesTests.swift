@@ -71,3 +71,17 @@ final class SettingsSelectionTests: XCTestCase {
         XCTAssertEqual(pins.editableCandidates(available: [new, new]), [new, old])
     }
 }
+
+final class NotchScreenSizingTests: XCTestCase {
+    func testHardwareNotchDeterminesHeight() {
+        XCTAssertEqual(NotchScreenSizing.height(safeArea: 38, menuBar: 44), 38)
+    }
+    func testExternalDisplayFollowsMenuBar() {
+        XCTAssertEqual(NotchScreenSizing.height(safeArea: 0, menuBar: 24), 24)
+        XCTAssertEqual(NotchScreenSizing.height(safeArea: 0, menuBar: 32), 32)
+    }
+    func testHiddenMenuBarHasUsableFallback() {
+        XCTAssertEqual(NotchScreenSizing.height(safeArea: 0, menuBar: 0), 24)
+        XCTAssertEqual(NotchScreenSizing.height(safeArea: .nan, menuBar: -.infinity), 24)
+    }
+}

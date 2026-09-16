@@ -231,14 +231,6 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         NotificationCenter.default.addObserver(
-            forName: Notification.Name.notchHeightChanged, object: nil, queue: nil
-        ) { [weak self] _ in
-            Task { @MainActor in
-                self?.adjustWindowPosition()
-            }
-        }
-
-        NotificationCenter.default.addObserver(
             forName: Notification.Name.automaticallySwitchDisplayChanged, object: nil, queue: nil
         ) { [weak self] _ in
             guard let self = self, let window = self.window else { return }
@@ -522,7 +514,6 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
 extension Notification.Name {
     static let selectedScreenChanged = Notification.Name("SelectedScreenChanged")
-    static let notchHeightChanged = Notification.Name("NotchHeightChanged")
     static let showOnAllDisplaysChanged = Notification.Name("showOnAllDisplaysChanged")
     static let automaticallySwitchDisplayChanged = Notification.Name("automaticallySwitchDisplayChanged")
 }

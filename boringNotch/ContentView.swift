@@ -44,7 +44,7 @@ struct ContentView: View {
     private let zeroHeightHoverPadding: CGFloat = 10
 
     private var topCornerRadius: CGFloat {
-       ((vm.notchState == .open) && Defaults[.cornerRadiusScaling])
+       ((vm.notchState == .open) && NotchStyle.scalesCorners)
                 ? cornerRadiusInsets.opened.top
                 : cornerRadiusInsets.closed.top
     }
@@ -52,7 +52,7 @@ struct ContentView: View {
     private var currentNotchShape: NotchShape {
         NotchShape(
             topCornerRadius: topCornerRadius,
-            bottomCornerRadius: ((vm.notchState == .open) && Defaults[.cornerRadiusScaling])
+            bottomCornerRadius: ((vm.notchState == .open) && NotchStyle.scalesCorners)
                 ? cornerRadiusInsets.opened.bottom
                 : cornerRadiusInsets.closed.bottom
         )
@@ -171,7 +171,7 @@ struct ContentView: View {
                     .padding(
                         .horizontal,
                         vm.notchState == .open
-                        ? Defaults[.cornerRadiusScaling]
+                        ? NotchStyle.scalesCorners
                         ? (cornerRadiusInsets.opened.top) : (cornerRadiusInsets.opened.bottom)
                         : cornerRadiusInsets.closed.bottom
                     )
@@ -185,8 +185,8 @@ struct ContentView: View {
                             .padding(.horizontal, topCornerRadius)
                     }
                     .shadow(
-                        color: ((vm.notchState == .open || isHovering) && Defaults[.enableShadow])
-                            ? .black.opacity(0.7) : .clear, radius: Defaults[.cornerRadiusScaling] ? 6 : 4
+                        color: ((vm.notchState == .open || isHovering) && NotchStyle.castsShadow)
+                            ? .black.opacity(0.7) : .clear, radius: NotchStyle.scalesCorners ? 6 : 4
                     )
                     .padding(
                         .bottom,
@@ -313,7 +313,7 @@ struct ContentView: View {
                     Image(systemName: "music.note")
                     GeometryReader { geo in
                         MarqueeText(.constant(musicManager.songTitle + " - " + musicManager.artistName),
-                                    textColor: Defaults[.playerColorTinting] ? Color(nsColor: musicManager.avgColor).ensureMinimumBrightness(factor: 0.6) : .gray,
+                                    textColor: NotchStyle.playerTinting ? Color(nsColor: musicManager.avgColor).ensureMinimumBrightness(factor: 0.6) : .gray,
                                     minDuration: 1, frameWidth: geo.size.width)
                     }
                 }
@@ -351,7 +351,7 @@ struct ContentView: View {
                         {
                             MarqueeText(
                                 .constant(musicManager.songTitle),
-                                textColor: Defaults[.coloredSpectrogram]
+                                textColor: NotchStyle.coloredSpectrogram
                                     ? Color(nsColor: musicManager.avgColor) : Color.gray,
                                 minDuration: 0.4,
                                 frameWidth: 100
@@ -367,7 +367,7 @@ struct ContentView: View {
                                 .lineLimit(1)
                                 .truncationMode(.tail)
                                 .foregroundStyle(
-                                    Defaults[.coloredSpectrogram]
+                                    NotchStyle.coloredSpectrogram
                                         ? Color(nsColor: musicManager.avgColor)
                                         : Color.gray
                                 )
@@ -392,7 +392,7 @@ struct ContentView: View {
             HStack {
                     Rectangle()
                         .fill(
-                            Defaults[.coloredSpectrogram]
+                            NotchStyle.coloredSpectrogram
                                 ? Color(nsColor: musicManager.avgColor).gradient
                                 : Color.gray.gradient
                         )
@@ -465,7 +465,7 @@ struct ContentView: View {
                   Defaults[.openNotchOnHover] else { return }
             
             hoverTask = Task {
-                try? await Task.sleep(for: .seconds(Defaults[.minimumHoverDuration]))
+                try? await Task.sleep(for: .seconds(NotchStyle.hoverDelay))
                 guard !Task.isCancelled else { return }
                 
                 await MainActor.run {

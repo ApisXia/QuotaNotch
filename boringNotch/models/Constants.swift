@@ -69,20 +69,9 @@ extension Defaults.Keys {
     static let automaticallySwitchDisplay = Key<Bool>("automaticallySwitchDisplay", default: true)
     
     // MARK: Behavior
-    static let minimumHoverDuration = Key<TimeInterval>("minimumHoverDuration", default: 0.3)
     static let enableHaptics = Key<Bool>("enableHaptics", default: true)
     static let openNotchOnHover = Key<Bool>("openNotchOnHover", default: true)
     static let extendHoverArea = Key<Bool>("extendHoverArea", default: false)
-    static let notchHeightMode = Key<WindowHeightMode>(
-        "notchHeightMode",
-        default: WindowHeightMode.matchRealNotchSize
-    )
-    static let nonNotchHeightMode = Key<WindowHeightMode>(
-        "nonNotchHeightMode",
-        default: WindowHeightMode.matchMenuBar
-    )
-    static let nonNotchHeight = Key<CGFloat>("nonNotchHeight", default: 32)
-    static let notchHeight = Key<CGFloat>("notchHeight", default: 32)
     //static let openLastTabByDefault = Key<Bool>("openLastTabByDefault", default: false)
     static let showOnLockScreen = Key<Bool>("showOnLockScreen", default: false)
     static let hideFromScreenRecording = Key<Bool>("hideFromScreenRecording", default: false)
@@ -91,23 +80,15 @@ extension Defaults.Keys {
     static let showEmojis = Key<Bool>("showEmojis", default: false)
     //static let alwaysShowTabs = Key<Bool>("alwaysShowTabs", default: true)
     static let settingsIconInNotch = Key<Bool>("settingsIconInNotch", default: true)
-    static let lightingEffect = Key<Bool>("lightingEffect", default: true)
-    static let enableShadow = Key<Bool>("enableShadow", default: true)
-    static let cornerRadiusScaling = Key<Bool>("cornerRadiusScaling", default: true)
 
     static let tileShowLabels = Key<Bool>("tileShowLabels", default: false)
     static let showCalendar = Key<Bool>("showCalendar", default: false)
     static let hideCompletedReminders = Key<Bool>("hideCompletedReminders", default: true)
-    static let sliderColor = Key<SliderColorEnum>(
-        "sliderUseAlbumArtColor",
-        default: SliderColorEnum.white
-    )
-    static let playerColorTinting = Key<Bool>("playerColorTinting", default: true)
+
     
     // MARK: Gestures
     
     // MARK: Media playback
-    static let coloredSpectrogram = Key<Bool>("coloredSpectrogram", default: true)
     static let enableSneakPeek = Key<Bool>("enableSneakPeek", default: false)
     static let sneakPeekStyles = Key<SneakPeekStyle>("sneakPeekStyles", default: .standard)
     static let waitInterval = Key<Double>("waitInterval", default: 3)
@@ -131,9 +112,6 @@ extension Defaults.Keys {
     
     // MARK: HUD
     static let hudReplacement = Key<Bool>("hudReplacement", default: false)
-    static let enableGradient = Key<Bool>("enableGradient", default: false)
-    static let systemEventIndicatorShadow = Key<Bool>("systemEventIndicatorShadow", default: false)
-    static let systemEventIndicatorUseAccent = Key<Bool>("systemEventIndicatorUseAccent", default: false)
     static let showClosedNotchHUDPercentage = Key<Bool>("showClosedNotchHUDPercentage", default: false)
     // Option key modifier behaviour for media keys
     static let optionKeyAction = Key<OptionKeyAction>("optionKeyAction", default: OptionKeyAction.openSettings)
