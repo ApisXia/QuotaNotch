@@ -18,6 +18,12 @@ final class QuotaNotchStore: ObservableObject {
     }()
 
     init() {
+        // The oversized development build used a larger default. Return that build
+        // to the compact presentation once, then respect subsequent user choices.
+        if !UserDefaults.standard.bool(forKey: "quotaCompactRefinementApplied") {
+            UserDefaults.standard.set(false, forKey: "quotaComfortable")
+            UserDefaults.standard.set(true, forKey: "quotaCompactRefinementApplied")
+        }
         NotificationCenter.default.publisher(for: NSMenu.didBeginTrackingNotification)
             .receive(on: RunLoop.main).sink { [weak self] _ in self?.menuOpen = true }.store(in: &menuObservers)
         NotificationCenter.default.publisher(for: NSMenu.didEndTrackingNotification)

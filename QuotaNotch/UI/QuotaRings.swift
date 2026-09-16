@@ -39,7 +39,7 @@ struct QuotaRing: View {
 struct QuotaNotchView: View {
     @ObservedObject private var store = QuotaNotchStore.shared
     private var provider: QuotaProvider { store.selectedProvider }
-    @AppStorage("quotaComfortable") private var comfortable = true
+    @AppStorage("quotaComfortable") private var comfortable = false
     @State private var page = 0
     private var windows: [QuotaWindow] { store.results[provider]?.snapshot?.windows ?? [] }
     private var pageCount: Int { QuotaWindowPages.count(windows: windows.count) }
@@ -135,9 +135,8 @@ struct QuotaNotchView: View {
         return (store.pins.automatic ? QuotaText.localized("自动") + " · " : "") + "\(provider.title) · \(store.window(for: pin)?.localizedTitle ?? QuotaText.localized("已固定窗口"))"
     }
 
-    /// Keep controls and refresh status on separate rows so larger text has room.
+    /// A quiet single row keeps the original compact panel footprint.
     private var pinSettings: some View {
-        VStack(spacing: 6) {
         HStack(spacing: 10) {
             Menu {
                 Button("不固定") { store.updatePins { $0.selected = nil; $0.automatic = false } }
@@ -174,6 +173,11 @@ struct QuotaNotchView: View {
                 }
                 .font(.system(size: 10)).fixedSize()
             }
+            QuotaRefreshStamp(updated: store.results[provider]?.snapshot?.fetchedAt,
+                              next: store.results[provider]?.nextAttempt,
+                              error: store.results[provider]?.failure?.message,
+                              stale: store.isStale(provider), refreshing: store.refreshing)
+                .fixedSize()
             Menu {
                 Toggle("圆环显示数字", isOn: Binding(
                     get: { store.pins.showsNumbers },
@@ -207,16 +211,7 @@ struct QuotaNotchView: View {
             .help("暂停用量监控")
             .fixedSize()
         }
-        .font(.system(size: 12))
-        HStack {
-            QuotaRefreshStamp(updated: store.results[provider]?.snapshot?.fetchedAt,
-                              next: store.results[provider]?.nextAttempt,
-                              error: store.results[provider]?.failure?.message,
-                              stale: store.isStale(provider))
-            Spacer(minLength: 0)
-            if store.refreshing { Text("正在刷新…").font(.system(size: 11)).foregroundStyle(.secondary) }
-        }
-        }
+        .font(.system(size: 11))
         .buttonStyle(.plain)
         .padding(.horizontal, 10).padding(.vertical, 6)
         .background(.white.opacity(0.055), in: RoundedRectangle(cornerRadius: 10))
@@ -235,7 +230,7 @@ struct QuotaPinnedWings: View {
     let albumArtNamespace: Namespace.ID
     let onSelect: (QuotaProvider) -> Void
     let onMusic: () -> Void
-    @AppStorage("quotaComfortable") private var comfortable = true
+    @AppStorage("quotaComfortable") private var comfortable = false
     private var iconSize: CGFloat { QuotaCompactMetrics.iconSize(height: height, comfortable: comfortable) }
 
     var body: some View {

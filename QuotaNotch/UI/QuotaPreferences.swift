@@ -5,7 +5,7 @@ import KeyboardShortcuts
 
 struct QuotaPreferences: View {
     @ObservedObject private var store = QuotaNotchStore.shared
-    @AppStorage("quotaComfortable") private var comfortable = true
+    @AppStorage("quotaComfortable") private var comfortable = false
     @AppStorage("quotaNotifications") private var notifications = false
     @AppStorage("quotaAlertThreshold") private var threshold = 20.0
     @State private var copied = false

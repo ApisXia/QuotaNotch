@@ -24,9 +24,9 @@ private struct FixtureSheet: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {
             Text("QuotaNotch · compact wings").font(.system(size: 22, weight: .semibold))
-            Text("Native SwiftUI fixtures — no live accounts. 32pt notch / 28pt icon. Enlarged default.")
+            Text("Native SwiftUI fixtures — no live accounts. 32pt notch / 20pt icon. Original footprint.")
                 .font(.system(size: 12)).foregroundStyle(.secondary)
-            Text("Equal 28pt wings; ring fills its icon box.")
+            Text("Original wing size; ring inset corrected.")
                 .font(.system(size: 12)).foregroundStyle(.secondary)
             row("Music reference", brand: nil, percent: nil, music: true)
             row("Claude · 58%", brand: .claude, percent: 58)
@@ -55,7 +55,7 @@ private struct FixtureSheet: View {
             .font(.system(size: 11)).padding(10)
             .background(.white.opacity(0.055), in: RoundedRectangle(cornerRadius: 10))
             Divider()
-            Text("4× detail — badge remains inside the 28pt box").font(.system(size: 12))
+            Text("4× detail — badge remains inside the 20pt box").font(.system(size: 12))
             HStack(spacing: 22) {
                 QuotaBrandMark(brand: .claude).frame(width: size, height: size).scaleEffect(4).frame(width: size * 4, height: size * 4)
                 QuotaBrandMark(brand: .codex).frame(width: size, height: size).scaleEffect(4).frame(width: size * 4, height: size * 4)

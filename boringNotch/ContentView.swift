@@ -15,7 +15,7 @@ import SwiftUIIntrospect
 
 @MainActor
 struct ContentView: View {
-    @AppStorage("quotaComfortable") private var comfortable = true
+    @AppStorage("quotaComfortable") private var comfortable = false
     @EnvironmentObject var vm: BoringViewModel
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 

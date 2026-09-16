@@ -2,8 +2,8 @@
 
 Version remains 1.0.0. Built from dev, without publishing a release.
 
-- Larger display is on by default: a 32 pt notch now uses 28 pt icons (previously 20 pt), with a near-full-size ring and larger digits. Compact mode uses 24 pt icons. Existing show-number preferences are preserved.
-- Expanded quota percentages grow from 21 to 28 pt, with larger labels and reset countdowns. The panel is 680 × 260 pt.
+- Compact display is the default again: a 32 pt notch uses the original 20 pt icons, with corrected ring inset and gently clearer digits. Optional larger display uses 22 pt icons. Existing show-number preferences are preserved. The oversized development default is reset once.
+- Expanded percentages use 22 pt (originally 21 pt), with reset countdowns in the existing date line. The original 640 × 190 pt panel and single-row toolbar are restored. Refresh details remain available on hover.
 - Refresh cooldown is visible; the manual refresh action targets the selected provider and is disabled during cooldown.
 - Stale readings are identified by age as well as failures; waking from sleep rechecks usage without bypassing provider cooldowns.
 - Low-quota and confirmed-recovery notifications are opt-in under Settings → AI Usage, with 10/20/30% thresholds. Alerts are deduplicated per quota cycle.

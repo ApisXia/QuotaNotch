@@ -1,6 +1,13 @@
 {
   "sourceLanguage" : "en",
   "strings" : {
+    "%@ 后可刷新" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Refresh in %@" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "%@ 后可刷新" } }
+      }
+    },
     "等待重置确认" : {
       "extractionState" : "manual",
       "localizations" : {

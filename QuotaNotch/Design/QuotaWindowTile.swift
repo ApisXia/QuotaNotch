@@ -2,7 +2,7 @@
 import SwiftUI
 
 struct QuotaWindowTile: View {
-    @AppStorage("quotaComfortable") private var comfortable = true
+    @AppStorage("quotaComfortable") private var comfortable = false
     let title: String
     let percent: Double
     let reset: Date?
@@ -14,9 +14,9 @@ struct QuotaWindowTile: View {
 
     var body: some View {
         let ink = QuotaWarningInk(accent: accent, percent: percent, stale: stale)
-        VStack(alignment: .leading, spacing: 6) {
+        VStack(alignment: .leading, spacing: 2) {
             HStack {
-                Text(title).font(.system(size: comfortable ? 13 : 11, weight: .medium))
+                Text(title).font(.system(size: comfortable ? 11 : 10, weight: .medium))
                     .foregroundStyle(.secondary).lineLimit(1).truncationMode(.middle)
                 Spacer(minLength: 4)
                 Button(action: onPin) {
@@ -30,10 +30,10 @@ struct QuotaWindowTile: View {
             }
             HStack(alignment: .firstTextBaseline, spacing: 4) {
                 Text(QuotaText.percent(percent) + "%")
-                    .font(.system(size: comfortable ? 28 : 24, weight: .semibold, design: .rounded)).monospacedDigit()
+                    .font(.system(size: comfortable ? 24 : 22, weight: .semibold, design: .rounded)).monospacedDigit()
                     .foregroundStyle(stale ? .gray : .white)
                 Text(LocalizedStringKey(stale ? "剩余 · 旧数据" : "剩余"))
-                    .font(.system(size: comfortable ? 12 : 11)).foregroundStyle(.secondary)
+                    .font(.system(size: comfortable ? 11 : 10)).foregroundStyle(.secondary)
             }
             GeometryReader { proxy in
                 Capsule().fill(ink.track)
@@ -43,7 +43,7 @@ struct QuotaWindowTile: View {
                             .frame(width: proxy.size.width * ink.warning.fraction)
                             .shadow(color: ink.halo, radius: 1.5)
                     }
-            }.frame(height: 5)
+            }.frame(height: 3)
                 .animation(reduceMotion ? nil : .easeInOut(duration: 0.35), value: percent)
             TimelineView(.periodic(from: .now, by: 30)) { context in
                 if let reset {
@@ -51,17 +51,17 @@ struct QuotaWindowTile: View {
                         .help(reset.formatted(date: .complete, time: .shortened))
                 } else { Text("重置时间未知") }
             }
-            .font(.system(size: comfortable ? 12 : 11)).foregroundStyle(.secondary).lineLimit(1)
+            .font(.system(size: comfortable ? 11 : 10)).foregroundStyle(.secondary).lineLimit(1)
 
         }
-        .padding(.horizontal, 10).padding(.vertical, 8)
+        .padding(.horizontal, 10).padding(.vertical, 3)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(.white.opacity(0.04), in: RoundedRectangle(cornerRadius: 10))
     }
 }
 
 struct QuotaProviderTab: View {
-    @AppStorage("quotaComfortable") private var comfortable = true
+    @AppStorage("quotaComfortable") private var comfortable = false
     let title: String
     let brand: QuotaBrand
     let selected: Bool
@@ -69,10 +69,10 @@ struct QuotaProviderTab: View {
     var body: some View {
         Button(action: onSelect) {
             HStack(spacing: 6) {
-                QuotaBrandMark(brand: brand).frame(width: 16, height: 16)
-                Text(title).font(.system(size: comfortable ? 13 : 12, weight: selected ? .semibold : .medium))
+                QuotaBrandMark(brand: brand).frame(width: 13, height: 13)
+                Text(title).font(.system(size: comfortable ? 12 : 11, weight: selected ? .semibold : .medium))
             }
-            .padding(.horizontal, 11).padding(.vertical, 8)
+            .padding(.horizontal, 11).padding(.vertical, 3)
             .foregroundStyle(selected ? .white : .gray)
             .background(selected ? .white.opacity(0.13) : .clear,
                         in: RoundedRectangle(cornerRadius: 7))
