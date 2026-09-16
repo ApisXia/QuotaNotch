@@ -208,7 +208,8 @@ struct SettingsPreviewRunner {
             fatalError("The open panel has no tab swipe region")
         }
         let inside = swipe.convert(NSPoint(x: swipe.bounds.midX, y: swipe.bounds.midY), to: nil)
-        let outside = swipe.convert(NSPoint(x: -20, y: -20), to: nil)
+        let outside = swipe.convert(NSPoint(x: swipe.bounds.minX - 20, y: swipe.bounds.minY - 20), to: nil)
+        verifyPresentation(coordinator.currentView == .home, "Swipe fixture did not start on Home")
         swipe.handleScroll(x: -30, y: 0, at: 1, phase: .began, eventWindow: window, location: outside)
         verifyPresentation(coordinator.currentView == .home, "A swipe outside the tab strip changed pages")
         swipe.handleScroll(x: 0, y: 30, at: 2, phase: .began, eventWindow: window, location: inside)

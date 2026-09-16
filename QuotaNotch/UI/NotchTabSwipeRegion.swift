@@ -41,6 +41,7 @@ struct NotchTabSwipeRegion: NSViewRepresentable {
                           eventWindow: NSWindow?, location: NSPoint) -> Bool {
             guard let window, window === eventWindow, window.isVisible, !isHiddenOrHasHiddenAncestor,
                   bounds.width > 0, bounds.height > 0,
+                  bounds.contains(convert(location, from: nil)),
                   visibleRect.contains(convert(location, from: nil)) else {
                 navigation.reset(); return false
             }
