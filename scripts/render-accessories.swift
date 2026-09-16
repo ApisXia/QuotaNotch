@@ -9,13 +9,13 @@ struct RenderAccessories {
         // Exercise the actual shipping Layout with widths unrelated to today's modes.
         for width: CGFloat in [120, 180, 240, 320, 420, 560] {
             for mode in 0..<4 {
-                let normal = try render(FixtureNotch(width: width, mode: mode, accessories: 0))
+                let normal = try render(FixtureNotch(width: width, mode: mode, accessories: 0, clipsCorners: false))
                 for count in 1...2 {
-                    let expanded = try render(FixtureNotch(width: width, mode: mode, accessories: count))
+                    let expanded = try render(FixtureNotch(width: width, mode: mode, accessories: count, clipsCorners: false))
                     precondition(normal.pixelsWide == expanded.pixelsWide, "Accessory changed primary width")
                     precondition(expanded.pixelsHigh == normal.pixelsHigh + count * 33 * 2, "Unexpected accessory height")
-                    // Compare primary pixels above the rounded bottom corners.
-                    for y in 0..<40 { for x in 0..<normal.pixelsWide {
+                    // Compare content before clipping: the bottom silhouette intentionally changes.
+                    for y in 0..<normal.pixelsHigh { for x in 0..<normal.pixelsWide {
                         precondition(normal.colorAt(x: x, y: y) == expanded.colorAt(x: x, y: y), "Primary content moved")
                     } }
                 }
@@ -39,6 +39,7 @@ private struct FixtureNotch: View {
     let width: CGFloat
     let mode: Int
     let accessories: Int
+    var clipsCorners = true
 
     var body: some View {
         PrimaryNotchLayout {
@@ -76,7 +77,7 @@ private struct FixtureNotch: View {
             }
         }
         .background(.black)
-        .clipShape(UnevenRoundedRectangle(bottomLeadingRadius: 12, bottomTrailingRadius: 12))
+        .clipShape(UnevenRoundedRectangle(bottomLeadingRadius: clipsCorners ? 12 : 0, bottomTrailingRadius: clipsCorners ? 12 : 0))
     }
 }
 
