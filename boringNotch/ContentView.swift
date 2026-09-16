@@ -34,6 +34,8 @@ struct ContentView: View {
 
 
     @State private var measuredClosedWidth: CGFloat = 0
+    @State private var taskWingOffset: CGFloat = 0
+    @ObservedObject private var agentStore = AgentActivityStore.shared
 
     // Shared interactive spring for movement/resizing to avoid conflicting animations
     private var animationSpring: Animation? {
@@ -88,7 +90,6 @@ struct ContentView: View {
         ZStack(alignment: .top) {
             VStack(spacing: 0) {
                 styledNotch
-                    .frame(height: vm.notchState == .open ? vm.notchSize.height : nil)
                     .conditionalModifier(true) { view in
                         let openAnimation = Animation.spring(response: 0.42, dampingFraction: 0.8, blendDuration: 0)
                         let closeAnimation = Animation.spring(response: 0.45, dampingFraction: 1.0, blendDuration: 0)
@@ -98,7 +99,7 @@ struct ContentView: View {
                     }
                     .contentShape(Rectangle())
                     .onHover { hovering in
-                        handleHover(hovering)
+                        if vm.notchState == .open { handleHover(hovering) }
                     }
                     .onGeometryChange(for: CGFloat.self) { geometry in
                         geometry.size.width
@@ -149,6 +150,24 @@ struct ContentView: View {
                         .frame(width: computedChinWidth, height: vm.chinHeight)
                 }
             }
+            if vm.notchState == .closed {
+                Color.clear.frame(width: vm.closedNotchSize.width, height: vm.effectiveClosedNotchHeight)
+                    .contentShape(Rectangle())
+                    .onHover { handleHover($0) }
+                    .onTapGesture { openFromPointer(explicit: true) }
+            }
+        }
+        .onPreferenceChange(AgentWingOffsetKey.self) { taskWingOffset = $0 }
+        .onReceive(NotificationCenter.default.publisher(for: .agentOpenNotch)) { _ in
+            coordinator.currentView = .activity; agentStore.notchReadEnabled = true
+            if vm.notchState == .closed { doOpen() }
+        }
+        .onChange(of: vm.notchState) { _, state in
+            if state == .closed {
+                agentStore.notchReadEnabled = false
+                agentStore.expandedTaskID = nil
+                agentStore.finishReading()
+            }
         }
         .padding(.bottom, 8)
         .frame(maxWidth: windowSize.width, maxHeight: windowSize.height, alignment: .top)
@@ -162,7 +181,7 @@ struct ContentView: View {
                 transaction.disablesAnimations = true
             }
         }
-        .task { quotaStore.start() }
+        .task { quotaStore.start(); AgentActivityStore.shared.start() }
     }
 
     private var styledNotch: some View {
@@ -176,6 +195,11 @@ struct ContentView: View {
                         : cornerRadiusInsets.closed.bottom
                     )
                     .padding([.horizontal, .bottom], vm.notchState == .open ? 12 : 0)
+                    // Size the painted shell, not a transparent wrapper around it.
+                    // Short tabs must never center the entire notch away from the screen edge.
+                    .frame(width: vm.notchState == .open ? vm.notchSize.width : nil,
+                           height: vm.notchState == .open ? vm.notchSize.height : nil,
+                           alignment: .top)
                     .background(.black)
                     .clipShape(currentNotchShape)
                     .overlay(alignment: .top) {
@@ -192,6 +216,8 @@ struct ContentView: View {
                         .bottom,
                         vm.effectiveClosedNotchHeight == 0 ? 10 : 0
                     )
+                    .offset(x: vm.notchState == .closed ? taskWingOffset : 0)
+                    .animation(reduceMotion ? nil : .smooth(duration: 0.32), value: taskWingOffset)
                 
     }
 
@@ -208,12 +234,10 @@ struct ContentView: View {
                 } else if vm.notchState == .closed {
                     PrimaryNotchLayout {
                         closedPrimaryContent
-                            .contentShape(Rectangle())
-                            .onTapGesture { openFromPointer() }
                         closedAccessoryContent
                     }
                 } else {
-                    BoringHeader().frame(height: max(24, vm.effectiveClosedNotchHeight))
+                    BoringHeader()
                 }
             }
             .zIndex(2)
@@ -225,6 +249,8 @@ struct ContentView: View {
                         NotchHomeView(albumArtNamespace: albumArtNamespace)
                     case .aiUsage:
                         QuotaNotchView()
+                    case .activity:
+                        AgentNotchView()
                     }
                 }
                 .transition(
@@ -280,7 +306,14 @@ struct ContentView: View {
             }
             .transition(.opacity)
         } else if compactPresentation == .music {
-            MusicLiveActivity().frame(alignment: .center)
+            if agentStore.showAccessory {
+                musicAndTaskWings
+            } else {
+                MusicLiveActivity().contentShape(Rectangle()).onTapGesture { coordinator.currentView = .home; doOpen() }
+            }
+        } else if agentStore.showAccessory && vm.effectiveClosedNotchHeight > 0 && !eventPresentation.replacesPrimary {
+            AgentTaskOnlyWings(centerWidth: vm.closedNotchSize.width - cornerRadiusInsets.closed.top,
+                               height: vm.effectiveClosedNotchHeight, open: openTasks)
         } else {
             Color.clear.frame(width: vm.closedNotchSize.width - 20, height: vm.effectiveClosedNotchHeight)
         }
@@ -327,6 +360,22 @@ struct ContentView: View {
     }
 
     @ViewBuilder
+    private var musicAndTaskWings: some View {
+        let height = vm.effectiveClosedNotchHeight
+        let size = max(0, height - 12)
+        return HStack(spacing: QuotaCompactMetrics.spacing) {
+            Button { coordinator.currentView = .home; doOpen() } label: {
+                Image(nsImage: musicManager.albumArt).resizable().scaledToFill()
+                    .frame(width: size, height: size)
+                    .clipShape(RoundedRectangle(cornerRadius: MusicPlayerImageSizes.cornerRadiusInset.closed))
+                    .frame(width: size, height: height)
+                    .auditNotchModule("music")
+            }.buttonStyle(.plain)
+            Color.clear.frame(width: vm.closedNotchSize.width - cornerRadiusInsets.closed.top, height: height)
+            AgentCompactDock(primaryWidth: 0, height: height, anchorWidth: size, widgetWidth: size, open: openTasks) { EmptyView() }
+        }.frame(height: height)
+    }
+
     func MusicLiveActivity() -> some View {
         HStack(spacing: QuotaCompactMetrics.spacing) {
             Image(nsImage: musicManager.albumArt)
@@ -419,6 +468,13 @@ struct ContentView: View {
             height: vm.effectiveClosedNotchHeight,
             alignment: .center
         )
+        .auditNotchModule("music")
+    }
+
+    private func openTasks() {
+        agentStore.notchReadEnabled = true
+        coordinator.currentView = .activity
+        doOpen()
     }
 
     private func doOpen() {
@@ -427,8 +483,13 @@ struct ContentView: View {
         }
     }
 
-    private func openFromPointer() {
+    private func openFromPointer(explicit: Bool = false) {
         guard vm.notchState == .closed else { return }
+        agentStore.notchReadEnabled = explicit
+        if agentStore.showAccessory && (compactPresentation == .none ||
+            (compactPresentation == .combined && agentStore.compactExpanded)) {
+            coordinator.currentView = .activity; doOpen(); return
+        }
         let presentation = compactPresentation
         let screen = vm.screenUUID.flatMap { NSScreen.screen(withUUID: $0) } ?? NSScreen.main
         let midpoint = screen?.frame.midX ?? NSEvent.mouseLocation.x

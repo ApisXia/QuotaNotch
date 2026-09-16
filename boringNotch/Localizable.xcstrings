@@ -1,6 +1,13 @@
 {
   "sourceLanguage" : "en",
   "strings" : {
+    "任务监控" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Task monitor" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "任务监控" } }
+      }
+    },
     "%@ 后可刷新" : {
       "extractionState" : "manual",
       "localizations" : {

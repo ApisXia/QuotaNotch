@@ -106,7 +106,9 @@ class SettingsWindowController: NSWindowController {
         window?.orderOut(nil)
         
         // Set app back to accessory mode immediately
-        NSApp.setActivationPolicy(.accessory)
+        if AgentActivityWindow.shared.window?.isVisible != true {
+            NSApp.setActivationPolicy(.accessory)
+        }
     }
 }
 

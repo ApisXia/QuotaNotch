@@ -11,6 +11,7 @@ import Defaults
 import KeyboardShortcuts
 import Sparkle
 import SwiftUI
+import UserNotifications
 
 #if !SETTINGS_PREVIEW
 @main
@@ -33,6 +34,8 @@ struct DynamicNotchApp: App {
 
     var body: some Scene {
         MenuBarExtra("QuotaNotch", image: "QuotaStatus", isInserted: $showMenuBarIcon) {
+            Button(AgentText.t("任务监控", "Task monitor")) { AgentActivityWindow.shared.show() }
+            Divider()
             Button("Settings") {
                 DispatchQueue.main.async {
                     SettingsWindowController.shared.showWindow()
@@ -214,6 +217,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        AgentActivityStore.shared.start()
+        UNUserNotificationCenter.current().delegate = AgentNotificationDelegate.shared
 
         NotificationCenter.default.addObserver(
             self,

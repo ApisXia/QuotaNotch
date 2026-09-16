@@ -17,19 +17,25 @@ struct TabModel: Identifiable {
 
 let tabs = [
     TabModel(label: "主页", icon: "house.fill", view: .home),
-    TabModel(label: "AI 用量", icon: "chart.bar.fill", view: .aiUsage)
+    TabModel(label: "AI 用量", icon: "chart.bar.fill", view: .aiUsage),
+    TabModel(label: "任务监控", icon: "square.stack.3d.up", view: .activity)
 ]
 
 struct TabSelectionView: View {
     @ObservedObject var coordinator = BoringViewCoordinator.shared
     @Namespace var animation
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    private func select(_ view: NotchViews) {
+        withAnimation(reduceMotion ? nil : .smooth(duration: 0.25)) {
+            coordinator.currentView = view
+            AgentActivityStore.shared.notchReadEnabled = view == .activity
+        }
+    }
     var body: some View {
         HStack(spacing: 0) {
             ForEach(tabs) { tab in
                     TabButton(label: QuotaText.localized(tab.label), icon: tab.icon, selected: coordinator.currentView == tab.view) {
-                        withAnimation(.smooth) {
-                            coordinator.currentView = tab.view
-                        }
+                        select(tab.view)
                     }
                     .frame(height: 26)
                     .help(QuotaText.localized(tab.label))
