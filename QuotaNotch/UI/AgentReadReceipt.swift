@@ -76,16 +76,22 @@ struct AgentInlineDetails: View {
                 if !session.userPrompt.isEmpty {
                     AgentCompactDetailField(title: AgentText.t("输入", "Input"), text: session.userPrompt)
                 }
-                AgentCompactDetailField(title: AgentText.t("最近", "Latest"),
-                    text: session.activityDetail.isEmpty ? AgentText.activity(session, now: AgentActivityStore.shared.now) : session.activityDetail)
+                if let detail = AgentText.detail(session, now: AgentActivityStore.shared.now) {
+                    AgentCompactDetailField(title: AgentText.t("最近", "Last"), text: detail)
+                } else if session.userPrompt.isEmpty {
+                    Text(AgentText.t("暂无输入或活动详情", "No input or activity details available"))
+                        .font(.system(size: 10)).foregroundStyle(.secondary)
+                        .padding(.leading, AgentNotchRowMetrics.iconWidth + AgentNotchRowMetrics.gap)
+                }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.horizontal, 9).padding(.vertical, 6)
+            .padding(.horizontal, AgentNotchRowMetrics.inset).padding(.vertical, 6)
             .background(Color.primary.opacity(0.035), in: RoundedRectangle(cornerRadius: 5))
         } else {
         VStack(alignment: .leading, spacing: 8) {
-            Label(AgentText.activity(session, now: AgentActivityStore.shared.now), systemImage: "circle.fill")
-                .font(.system(size: 11)).foregroundStyle(AgentText.color(session.state))
+            if let context = AgentText.context(session, now: AgentActivityStore.shared.now) {
+                Text(context).font(.system(size: 11)).foregroundStyle(AgentText.color(session.state))
+            }
             if !session.userPrompt.isEmpty {
                 Text(AgentText.t("本轮输入", "Your request")).font(.system(size: 10, weight: .medium)).foregroundStyle(.secondary)
                 Text(session.userPrompt).font(.system(size: 11)).textSelection(.enabled)
@@ -109,8 +115,9 @@ private struct AgentCompactDetailField: View {
     @State private var expanded = false
     private var canExpand: Bool { text.count > 80 || text.contains("\n") }
     var body: some View {
-        HStack(alignment: .top, spacing: 6) {
-            Text(title).font(.system(size: 10)).foregroundStyle(.secondary).frame(width: 34, alignment: .leading)
+        HStack(alignment: .top, spacing: AgentNotchRowMetrics.detailGap) {
+            Text(title).font(.system(size: 9)).foregroundStyle(.secondary)
+                .frame(width: AgentNotchRowMetrics.detailLabelWidth, alignment: .leading)
             Text(text).font(.system(size: 11)).textSelection(.enabled)
                 .lineLimit(expanded ? nil : 2).fixedSize(horizontal: false, vertical: true)
                 .frame(maxWidth: .infinity, alignment: .leading)

@@ -56,13 +56,6 @@ struct TabSelectionView: View {
             }
         }
         .clipShape(Capsule())
-        .background {
-            NotchTabSwipeRegion { step in
-                guard let current = tabs.firstIndex(where: { $0.view == coordinator.currentView }) else { return }
-                let next = TabSwipeNavigation.destination(current: current, step: step, count: tabs.count)
-                if next != current { select(tabs[next].view) }
-            }
-        }
     }
 }
 

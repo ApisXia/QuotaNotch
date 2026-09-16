@@ -12,6 +12,7 @@ struct BoringHeader: View {
     @EnvironmentObject var vm: BoringViewModel
     @ObservedObject var batteryModel = BatteryStatusViewModel.shared
     @ObservedObject var coordinator = BoringViewCoordinator.shared
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     var body: some View {
         HStack(spacing: 0) {
             HStack {
@@ -73,6 +74,22 @@ struct BoringHeader: View {
             .opacity(vm.notchState == .closed ? 0 : 1)
             .blur(radius: vm.notchState == .closed ? 20 : 0)
             .zIndex(2)
+        }
+        .frame(maxWidth: .infinity)
+        .frame(height: max(24, vm.effectiveClosedNotchHeight))
+        .background {
+            if vm.notchState == .open {
+                // The whole header row accepts swipes, including gaps and the right-hand controls.
+                NotchTabSwipeRegion { step in
+                    guard let current = tabs.firstIndex(where: { $0.view == coordinator.currentView }) else { return }
+                    let next = TabSwipeNavigation.destination(current: current, step: step, count: tabs.count)
+                    guard next != current else { return }
+                    withAnimation(reduceMotion ? nil : .smooth(duration: 0.25)) {
+                        coordinator.currentView = tabs[next].view
+                        AgentActivityStore.shared.notchReadEnabled = tabs[next].view == .activity
+                    }
+                }
+            }
         }
         .foregroundColor(.gray)
         .environmentObject(vm)

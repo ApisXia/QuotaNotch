@@ -248,11 +248,11 @@ enum AgentText {
     static func activity(_ session: AgentSession, now: Date) -> String {
         switch session.state {
         case .waiting:
-            return session.waitingCallID == nil ? t("查看等待详情", "Review waiting details") : t("等待你的回答", "Waiting for your answer")
-        case .failed: return t("查看状态详情", "Review status details")
-        case .completed: return t("可查看本轮结果", "Response ready to review")
-        case .interrupted: return t("本轮已停止", "This turn was stopped")
-        case .unknown: return t("等待新活动确认", "Awaiting fresh activity")
+            return session.waitingCallID == nil ? state(.waiting) : t("等待你的回答", "Waiting for your answer")
+        case .failed: return state(.failed)
+        case .completed: return state(.completed)
+        case .interrupted: return state(.interrupted)
+        case .unknown: return state(.unknown)
         case .running: break
         }
         if session.isQuiet(at: now) { return t("暂时无新活动", "No recent activity") }
@@ -276,6 +276,29 @@ enum AgentText {
         default: label = t("工具活动", "tool activity")
         }
         return t("最近：", "Recent: ") + label
+    }
+    /// Optional context adds observed information; generic calls to action are not activity.
+    static func context(_ session: AgentSession, now: Date) -> String? {
+        if session.state == .waiting {
+            return session.waitingCallID == nil ? nil : t("等待回答", "Awaiting answer")
+        }
+        guard session.state == .running else { return nil }
+        guard session.isQuiet(at: now) || !session.tool.isEmpty || !session.activityDetail.isEmpty else { return nil }
+        return activity(session, now: now)
+    }
+    static func detail(_ session: AgentSession, now: Date) -> String? {
+        if !session.activityDetail.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { return session.activityDetail }
+        return context(session, now: now)
+    }
+    static func relativeTime(_ date: Date, now: Date) -> String? {
+        guard date != .distantPast else { return nil }
+        let seconds = max(0, now.timeIntervalSince(date))
+        if seconds < 60 { return t("刚刚", "Just now") }
+        let minutes = Int(seconds / 60)
+        if minutes < 60 { return t("\(minutes) 分钟前", "\(minutes)m ago") }
+        let hours = minutes / 60
+        if hours < 24 { return t("\(hours) 小时前", "\(hours)h ago") }
+        return t("\(hours / 24) 天前", "\(hours / 24)d ago")
     }
     static func source(_ source: AgentSurface) -> String {
         switch source { case .desktop: return "Codex"; case .vscode: return "VS Code"; case .cli: return "CLI"; case .unknown: return "Codex" }

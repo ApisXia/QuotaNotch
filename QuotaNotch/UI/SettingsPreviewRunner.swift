@@ -109,12 +109,33 @@ struct SettingsPreviewRunner {
             }.padding(20).background(Color(nsColor: .windowBackgroundColor)).preferredColorScheme(dark ? .dark : .light),
                 width: 380, name: "Task-state-colors-\(dark)", output: output, height: 220)
         }
+        for reduced in [false, true] {
+            try capture(VStack(alignment: .leading, spacing: 14) {
+                ForEach(AgentRunState.allCases, id: \.self) { state in
+                    HStack(spacing: 18) {
+                        AgentTaskStateMark(state: state).frame(width: 12)
+                        AgentTaskStateMark(state: state).scaleEffect(3).frame(width: 22, height: 22)
+                        Text(AgentText.state(state)).font(.system(size: 11)).foregroundStyle(.white)
+                        Spacer()
+                    }
+                }
+            }.padding(16).background(.black).preferredColorScheme(.dark)
+                .environment(\.accessibilityReduceMotion, reduced), width: 300,
+                name: "Task-state-marks-\(reduced ? "still" : "motion")", output: output, height: 250)
+        }
         var recent = fixtures[2]
         recent.updatedAt = now; recent.tool = "apply_patch"
         precondition(AgentText.activity(recent, now: now).contains(AgentText.t("修改文件", "file edit")))
         precondition(AgentText.activity(recent, now: now.addingTimeInterval(121)) == AgentText.t("暂时无新活动", "No recent activity"))
         recent.state = .completed
         precondition(!AgentText.activity(recent, now: now).contains(AgentText.t("修改文件", "file edit")))
+        var noDetail = AgentSession(id: "no-detail", state: .failed)
+        precondition(AgentText.context(noDetail, now: now) == nil && AgentText.detail(noDetail, now: now) == nil)
+        noDetail.state = .waiting
+        precondition(AgentText.context(noDetail, now: now) == nil)
+        noDetail.waitingCallID = "question"
+        precondition(AgentText.context(noDetail, now: now) == AgentText.t("等待回答", "Awaiting answer"))
+        precondition(AgentText.relativeTime(now.addingTimeInterval(-720), now: now) == AgentText.t("12 分钟前", "12m ago"))
         for height: CGFloat in [24, 32, 38] {
             let metrics = NotchModuleMetrics(widgetWidth: QuotaCompactMetrics.iconSize(height: height))
             let samples: [Double?] = [nil, 0, 10, 42, 100]
@@ -202,16 +223,20 @@ struct SettingsPreviewRunner {
                 }
             }
         }
-        // Drive the actual tab strip's event receiver, including its window and hit region.
+        // Drive the full header row's event receiver, including blank space and the right side.
         coordinator.currentView = .home; settle(); host.layoutSubtreeIfNeeded()
         guard let swipe = descendants(host).compactMap({ $0 as? NotchTabSwipeRegion.Region }).first else {
-            fatalError("The open panel has no tab swipe region")
+            fatalError("The open panel has no header swipe region")
         }
+        verifyPresentation(swipe.bounds.width >= openNotchSize.width * 0.7,
+                           "Swipe region only covers the tabs instead of the full header row")
+        verifyPresentation(abs(swipe.bounds.height - max(24, vm.effectiveClosedNotchHeight)) < 1,
+                           "Header swipe region extends into the page body")
         let inside = swipe.convert(NSPoint(x: swipe.bounds.midX, y: swipe.bounds.midY), to: nil)
         let outside = swipe.convert(NSPoint(x: swipe.bounds.minX - 20, y: swipe.bounds.minY - 20), to: nil)
         verifyPresentation(coordinator.currentView == .home, "Swipe fixture did not start on Home")
         swipe.handleScroll(x: -30, y: 0, at: 1, phase: .began, eventWindow: window, location: outside)
-        verifyPresentation(coordinator.currentView == .home, "A swipe outside the tab strip changed pages")
+        verifyPresentation(coordinator.currentView == .home, "A swipe outside the header row changed pages")
         swipe.handleScroll(x: 0, y: 30, at: 2, phase: .began, eventWindow: window, location: inside)
         verifyPresentation(coordinator.currentView == .home, "Vertical scrolling changed tabs")
         for index in 0..<5 {
@@ -231,6 +256,20 @@ struct SettingsPreviewRunner {
         swipe.handleScroll(x: 20, y: 0, at: 7, phase: .began, eventWindow: window, location: inside)
         verifyPresentation(coordinator.currentView == .aiUsage && !AgentActivityStore.shared.notchReadEnabled,
                            "Swiping back did not leave Tasks correctly")
+        for (index, fraction) in [CGFloat(0.05), 0.5, 0.95].enumerated() {
+            coordinator.currentView = .home
+            let point = swipe.convert(NSPoint(x: swipe.bounds.minX + swipe.bounds.width * fraction,
+                                              y: swipe.bounds.midY), to: nil)
+            swipe.handleScroll(x: -20, y: 0, at: 8 + Double(index) * 2, phase: .began, eventWindow: window, location: point)
+            verifyPresentation(coordinator.currentView == .aiUsage, "Header swipe failed at horizontal position \(fraction)")
+            swipe.handleScroll(x: 20, y: 0, at: 9 + Double(index) * 2, phase: .began, eventWindow: window, location: point)
+            verifyPresentation(coordinator.currentView == .home, "Reverse header swipe failed at horizontal position \(fraction)")
+        }
+        for y in [swipe.bounds.minY - 20, swipe.bounds.maxY + 20] {
+            let point = swipe.convert(NSPoint(x: swipe.bounds.midX, y: y), to: nil)
+            swipe.handleScroll(x: -20, y: 0, at: 20, phase: .began, eventWindow: window, location: point)
+            verifyPresentation(coordinator.currentView == .home, "A swipe above or below the header changed tabs")
+        }
         coordinator.currentView = .activity; settle(); host.layoutSubtreeIfNeeded()
         let activity = AgentActivityStore.shared
         let fixtures = activity.sessions
@@ -412,6 +451,17 @@ struct SettingsPreviewRunner {
             verifyPresentation(store.visible.count == 1, "Five-hour history omitted a read three-hour-old task")
             store.historyWindow = previousWindow
         }
+        var unreadResult = fixtures[5]
+        unreadResult.title = AgentText.t("修复任务筛选", "Fix task filtering")
+        unreadResult.updatedAt = store.now.addingTimeInterval(-120)
+        var readResult = unreadResult
+        readResult.id = "33333333-3333-4333-8333-333333333333"
+        readResult.title = AgentText.t("核对英文布局", "Review English layout")
+        readResult.updatedAt = store.now.addingTimeInterval(-720)
+        store.configurePreview([unreadResult, readResult]); store.expandedTaskID = nil
+        store.markRead(readResult); store.retainNotchOrder()
+        try snapshot("Task-panel-read-history")
+        verifyPresentation(store.visible.count == 2 && store.unread.count == 1, "Read history styling changed record retention")
         store.configurePreview(fixtures); store.retainNotchOrder()
         let originalOrder = store.notchSessions.map(\.identity)
         var newTask = fixtures[0]

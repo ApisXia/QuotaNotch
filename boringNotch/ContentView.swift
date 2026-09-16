@@ -237,7 +237,7 @@ struct ContentView: View {
                         closedAccessoryContent
                     }
                 } else {
-                    BoringHeader().frame(height: max(24, vm.effectiveClosedNotchHeight))
+                    BoringHeader()
                 }
             }
             .zIndex(2)

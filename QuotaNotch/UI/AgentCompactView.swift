@@ -60,6 +60,68 @@ struct AgentPaperGlyph: View {
     }
 }
 
+/// Tiny state marks fit inside the existing camera-side gap, leaving task names their full width.
+struct AgentTaskStateMark: View {
+    static let size: CGFloat = 6
+    let state: AgentRunState
+    @Environment(\.accessibilityReduceMotion) private var reduced
+    private let stroke = StrokeStyle(lineWidth: 0.85, lineCap: .round, lineJoin: .round)
+
+    var body: some View {
+        glyph
+            .frame(width: Self.size, height: Self.size)
+            .foregroundStyle(AgentText.color(state))
+            .allowsHitTesting(false)
+            .accessibilityHidden(true)
+    }
+
+    @ViewBuilder private var glyph: some View {
+        switch state {
+        case .running:
+            TimelineView(.animation(minimumInterval: 1.0 / 15, paused: reduced)) { timeline in
+                let angle = reduced ? 0 : timeline.date.timeIntervalSinceReferenceDate
+                    .truncatingRemainder(dividingBy: 2.4) / 2.4 * 360
+                Circle().trim(from: 0.12, to: 0.9).stroke(style: stroke)
+                    .padding(0.5).rotationEffect(.degrees(angle))
+            }
+        case .waiting:
+            HStack(spacing: 1.5) {
+                Capsule().frame(width: 1, height: 4)
+                Capsule().frame(width: 1, height: 4)
+            }.frame(width: Self.size, height: Self.size)
+        case .completed:
+            Circle().strokeBorder(lineWidth: 0.85).padding(0.5)
+                .overlay { Circle().frame(width: 1.3, height: 1.3) }
+        case .failed:
+            AgentBrokenLinkMark().stroke(style: stroke)
+        case .interrupted:
+            RoundedRectangle(cornerRadius: 0.6).frame(width: 4, height: 4)
+        case .unknown:
+            Circle().strokeBorder(style: StrokeStyle(lineWidth: 0.85, lineCap: .round, dash: [1, 1.5]))
+                .padding(0.5)
+        }
+    }
+}
+
+/// Two open link ends, with a visible break rather than an exclamation or cross.
+private struct AgentBrokenLinkMark: Shape {
+    func path(in rect: CGRect) -> Path {
+        var path = Path()
+        path.move(to: CGPoint(x: 2.6, y: 1.1))
+        path.addLine(to: CGPoint(x: 1.8, y: 1.1))
+        path.addQuadCurve(to: CGPoint(x: 0.6, y: 2.3), control: CGPoint(x: 0.6, y: 1.1))
+        path.addQuadCurve(to: CGPoint(x: 1.8, y: 3.5), control: CGPoint(x: 0.6, y: 3.5))
+        path.addLine(to: CGPoint(x: 2.2, y: 3.5))
+        path.move(to: CGPoint(x: 3.8, y: 2.5))
+        path.addLine(to: CGPoint(x: 4.2, y: 2.5))
+        path.addQuadCurve(to: CGPoint(x: 5.4, y: 3.7), control: CGPoint(x: 5.4, y: 2.5))
+        path.addQuadCurve(to: CGPoint(x: 4.2, y: 4.9), control: CGPoint(x: 5.4, y: 4.9))
+        path.addLine(to: CGPoint(x: 3.4, y: 4.9))
+        return path.applying(CGAffineTransform(scaleX: rect.width / 6, y: rect.height / 6))
+            .applying(CGAffineTransform(translationX: rect.minX, y: rect.minY))
+    }
+}
+
 struct AgentCompactDock<Primary: View>: View {
     let primaryWidth: CGFloat
     let height: CGFloat
@@ -241,7 +303,7 @@ extension View {
     }
 }
 
-/// Task-only layout uses the existing widget/minimal footprint, with dots in the camera-side gap.
+/// Task-only layout uses the existing widget/minimal footprint, with state marks in the camera-side gap.
 struct AgentTaskOnlyWings: View {
     let centerWidth: CGFloat
     let height: CGFloat
@@ -276,8 +338,8 @@ struct AgentTaskOnlyWings: View {
                             .lineLimit(1).truncationMode(.tail)
                             .frame(width: textWidth, alignment: .leading)
                             .overlay(alignment: .leading) {
-                                Circle().fill(AgentText.color(session.state)).frame(width: 2.5, height: 2.5)
-                                    .offset(x: -5.25).accessibilityHidden(true)
+                                AgentTaskStateMark(state: session.state)
+                                    .offset(x: -(QuotaCompactMetrics.spacing + AgentTaskStateMark.size) / 2)
                             }
                     }
                 }

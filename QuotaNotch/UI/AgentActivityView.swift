@@ -33,7 +33,7 @@ struct AgentNotchView: View {
                         LazyVStack(spacing: 4) {
                             ForEach(tasks, id: \.identity) { session in
                                 VStack(spacing: 3) {
-                                    AgentNotchTaskRow(session: session, now: store.now,
+                                    AgentNotchTaskRow(session: session, now: store.now, unread: store.isUnread(session),
                                                       expanded: store.expandedTaskID == session.identity) {
                                         store.notchReadEnabled = true
                                         withAnimation(reduced ? nil : .smooth(duration: 0.24)) { store.toggleInlineDetails(session) }
@@ -59,22 +59,33 @@ struct AgentNotchView: View {
     }
 }
 
+enum AgentNotchRowMetrics {
+    static let inset: CGFloat = 7
+    static let iconWidth: CGFloat = 18
+    static let gap: CGFloat = 8
+    static let detailLabelWidth: CGFloat = 24
+    static var detailGap: CGFloat { iconWidth + gap - detailLabelWidth }
+}
+
 private struct AgentNotchTaskRow: View {
     let session: AgentSession
     let now: Date
+    let unread: Bool
     let expanded: Bool
     let open: () -> Void
     @State private var hovering = false
     var body: some View {
         Button(action: open) {
-            HStack(spacing: 8) {
+            HStack(spacing: AgentNotchRowMetrics.gap) {
                 AgentPaperGlyph(kind: AgentPaperGlyph.kind(session.state), running: session.state == .running, accent: AgentText.color(session.state))
+                    .frame(width: AgentNotchRowMetrics.iconWidth)
                 identity
                 status
                 Image(systemName: "chevron.right").font(.system(size: 8, weight: .medium))
                     .rotationEffect(.degrees(expanded ? 90 : 0)).foregroundStyle(.secondary).frame(width: 8)
             }
-            .padding(.horizontal, 7).frame(height: 34)
+            .opacity(!session.state.isActive && !unread && !expanded && !hovering ? 0.72 : 1)
+            .padding(.horizontal, AgentNotchRowMetrics.inset).frame(height: 34)
             .background(hovering ? Color.white.opacity(0.10) : Color.white.opacity(0.045), in: RoundedRectangle(cornerRadius: 6))
             .contentShape(Rectangle())
         }
@@ -91,19 +102,21 @@ private struct AgentNotchTaskRow: View {
     }
     private var identity: some View {
         VStack(alignment: .leading, spacing: 2) {
+            Text(session.displayTitle).font(.system(size: 12, weight: .semibold)).foregroundStyle(.white).lineLimit(1)
             HStack(spacing: 6) {
-                Text(session.projectName).font(.system(size: 12, weight: .semibold)).lineLimit(1).truncationMode(.middle)
+                Text(session.projectName).font(.system(size: 10)).foregroundStyle(.white.opacity(0.72)).lineLimit(1).truncationMode(.middle)
                 Text(AgentText.source(session)).font(.system(size: 11, weight: .medium)).foregroundStyle(.white.opacity(0.85)).fixedSize()
             }
-            Text(session.displayTitle).font(.system(size: 10)).foregroundStyle(.white.opacity(0.65)).lineLimit(1)
         }.frame(maxWidth: .infinity, alignment: .leading)
     }
     private var status: some View {
         VStack(alignment: .trailing, spacing: 2) {
             Text(AgentText.state(session.state))
                 .font(.system(size: 10, weight: .medium)).foregroundStyle(AgentText.color(session.state))
-            Text(AgentText.activity(session, now: now)).font(.system(size: 9)).foregroundStyle(.secondary).lineLimit(1)
-        }.frame(width: 142, alignment: .trailing)
+            if let caption = session.state.isActive ? AgentText.context(session, now: now) : AgentText.relativeTime(session.updatedAt, now: now) {
+                Text(caption).font(.system(size: 9)).foregroundStyle(.secondary).lineLimit(1)
+            }
+        }.frame(width: 112, alignment: .trailing)
     }
 }
 
@@ -328,19 +341,21 @@ struct AgentTaskRow: View {
                 .frame(width: 20).padding(.top, 3)
             VStack(alignment: .leading, spacing: 7) {
                 HStack(spacing: 6) {
-                    Text(session.projectName).font(.system(size: 13, weight: .semibold)).lineLimit(1).truncationMode(.middle)
+                    Text(session.displayTitle).font(.system(size: 13, weight: .semibold)).lineLimit(2)
                     if store.isUnread(session) { Circle().fill(.secondary).frame(width: 5, height: 5) }
                 }.frame(maxWidth: .infinity, alignment: .leading)
-                Text(session.displayTitle).font(.system(size: 12)).lineLimit(2)
                 HStack(spacing: 6) {
+                    Text(session.projectName).font(.system(size: 11)).lineLimit(1).truncationMode(.middle)
                     Text(AgentText.source(session)).font(.system(size: 12, weight: .medium)).foregroundStyle(.primary).fixedSize()
-                    Text("·")
-                    Text(AgentText.activity(session, now: store.now)).lineLimit(1)
                 }.font(.system(size: 11)).foregroundStyle(.secondary)
+                if let context = AgentText.context(session, now: store.now) {
+                    Text(context).font(.system(size: 11)).foregroundStyle(.secondary).lineLimit(1)
+                }
             }
             VStack(alignment: .trailing, spacing: 7) {
                 Text(AgentText.state(session.state)).font(.system(size: 11, weight: .medium)).foregroundStyle(AgentText.color(session.state))
-                Text(AgentText.duration(session.startedAt, now: session.finishedAt ?? store.now)).font(.system(size: 10)).monospacedDigit().foregroundStyle(.secondary)
+                Text(session.state.isActive ? AgentText.duration(session.startedAt, now: store.now) : (AgentText.relativeTime(session.updatedAt, now: store.now) ?? ""))
+                    .font(.system(size: 10)).monospacedDigit().foregroundStyle(.secondary)
             }.frame(width: 94, alignment: .trailing)
             Menu {
                 Button(AgentText.t("标为已读", "Mark as read")) { store.markRead(session) }
@@ -350,6 +365,7 @@ struct AgentTaskRow: View {
                 Button(AgentText.t("复制会话 ID", "Copy session ID")) { NSPasteboard.general.clearContents(); NSPasteboard.general.setString(session.id, forType: .string) }
             } label: { Image(systemName: "ellipsis") }.menuStyle(.borderlessButton).menuIndicator(.hidden).frame(width: 18).padding(.top, 2)
         }
+        .opacity(!session.state.isActive && !store.isUnread(session) && store.expandedTaskID != session.identity ? 0.72 : 1)
         .padding(.vertical, 14).contentShape(Rectangle())
         .background(AgentReadReceipt(session: session))
         .onTapGesture { store.toggleInlineDetails(session) }

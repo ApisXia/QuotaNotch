@@ -2,7 +2,7 @@
 import AppKit
 import SwiftUI
 
-/// Observe scrolls only over the visible tab strip; never intercept button hit testing.
+/// Observe scrolls over the entire visible header row; never intercept button hit testing.
 struct NotchTabSwipeRegion: NSViewRepresentable {
     let select: (Int) -> Void
     func makeNSView(context: Context) -> Region { let view = Region(); view.select = select; return view }
