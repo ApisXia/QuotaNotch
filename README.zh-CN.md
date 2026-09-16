@@ -2,7 +2,7 @@
 
 # QuotaNotch
 
-在 MacBook 刘海中查看 AI 额度、控制音乐和查看日历。
+在 MacBook 刘海中查看 AI 额度和编程任务状态、控制音乐和查看日历。
 
 [English](README.md) · [下载](https://github.com/ApisXia/QuotaNotch/releases) · [构建附件](https://github.com/ApisXia/QuotaNotch/actions/workflows/quotanotch.yml)
 
@@ -11,7 +11,9 @@
 原生界面预览，使用示例数据。
 
 - 支持 Claude、Codex 和可选的 Gemini CLI / Code Assist 额度。
-- 固定一个额度与音乐共享刘海：悬停左边看音乐，右边看额度。
+- 按项目监控本机 Codex 和 Claude Code 任务，显示来源、进行状态与等待处理提醒。
+- 固定一个额度，与音乐和任务共存；点击 widget 打开对应页面，在展开后的顶部整行左右滑动切页。
+- 已读任务历史可保留 1 小时、5 小时（默认）或 1 天。
 - 额度不足时逐渐变黄、变红，并带轻微光晕。
 - 保留日历、提醒事项，支持中文与英语。
 

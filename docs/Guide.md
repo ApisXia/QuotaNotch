@@ -25,6 +25,14 @@ The app has a separate identity (`com.apisxia.quotanotch`) and does not replace 
 
 Sign in to the relevant CLI on this Mac, then enable monitoring in AI quota settings. Credentials remain local. Missing or stale quota is identified; no token totals, costs or unsupported model breakdowns are invented. Only enabled providers are polled.
 
+## Task monitoring
+
+Follow local Codex desktop, VS Code extension and CLI sessions, and Claude Code sessions where local transcripts are available. Tasks show their project or root folder, client source, current state, latest request and observed activity. Each conversation has one current record. Read history stays for 1 hour, 5 hours by default, or 1 day; working and waiting tasks are not aged out by this setting.
+
+Click a task to expand compact inline details in the same fixed-height panel. Swipe anywhere in the open header row to switch Music, Quota and Tasks. When all three modules are present, music stays left while quota and tasks share the right wing; click the divider or swipe that wing to exchange widget/minimal.
+
+Optional event connections in Settings → Task monitor improve approval-wait detection. Review and trust the hooks in the relevant coding app after installation. Hooks only observe state and never approve operations. Claude Chat/Cowork and remote sessions without local activity records are not covered.
+
 ## Build and verification
 
 Use Xcode 26 and the `boringNotch` scheme in `boringNotch.xcodeproj`; the product is **QuotaNotch.app**. `swift test --parallel` runs account-free core fixtures. The macOS workflow builds both architectures, validates English/Chinese resources, renders native UI fixtures, verifies signatures and packages a DMG together with the matching source and license notices.

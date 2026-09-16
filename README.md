@@ -2,7 +2,7 @@
 
 # QuotaNotch
 
-AI quota, music and calendar in your MacBook notch.
+AI quota, coding task activity, music and calendar in your MacBook notch.
 
 [简体中文](README.zh-CN.md) · [Download](https://github.com/ApisXia/QuotaNotch/releases) · [Builds](https://github.com/ApisXia/QuotaNotch/actions/workflows/quotanotch.yml)
 
@@ -11,7 +11,9 @@ AI quota, music and calendar in your MacBook notch.
 Native UI preview with sample data.
 
 - Claude, Codex and optional Gemini CLI / Code Assist quota.
-- Pin one quota beside music. Hover left for music, right for quota.
+- Follow local Codex and Claude Code tasks across projects, with source labels and approval-wait awareness.
+- Pin one quota beside music and task activity. Click widgets to open their panels; swipe across the open header to change pages.
+- Keep read task history for 1 hour, 5 hours (default), or 1 day.
 - Low quota gradually turns yellow, then red, with a subtle glow.
 - Calendar, reminders, English and Simplified Chinese.
 
