@@ -246,7 +246,9 @@ struct QuotaPinnedWings: View {
         if let pin = store.activePin, let provider = pin.provider {
             HStack(spacing: QuotaCompactMetrics.spacing) {
                 Button {
-                    if showsMusic { onMusic() } else { onSelect(provider) }
+                    if showsMusic { onMusic() }
+                    else if tasksExpanded { restoreQuotaWidget() }
+                    else { onSelect(provider) }
                 } label: {
                     Group {
                         if showsMusic { albumWithActivity }
@@ -261,7 +263,8 @@ struct QuotaPinnedWings: View {
                     .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
-                .help(showsMusic ? QuotaText.localized("打开音乐") : QuotaText.format("打开 %@ 额度", provider.title))
+                .modifier(AgentModuleSwitchGesture(enabled: activity.showAccessory && !showsMusic))
+                .help(showsMusic ? QuotaText.localized("打开音乐") : tasksExpanded ? AgentText.t("切换到额度 widget", "Show quota widget") : QuotaText.format("打开 %@ 额度", provider.title))
                 .accessibilityLabel(showsMusic ? QuotaText.localized("打开音乐") : QuotaText.format("打开 %@ 额度", provider.title))
 
                 Color.clear.frame(width: centerWidth, height: height)
@@ -272,7 +275,9 @@ struct QuotaPinnedWings: View {
                     NotificationCenter.default.post(name: .agentOpenNotch, object: nil)
                 }) {
                     if !activity.showAccessory || showsMusic {
-                        Button { onSelect(provider) } label: {
+                        Button {
+                            if tasksExpanded { restoreQuotaWidget() } else { onSelect(provider) }
+                        } label: {
                             Group {
                                 if tasksExpanded { minimalQuota(pin, provider: provider) }
                                 else { quotaIndicator(pin, provider: provider) }
@@ -281,7 +286,7 @@ struct QuotaPinnedWings: View {
                             .contentShape(Rectangle())
                         }
                         .buttonStyle(.plain)
-                        .help("\(provider.title) · \(reading(for: pin))")
+                        .help(tasksExpanded ? AgentText.t("切换到额度 widget", "Show quota widget") : "\(provider.title) · \(reading(for: pin))")
                         .accessibilityLabel("\(provider.title) \(store.window(for: pin)?.localizedTitle ?? QuotaText.localized("额度"))")
                         .accessibilityValue(reading(for: pin))
                     }
@@ -293,15 +298,20 @@ struct QuotaPinnedWings: View {
         }
     }
 
+    private func restoreQuotaWidget() {
+        withAnimation(reduceMotion ? nil : .smooth(duration: 0.32)) { activity.compactExpanded = false }
+    }
+
     private func minimalQuota(_ pin: QuotaPin, provider: QuotaProvider) -> some View {
-        VStack(spacing: 1) {
-            QuotaBrandMark(brand: provider.brand).frame(width: min(10, metrics.minimalWidth), height: min(10, metrics.minimalWidth))
-            Text(store.window(for: pin).map { QuotaText.percent($0.remainingPercent) } ?? "—")
-                .font(.system(size: 8, weight: .medium)).monospacedDigit().lineLimit(1).minimumScaleFactor(0.6)
-                .foregroundStyle(store.isStale(provider) ? .secondary : .primary)
-        }.frame(width: metrics.minimalWidth, height: height)
-            .accessibilityElement(children: .ignore)
-            .accessibilityLabel(provider.title + " · " + reading(for: pin))
+        NotchMinimalLabel(metrics: metrics,
+                          number: store.window(for: pin).map { QuotaText.percent($0.remainingPercent) } ?? "—") {
+            QuotaBrandMark(brand: provider.brand)
+                .frame(width: metrics.minimalIconSize, height: metrics.minimalIconSize)
+        }
+        .foregroundStyle(store.isStale(provider) ? .secondary : .primary)
+        .frame(width: metrics.minimalWidth, height: height)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(provider.title + " · " + reading(for: pin))
     }
 
     private var albumWithActivity: some View {

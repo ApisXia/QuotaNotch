@@ -22,8 +22,11 @@ struct AgentPaperGlyph: View {
                 RoundedRectangle(cornerRadius: 2.2).fill(Color(nsColor: .windowBackgroundColor))
                     .frame(width: 10, height: 12).opacity(0.15)
                 RoundedRectangle(cornerRadius: 2.2).strokeBorder(lineWidth: 1.05)
-                    .frame(width: 10, height: 12).offset(x: spread / 2 + drift, y: spread / 2)
-                if kind == .other {
+                    .frame(width: 10, height: 12).offset(x: spread / 2, y: spread / 2)
+                if running {
+                    Capsule().frame(width: 3.5, height: 1.1)
+                        .offset(x: spread / 2 + drift, y: spread / 2)
+                } else if kind == .other {
                     Capsule().frame(width: 4, height: 1).offset(x: 1.2, y: 2)
                 }
             }.frame(width: 18, height: 18)
@@ -68,6 +71,7 @@ struct AgentCompactDock<Primary: View>: View {
             }
         }
         .frame(height: height)
+        .contentShape(Rectangle())
         .animation(motion, value: extra)
         .animation(motion, value: primaryWidth)
         .onChange(of: visible) { _, value in if !value { store.compactExpanded = false } }
@@ -76,37 +80,39 @@ struct AgentCompactDock<Primary: View>: View {
             withAnimation(motion) { hovering = value }
             if !value && !store.showAccessory { store.compactExpanded = false }
         }
-        .simultaneousGesture(DragGesture(minimumDistance: 18).onEnded { value in
-            guard abs(value.translation.width) > abs(value.translation.height), visible else { return }
-            withAnimation(motion) { store.compactExpanded = value.translation.width > 0 }
-        })
-        .background(AgentHorizontalScroll { right in
-            if visible { withAnimation(motion) { store.compactExpanded = right } }
-        })
+        .modifier(AgentModuleSwitchGesture(enabled: visible))
         .preference(key: AgentWingOffsetKey.self, value: (primaryWidth + extra - (anchorWidth ?? primaryWidth)) / 2)
     }
     private var taskButton: some View {
-        Button { store.notchReadEnabled = true; open() } label: {
+        Button {
+            if !store.compactExpanded {
+                withAnimation(motion) { store.compactExpanded = true }
+            } else {
+                store.notchReadEnabled = true
+                open()
+            }
+        } label: {
             taskLabel.frame(width: taskWidth, height: height).contentShape(Rectangle())
         }.buttonStyle(.plain).help(summaryLabel).accessibilityLabel(summaryLabel)
+            .accessibilityHint(store.compactExpanded ? AgentText.t("查看任务详情", "View task details") : AgentText.t("切换到任务 widget", "Show task widget"))
     }
     @ViewBuilder private var taskLabel: some View {
         if store.compactExpanded {
-            glyph.scaleEffect(metrics.widgetWidth / 18)
+            glyph.scaleEffect(metrics.widgetWidth / 16)
                 .frame(width: metrics.widgetWidth, height: metrics.widgetWidth)
                 .overlay(alignment: .bottomTrailing) {
-                    Text(countLabel).font(.system(size: max(6, min(8, metrics.widgetWidth * 0.4)), weight: .medium))
-                        .monospacedDigit().lineLimit(1).minimumScaleFactor(0.6)
+                    Text(countLabel).font(.system(size: min(8, metrics.widgetWidth * 0.4), weight: .medium))
+                        .monospacedDigit().fixedSize()
                         .padding(.horizontal, 1).background(.black, in: RoundedRectangle(cornerRadius: 2))
-                        .offset(x: 1, y: 2)
                 }
+                .transition(.opacity)
         } else {
-            VStack(spacing: 1) {
-                glyph.scaleEffect(min(9, metrics.minimalWidth) / 18)
-                    .frame(width: metrics.minimalWidth, height: min(10, metrics.minimalWidth + 1))
-                Text(countLabel).font(.system(size: 8, weight: .medium)).monospacedDigit()
-                    .lineLimit(1).minimumScaleFactor(0.6)
-            }.frame(width: metrics.minimalWidth)
+            NotchMinimalLabel(metrics: metrics, number: countLabel) {
+                // Paper outlines have intrinsic margins; normalize their visible ink to the brand mark.
+                glyph.scaleEffect(metrics.minimalIconSize / 16)
+                    .frame(width: metrics.minimalIconSize, height: metrics.minimalIconSize)
+            }
+            .transition(.opacity)
         }
     }
     private var summaryLabel: String { "\(summary.running) " + AgentText.state(.running) + " · \(summary.waiting) " + AgentText.state(.waiting) + " · \(summary.unread) " + AgentText.t("未读", "unread") }
@@ -114,6 +120,41 @@ struct AgentCompactDock<Primary: View>: View {
     private var glyph: some View {
         AgentPaperGlyph(kind: summary.kind, running: summary.running > 0)
             .foregroundStyle(summary.needsAction ? AgentText.color(.waiting) : .primary)
+    }
+}
+
+/// Fixed rows keep the glyph center and numeric baseline identical across both minimal modules.
+struct NotchMinimalLabel<Icon: View>: View {
+    let metrics: NotchModuleMetrics
+    let number: String
+    @ViewBuilder let icon: () -> Icon
+    var body: some View {
+        VStack(spacing: metrics.minimalSpacing) {
+            icon().frame(width: metrics.minimalWidth, height: metrics.minimalIconRowHeight)
+            Text(number).font(.system(size: 8, weight: .medium)).monospacedDigit().fixedSize()
+                .frame(width: metrics.minimalWidth, height: metrics.minimalNumberHeight)
+        }
+        .frame(width: metrics.minimalWidth, height: metrics.minimalContentHeight)
+    }
+}
+
+struct AgentModuleSwitchGesture: ViewModifier {
+    let enabled: Bool
+    @ObservedObject private var store = AgentActivityStore.shared
+    @Environment(\.accessibilityReduceMotion) private var reduced
+    private func select(_ expanded: Bool) {
+        guard enabled else { return }
+        withAnimation(reduced ? nil : .smooth(duration: 0.32)) { store.compactExpanded = expanded }
+    }
+    func body(content: Content) -> some View {
+        content
+            .simultaneousGesture(DragGesture(minimumDistance: 12).onEnded { value in
+                guard abs(value.translation.width) > abs(value.translation.height) else { return }
+                select(value.translation.width > 0)
+            }, including: enabled ? .all : .none)
+            .background {
+                if enabled { AgentHorizontalScroll { right in select(right) } }
+            }
     }
 }
 
@@ -126,7 +167,7 @@ private struct ChevronDivider: View {
                 .rotationEffect(.degrees(expanded ? (reversed ? 34 : -34) : -5), anchor: .center)
             Capsule().frame(width: 1.1, height: 7).offset(y: 3.3)
                 .rotationEffect(.degrees(expanded ? (reversed ? -34 : 34) : 5), anchor: .center)
-        }.foregroundStyle(.white.opacity(expanded ? 0.85 : 0.32))
+        }.foregroundStyle(.white.opacity(expanded ? 0.75 : 0.20))
     }
 }
 

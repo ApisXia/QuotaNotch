@@ -102,6 +102,25 @@ struct SettingsPreviewRunner {
         recent.state = .completed
         precondition(!AgentText.activity(recent, now: now).contains(AgentText.t("修改文件", "file edit")))
         for height: CGFloat in [24, 32, 38] {
+            let metrics = NotchModuleMetrics(widgetWidth: QuotaCompactMetrics.iconSize(height: height))
+            try capture(HStack(spacing: 16) {
+                ForEach(["0", "42", "100", "99+"], id: \.self) { number in
+                    HStack(spacing: 6) {
+                        NotchMinimalLabel(metrics: metrics, number: number) {
+                            QuotaBrandMark(brand: .claude)
+                                .frame(width: metrics.minimalIconSize, height: metrics.minimalIconSize)
+                        }
+                        NotchMinimalLabel(metrics: metrics, number: number) {
+                            AgentPaperGlyph(kind: .running, running: true)
+                                .scaleEffect(metrics.minimalIconSize / 16)
+                                .frame(width: metrics.minimalIconSize, height: metrics.minimalIconSize)
+                        }
+                    }
+                    .overlay(alignment: .bottom) { Color.white.opacity(0.15).frame(height: 0.5) }
+                }
+            }.foregroundStyle(.white).frame(maxWidth: .infinity, maxHeight: .infinity)
+                .background(.black).preferredColorScheme(.dark), width: 240,
+                name: "Minimal-baselines-\(Int(height))", output: output, height: height)
             for expanded in [false, true] {
                 activity.compactExpanded = expanded
                 try capture(AgentCompactDock(primaryWidth: 24, height: height, open: {}) {
@@ -208,7 +227,7 @@ struct SettingsPreviewRunner {
                 let scale = CGFloat(baseline.pixelsWide) / host.bounds.width
                 let budget = NotchModuleMetrics(widgetWidth: QuotaCompactMetrics.iconSize(height: headerHeight)).additionalWidth
                 precondition(CGFloat(compactWidths[layout + String(Int(headerHeight))]! - blackWidth(baseline)) <= budget * scale + 2,
-                             "Minimal exceeded one third of the existing widget footprint")
+                             "Minimal exceeded its fixed additional-width budget")
                 try baseline.representation(using: .png, properties: [:])!.write(to: output.appendingPathComponent("Notch-closed-\(Int(headerHeight))-widget-only.png"))
                 activity.configurePreview(fixtures)
             }
