@@ -42,15 +42,18 @@ actor QuotaClient {
     private let credentials: any QuotaCredentialSource
     private let transport: any QuotaTransport
     private let clock: @Sendable () -> Date
+    private let claudeFallback: (any ClaudeQuotaFallback)?
     private var results: [QuotaProvider: QuotaResult] = [:]
     private var inFlight: [QuotaProvider: Task<QuotaResult, Never>] = [:]
 
     init(credentials: any QuotaCredentialSource = LocalQuotaCredentials(),
          transport: any QuotaTransport = QuotaURLTransport(),
-         clock: @escaping @Sendable () -> Date = { Date() }) {
+         clock: @escaping @Sendable () -> Date = { Date() },
+         claudeFallback: (any ClaudeQuotaFallback)? = nil) {
         self.credentials = credentials
         self.transport = transport
         self.clock = clock
+        self.claudeFallback = claudeFallback
     }
 
     /// All callers, including manual refresh and multiple displays, share the same cooldown.
@@ -61,27 +64,31 @@ actor QuotaClient {
         let old = results[provider]?.snapshot
         let credentials = self.credentials
         let transport = self.transport
+        let claudeFallback = self.claudeFallback
+        let clock = self.clock
         let task = Task<QuotaResult, Never> {
             do {
                 try Task.checkCancellation()
+                if provider == .claude {
+                    let snapshot = try await ClaudeQuotaProbe(credentials: credentials, transport: transport,
+                        fallback: claudeFallback, clock: clock).fetch()
+                    return QuotaResult(snapshot: snapshot, failure: nil,
+                        nextAttempt: clock().addingTimeInterval(provider.interval))
+                }
                 let credential = try await credentials.load(provider)
                 if let expiry = credential.expiresAt, expiry <= now { throw QuotaFailure.expired }
                 if provider == .gemini {
                     let snapshot = try await Self.geminiSnapshot(credential, transport: transport, now: now)
                     return QuotaResult(snapshot: snapshot, failure: nil, nextAttempt: now.addingTimeInterval(provider.interval))
                 }
-                let endpoint = provider == .claude
-                    ? "https://api.anthropic.com/api/oauth/usage"
-                    : "https://chatgpt.com/backend-api/wham/usage"
+                let endpoint = "https://chatgpt.com/backend-api/wham/usage"
                 var request = URLRequest(url: URL(string: endpoint)!)
                 request.timeoutInterval = 20
                 request.cachePolicy = .reloadIgnoringLocalCacheData
                 request.setValue("Bearer \(credential.accessToken)", forHTTPHeaderField: "Authorization")
                 request.setValue("application/json", forHTTPHeaderField: "Accept")
                 request.setValue("QuotaNotch", forHTTPHeaderField: "User-Agent")
-                if provider == .claude {
-                    request.setValue("oauth-2025-04-20", forHTTPHeaderField: "anthropic-beta")
-                } else if let accountID = credential.accountID {
+                if let accountID = credential.accountID {
                     request.setValue(accountID, forHTTPHeaderField: "ChatGPT-Account-Id")
                 }
                 try Task.checkCancellation()

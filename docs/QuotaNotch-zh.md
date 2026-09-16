@@ -43,18 +43,28 @@ Claude 只有接口实际提供模型窗口时才显示该模型。固定选择�
 
 ## 本机登录要求
 
-- Claude：需要 Claude Code 的订阅登录；在 CLI 中运行 `/login`。优先读取
-  `~/.claude/.credentials.json`，不存在时读取钥匙串服务 `Claude Code-credentials`。
+- Claude：需要 Claude Code 的订阅登录；在 CLI 中运行 `/login`。检查
+  `~/.claude/.credentials.json` 和钥匙串服务 `Claude Code-credentials`，优先选用
+  有效且较新的凭据；损坏或过期的文件不会挡住钥匙串中的有效登录。
   自定义绝对路径 `CLAUDE_CONFIG_DIR` 仅在传入 App 进程环境时有效。
 - Codex：需要 `codex login` 建立的 `~/.codex/auth.json` OAuth 凭据；支持 App 进程
   环境中的绝对路径 `CODEX_HOME`。本版暂不支持只存于 Codex 钥匙串的登录配置。
   可以在本机 Codex 配置中选择文件凭据存储后重新登录；请勿将 auth.json 发给任何人。
 - 只有网页 / ChatGPT 登录、API key，或 Claude inference-only token 不保证能读取
   这些订阅额度。本版不包含完整浏览器 OAuth 登录流程，不读取浏览器 cookie。
-- 过期或 401/403 会清除显示的旧额度并提示重新登录；不自动轮换 refresh token，
-  不修改 CLI 凭据，避免与 CLI 同时刷新造成冲突。
+- Claude 在检测时发现凭据距过期不足 5 分钟，会自动续期；认证失败时先重新读取
+  本机登录，再有限重试。新的 access/refresh token 写回原来的文件或钥匙串，保留
+  scopes 等字段。写入前检查原凭据是否已改变，发现外部更新就使用新凭据。
+  这能缩小与 Claude Code 同时续期的竞态窗口，但两者没有共同的跨进程锁。
+- Claude API 恢复失败时尝试本机 `claude /usage`，最多等待 20 秒。仅在 App 的专用
+  空目录运行内置用量命令，禁用工具、普通 hooks 和外部 MCP 配置；不发送推理提示。
+  备用结果支持剩余/已用百分比及相对重置时间，无法可靠解析的重置时间显示未知。
+  服务端限流时不会切换通道继续请求。
+- Claude 的恢复途径都失败后，才提示重新登录。Codex/Gemini 仍只读取凭据，
+  认证失效时清除旧额度并提示重新登录。
 
-凭据只在运行 App 的 Mac 内存中读取并通过 HTTPS 发给对应服务；不写日志、
+凭据在运行 App 的 Mac 上读取，Claude 续期成功后保存回原来的本机存储；
+通过 HTTPS 发给对应服务，不写日志、
 不写 App 设置、不上传 workspace/GitHub、不扫描钥匙串。数据请求使用无持久缓存、
 无 cookie 的短期 URLSession，并拒绝重定向。首次钥匙串访问可能需要本机允许。
 

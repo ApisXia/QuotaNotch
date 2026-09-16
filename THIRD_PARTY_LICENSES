@@ -444,3 +444,7 @@ for Claude/Codex usage endpoints and credential locations. Its README declares
 MIT but that snapshot contains no standalone full license text. No ClaudeBar
 source files, fixtures, images, icons or UI were copied into this distribution.
 The QuotaNotch core, view and tests were independently written for this fork.
+
+ClaudeBar commit 80de4330ede5a7d1ea71456e54d26473cbd50c99 was also reviewed
+as a behavioral reference for Claude OAuth renewal and CLI quota fallback.
+The recovery implementation and regression tests in QuotaNotch are original.

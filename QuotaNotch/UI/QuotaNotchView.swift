@@ -118,7 +118,7 @@ final class QuotaNotchStore: ObservableObject {
         if enabled { Task { await refresh() } }
     }
 
-    private let client = QuotaClient()
+    private let client = QuotaClient(claudeFallback: ClaudeCLIQuotaFallback())
     private var polling: Task<Void, Never>?
 
     func updatePins(_ change: (inout QuotaPins) -> Void) {
