@@ -2,6 +2,7 @@
 import SwiftUI
 
 struct QuotaWindowTile: View {
+    @AppStorage("quotaComfortable") private var comfortable = true
     let title: String
     let percent: Double
     let reset: Date?
@@ -13,9 +14,9 @@ struct QuotaWindowTile: View {
 
     var body: some View {
         let ink = QuotaWarningInk(accent: accent, percent: percent, stale: stale)
-        VStack(alignment: .leading, spacing: 2) {
+        VStack(alignment: .leading, spacing: 6) {
             HStack {
-                Text(title).font(.system(size: 10, weight: .medium))
+                Text(title).font(.system(size: comfortable ? 13 : 11, weight: .medium))
                     .foregroundStyle(.secondary).lineLimit(1).truncationMode(.middle)
                 Spacer(minLength: 4)
                 Button(action: onPin) {
@@ -28,11 +29,11 @@ struct QuotaWindowTile: View {
                 .accessibilityLabel(QuotaText.localized(pinned ? "取消固定" : "固定此额度") + " " + title)
             }
             HStack(alignment: .firstTextBaseline, spacing: 4) {
-                Text("\(percent, specifier: "%.0f")%")
-                    .font(.system(size: 21, weight: .semibold, design: .rounded)).monospacedDigit()
+                Text(QuotaText.percent(percent) + "%")
+                    .font(.system(size: comfortable ? 28 : 24, weight: .semibold, design: .rounded)).monospacedDigit()
                     .foregroundStyle(stale ? .gray : .white)
                 Text(LocalizedStringKey(stale ? "剩余 · 旧数据" : "剩余"))
-                    .font(.system(size: 10)).foregroundStyle(.secondary)
+                    .font(.system(size: comfortable ? 12 : 11)).foregroundStyle(.secondary)
             }
             GeometryReader { proxy in
                 Capsule().fill(ink.track)
@@ -42,24 +43,25 @@ struct QuotaWindowTile: View {
                             .frame(width: proxy.size.width * ink.warning.fraction)
                             .shadow(color: ink.halo, radius: 1.5)
                     }
-            }.frame(height: 3)
+            }.frame(height: 5)
                 .animation(reduceMotion ? nil : .easeInOut(duration: 0.35), value: percent)
-            HStack(spacing: 3) {
+            TimelineView(.periodic(from: .now, by: 30)) { context in
                 if let reset {
-                    Text("重置")
-                    Text(reset, style: .date)
-                    Text(reset, style: .time)
+                    Text(QuotaText.countdown(reset, now: context.date))
+                        .help(reset.formatted(date: .complete, time: .shortened))
                 } else { Text("重置时间未知") }
             }
-            .font(.system(size: 9)).foregroundStyle(.secondary).lineLimit(1).minimumScaleFactor(0.8)
+            .font(.system(size: comfortable ? 12 : 11)).foregroundStyle(.secondary).lineLimit(1)
+
         }
-        .padding(.horizontal, 10).padding(.vertical, 3)
+        .padding(.horizontal, 10).padding(.vertical, 8)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(.white.opacity(0.04), in: RoundedRectangle(cornerRadius: 10))
     }
 }
 
 struct QuotaProviderTab: View {
+    @AppStorage("quotaComfortable") private var comfortable = true
     let title: String
     let brand: QuotaBrand
     let selected: Bool
@@ -67,10 +69,10 @@ struct QuotaProviderTab: View {
     var body: some View {
         Button(action: onSelect) {
             HStack(spacing: 6) {
-                QuotaBrandMark(brand: brand).frame(width: 13, height: 13)
-                Text(title).font(.system(size: 11, weight: selected ? .semibold : .medium))
+                QuotaBrandMark(brand: brand).frame(width: 16, height: 16)
+                Text(title).font(.system(size: comfortable ? 13 : 12, weight: selected ? .semibold : .medium))
             }
-            .padding(.horizontal, 11).padding(.vertical, 3)
+            .padding(.horizontal, 11).padding(.vertical, 8)
             .foregroundStyle(selected ? .white : .gray)
             .background(selected ? .white.opacity(0.13) : .clear,
                         in: RoundedRectangle(cornerRadius: 7))

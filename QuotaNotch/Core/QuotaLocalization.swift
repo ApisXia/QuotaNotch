@@ -2,6 +2,18 @@
 import Foundation
 
 enum QuotaText {
+    static func percent(_ value: Double) -> String {
+        if value > 0 && value < 1 { return "<1" }
+        if value < 100 && value > 99 { return "99" }
+        return String(format: "%.0f", min(100, max(0, value)))
+    }
+    static func countdown(_ reset: Date, now: Date) -> String {
+        guard reset > now else { return localized("等待重置确认") }
+        let minutes = max(1, Int(ceil(reset.timeIntervalSince(now) / 60)))
+        if minutes >= 1440 { return format("%d 天 %d 小时后重置", minutes / 1440, (minutes % 1440) / 60) }
+        if minutes >= 60 { return format("%d 小时 %d 分后重置", minutes / 60, minutes % 60) }
+        return format("%d 分后重置", minutes)
+    }
     static func localized(_ key: String) -> String {
         NSLocalizedString(key, comment: "")
     }

@@ -15,6 +15,7 @@ import SwiftUIIntrospect
 
 @MainActor
 struct ContentView: View {
+    @AppStorage("quotaComfortable") private var comfortable = true
     @EnvironmentObject var vm: BoringViewModel
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
@@ -66,7 +67,7 @@ struct ContentView: View {
         {
             chinWidth = 640
         } else if showQuotaWings {
-            chinWidth += QuotaCompactMetrics.chinAddition(height: vm.effectiveClosedNotchHeight)
+            chinWidth += QuotaCompactMetrics.chinAddition(height: vm.effectiveClosedNotchHeight, comfortable: comfortable)
         } else if (!coordinator.expandingView.show || coordinator.expandingView.type == .music)
             && vm.notchState == .closed && (musicManager.isPlaying || !musicManager.isPlayerIdle)
             && coordinator.musicLiveActivityEnabled && !vm.hideOnClosed
@@ -84,7 +85,7 @@ struct ContentView: View {
 
     private var quotaPresentation: QuotaPresentation {
         guard vm.notchState == .closed else { return .none }
-        return quotaStore.pins.presentation(
+        return quotaStore.presentationPins.presentation(
             enabled: quotaStore.enabled,
             hidden: vm.hideOnClosed || vm.effectiveClosedNotchHeight <= 0,
             transient: coordinator.expandingView.show || coordinator.sneakPeek.show || coordinator.helloAnimationRunning,
@@ -122,14 +123,17 @@ struct ContentView: View {
                             }
                         }
                     }
+                    .onChange(of: quotaStore.menuOpen) { _, open in
+                        if !open && !isHovering { handleHover(false) }
+                    }
                     .onChange(of: vm.isBatteryPopoverActive) {
                         if !vm.isBatteryPopoverActive && !isHovering && vm.notchState == .open {
                             hoverTask?.cancel()
                             hoverTask = Task {
-                                try? await Task.sleep(for: .milliseconds(100))
+                                try? await Task.sleep(for: .milliseconds(250))
                                 guard !Task.isCancelled else { return }
                                 await MainActor.run {
-                                    if !self.vm.isBatteryPopoverActive && !self.isHovering && self.vm.notchState == .open {
+                                    if !self.vm.isBatteryPopoverActive && !self.quotaStore.menuOpen && !self.isHovering && self.vm.notchState == .open {
                                         self.vm.close()
                                     }
                                 }
@@ -474,7 +478,7 @@ struct ContentView: View {
         switch target {
         case .home: coordinator.currentView = .home
         case .quota:
-            if let provider = quotaStore.pins.selected?.provider { quotaStore.selectedProvider = provider }
+            if let provider = quotaStore.activePin?.provider { quotaStore.selectedProvider = provider }
             coordinator.currentView = .aiUsage
         case nil: break
         }
@@ -514,7 +518,7 @@ struct ContentView: View {
             }
         } else {
             hoverTask = Task {
-                try? await Task.sleep(for: .milliseconds(100))
+                try? await Task.sleep(for: .milliseconds(250))
                 guard !Task.isCancelled else { return }
                 
                 await MainActor.run {
@@ -522,7 +526,7 @@ struct ContentView: View {
                         self.isHovering = false
                     }
                     
-                    if self.vm.notchState == .open && !self.vm.isBatteryPopoverActive {
+                    if self.vm.notchState == .open && !self.vm.isBatteryPopoverActive && !self.quotaStore.menuOpen {
                         self.vm.close()
                     }
                 }

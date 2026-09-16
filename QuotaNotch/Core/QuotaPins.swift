@@ -9,6 +9,8 @@ struct QuotaPin: Codable, Equatable, Sendable {
 
 struct QuotaPins: Codable, Equatable, Sendable {
     var selected: QuotaPin?
+    var automatic = false
+    var candidates: [QuotaPin] = []
     var showsNumbers = false
     var hasPins: Bool { selected?.provider != nil }
 
@@ -17,11 +19,13 @@ struct QuotaPins: Codable, Equatable, Sendable {
         self.showsNumbers = showsNumbers
     }
 
-    private enum CodingKeys: String, CodingKey { case selected, left, right, showsNumbers }
+    private enum CodingKeys: String, CodingKey { case selected, left, right, showsNumbers, automatic, candidates }
 
     init(from decoder: Decoder) throws {
         let values = try decoder.container(keyedBy: CodingKeys.self)
         showsNumbers = try values.decodeIfPresent(Bool.self, forKey: .showsNumbers) ?? false
+        automatic = try values.decodeIfPresent(Bool.self, forKey: .automatic) ?? false
+        candidates = try values.decodeIfPresent([QuotaPin].self, forKey: .candidates) ?? []
         if values.contains(.selected) {
             selected = try values.decodeIfPresent(QuotaPin.self, forKey: .selected)
         } else {
@@ -37,6 +41,8 @@ struct QuotaPins: Codable, Equatable, Sendable {
         var values = encoder.container(keyedBy: CodingKeys.self)
         try values.encode(selected, forKey: .selected)
         try values.encode(showsNumbers, forKey: .showsNumbers)
+        try values.encode(automatic, forKey: .automatic)
+        try values.encode(candidates, forKey: .candidates)
     }
 
     func presentation(enabled: Bool, hidden: Bool, transient: Bool, musicPlaying: Bool) -> QuotaPresentation {

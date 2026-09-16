@@ -5,6 +5,10 @@ import KeyboardShortcuts
 
 struct QuotaPreferences: View {
     @ObservedObject private var store = QuotaNotchStore.shared
+    @AppStorage("quotaComfortable") private var comfortable = true
+    @AppStorage("quotaNotifications") private var notifications = false
+    @AppStorage("quotaAlertThreshold") private var threshold = 20.0
+    @State private var copied = false
     var body: some View {
         Form {
             Section("监控") {
@@ -34,6 +38,7 @@ struct QuotaPreferences: View {
                     .font(.caption).foregroundStyle(.secondary)
             }
             Section("刘海显示") {
+                Toggle("大字模式", isOn: $comfortable)
                 Toggle("圆环显示数字", isOn: Binding(get: { store.pins.showsNumbers },
                     set: { value in store.updatePins { $0.showsNumbers = value } }))
                 Text("数字表示剩余百分比。固定窗口在 AI 额度页选择；音乐播放时左侧显示封面与动效，右侧显示额度。")
@@ -42,6 +47,46 @@ struct QuotaPreferences: View {
                     Button("取消固定额度") { store.updatePins { $0.selected = nil } }
                 }
             }
+            Section("自动关注") {
+                Toggle("自动显示最低剩余额度", isOn: Binding(get: { store.pins.automatic }, set: { value in
+                    store.updatePins { $0.automatic = value }
+                }))
+                Text("仅比较选中的额度窗口；旧数据不参与比较。没有可用数据时保留手动固定项。")
+                    .font(.caption).foregroundStyle(.secondary)
+                ForEach(store.visibleProviders) { provider in
+                    ForEach(store.results[provider]?.snapshot?.windows ?? []) { window in
+                        let pin = QuotaPin(providerID: provider.rawValue, windowID: window.id)
+                        Toggle(provider.title + " · " + window.localizedTitle, isOn: Binding(
+                            get: { store.pins.candidates.contains(pin) },
+                            set: { checked in store.updatePins { pins in
+                                pins.candidates.removeAll { $0 == pin }
+                                if checked { pins.candidates.append(pin) }
+                            }}))
+                    }
+                }
+                if store.pins.automatic && store.pins.candidates.isEmpty {
+                    Text("请至少选择一个额度窗口").foregroundStyle(.orange)
+                }
+            }
+            Section("额度通知") {
+                Toggle("低额度与恢复通知", isOn: Binding(get: { notifications }, set: { value in
+                    Task { await store.setNotifications(value) }
+                }))
+                Picker("低额度阈值", selection: $threshold) {
+                    Text("10%").tag(10.0)
+                    Text("20%").tag(20.0)
+                    Text("30%").tag(30.0)
+                }
+                Text("每个额度周期提醒一次；恢复提醒仅在成功读取到新额度后发送。")
+                    .font(.caption).foregroundStyle(.secondary)
+                if !store.notificationStatus.isEmpty { Text(store.notificationStatus).font(.caption) }
+            }
+            Section("连接诊断") {
+                Button(copied ? "已复制" : "复制诊断信息") { store.copyDiagnostics(); copied = true }
+                Text("仅包含应用、系统版本、连接状态与更新时间，不包含令牌、账户或本机路径。")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+
         }
         .navigationTitle("AI 额度")
     }

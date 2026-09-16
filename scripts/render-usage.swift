@@ -32,9 +32,9 @@ private struct UsageSheet: View {
                 }.padding(2).background(.white.opacity(0.035), in: RoundedRectangle(cornerRadius: 9))
                 HStack(spacing: 8) {
                     QuotaWindowTile(title: QuotaText.localized("5 小时"), percent: 58,
-                                    reset: Date(timeIntervalSince1970: 1789416000), accent: QuotaBrand.claude.color, pinned: true)
+                                    reset: Date(timeIntervalSince1970: Date().timeIntervalSince1970 + 8280), accent: QuotaBrand.claude.color, pinned: true)
                     QuotaWindowTile(title: QuotaText.localized("7 天"), percent: 25,
-                                    reset: Date(timeIntervalSince1970: 1789588800), accent: QuotaBrand.claude.color)
+                                    reset: Date(timeIntervalSince1970: Date().timeIntervalSince1970 + 180000), accent: QuotaBrand.claude.color)
                 }
                 HStack(spacing: 10) {
                     Label("Claude · " + QuotaText.localized("5 小时"), systemImage: "pin.fill")
@@ -50,7 +50,7 @@ private struct UsageSheet: View {
                 .padding(.horizontal, 10).padding(.vertical, 6)
                 .background(.white.opacity(0.055), in: RoundedRectangle(cornerRadius: 10))
             }
-            .frame(height: 126)
+            .frame(height: 186)
             .padding(8).background(.black, in: RoundedRectangle(cornerRadius: 16))
             HStack {
                 Label("主页", systemImage: "house.fill")
@@ -60,6 +60,6 @@ private struct UsageSheet: View {
             }.font(.system(size: 12))
             Text("Native SwiftUI components · fixture values").font(.caption).foregroundStyle(.secondary)
         }
-        .padding(22).frame(width: 604).foregroundStyle(.white).background(Color(white: 0.075))
+        .padding(22).frame(width: 644).foregroundStyle(.white).background(Color(white: 0.075))
     }
 }

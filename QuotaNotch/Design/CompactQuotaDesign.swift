@@ -81,8 +81,8 @@ struct CompactQuotaGauge: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
-        let stroke = max(1, min(1.8, size * 0.085))
-        let inset = stroke / 2 + 1.5
+        let stroke = max(1, min(2.4, size * 0.085))
+        let inset = stroke / 2 + 0.25
         let ink = QuotaWarningInk(accent: brand.color, percent: percent, stale: stale)
         ZStack {
             Circle().inset(by: inset)
@@ -94,11 +94,11 @@ struct CompactQuotaGauge: View {
                     .rotationEffect(.degrees(-90))
                     .shadow(color: ink.halo, radius: 1.2)
                 if showsNumbers {
-                    Text("\(percent, specifier: "%.0f")")
-                        .font(.system(size: max(5, size * 0.36), weight: .semibold, design: .rounded))
+                    Text(QuotaText.percent(percent))
+                        .font(.system(size: max(5, size * 0.43), weight: .semibold, design: .rounded))
                         .monospacedDigit().lineLimit(1).minimumScaleFactor(0.7)
                         .foregroundStyle(stale ? .gray : .white)
-                        .frame(width: size * 0.68)
+                        .frame(width: size * 0.76)
                         .offset(y: showsBrand ? -size * 0.07 : 0)
                 }
             } else {
