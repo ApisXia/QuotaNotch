@@ -8,7 +8,7 @@ struct AgentNotchView: View {
         VStack(alignment: .leading, spacing: 6) {
             HStack(spacing: 8) {
                 ForEach(AgentFilter.allCases, id: \.self) { filter in
-                    Button { store.filter = filter } label: {
+                    Button { store.filter = filter; store.notchReadEnabled = true } label: {
                         Text(filter.title).font(.system(size: 11, weight: .medium))
                             .foregroundStyle(store.filter == filter ? .white : .gray)
                             .padding(.horizontal, 7).padding(.vertical, 3)
@@ -46,7 +46,8 @@ private struct AgentNotchTaskRow: View {
     var body: some View {
         Button(action: open) {
             HStack(spacing: 8) {
-                RoundedRectangle(cornerRadius: 2).fill(AgentText.color(session.state)).frame(width: 3, height: 24)
+                AgentPaperGlyph(kind: AgentPaperGlyph.kind(session.state), running: session.state == .running)
+                    .foregroundStyle(AgentText.color(session.state))
                 identity
                 status
             }

@@ -184,6 +184,9 @@ final class AgentRepositoryTests: XCTestCase {
         try Data((try line("session_meta", ["id": id, "cwd": "/projects/changed", "source": "vscode"]) + line("event_msg", ["type": "task_started", "turn_id": "new"])).utf8).write(to: file, options: .atomic)
         let replaced = await repository.scan(); XCTAssertEqual(replaced.sessions.first?.turnID, "new")
         XCTAssertEqual(replaced.sessions.first?.projectName, "changed")
+        try append(line("response_item", ["type": "function_call", "name": "request_user_input", "call_id": "pending"]), file: file)
+        let overnight = await repository.scan(now: Date().addingTimeInterval(14 * 3600))
+        XCTAssertEqual(overnight.sessions.first?.state, .waiting, "Reading or elapsed time must not resolve a pending request")
     }
     func testDatabaseProjectRenameArchiveAndReadOnlyAccess() async throws {
         let file = root.appendingPathComponent("sessions/one.jsonl"); let id = UUID().uuidString
@@ -233,11 +236,13 @@ final class AgentRepositoryTests: XCTestCase {
         let file = root.appendingPathComponent("sessions/long.jsonl"); let id = UUID().uuidString
         try append(line("session_meta", ["id": id, "cwd": "/projects/long", "source": "vscode"]), file: file)
         try append(line("event_msg", ["type": "task_started", "turn_id": "old"]), file: file)
+        try append(line("event_msg", ["type": "user_message", "message": "Old request outside the tail"]), file: file)
         try append(String(repeating: "x", count: 3 * 1024 * 1024) + "\n", file: file)
         try append(line("event_msg", ["type": "task_complete", "turn_id": "new"]), file: file)
         let repository = AgentActivityRepository(home: root, hookDirectory: root.appendingPathComponent("events"))
         let snapshot = await repository.scan(force: true)
         XCTAssertEqual(snapshot.sessions.first?.state, .completed)
         XCTAssertEqual(snapshot.sessions.first?.turnID, "new")
+        XCTAssertEqual(snapshot.sessions.first?.userPrompt, "")
     }
 }

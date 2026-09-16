@@ -122,6 +122,7 @@ actor AgentActivityRepository {
                         // the latest completion in the tail of a long conversation.
                         session.state = .unknown; session.turnID = ""; session.updatedAt = .distantPast
                         session.startedAt = nil; session.finishedAt = nil; session.waitingCallID = nil; session.tool = ""
+                        session.userPrompt = ""; session.activityDetail = ""; session.toolCallID = ""; session.toolIsRunning = false; session.attentionRevision = ""
                         cursor.offset = size - 2 * 1024 * 1024
                         cursor.skipping = true
                     }
@@ -141,11 +142,10 @@ actor AgentActivityRepository {
             }
             cache[path] = session
             if session.excluded { continue }
-            if session.state.isActive && now.timeIntervalSince(session.updatedAt) > 12 * 3600 {
+            if session.state == .running && now.timeIntervalSince(session.updatedAt) > 12 * 3600 {
                 session.state = .unknown
             }
-            // Keep active/attention sessions and one day of recent results; no startup alert replay.
-            if !session.state.isActive && now.timeIntervalSince(session.updatedAt) > 86400 { continue }
+            // Reading, not a one-day timer, dismisses finished attention within the local history window.
             var assignment = record.projectID
             if !record.hasProjectAssignment, assignment == nil,
                let assignments = global["thread-project-assignments"] as? [String: [String: String]],

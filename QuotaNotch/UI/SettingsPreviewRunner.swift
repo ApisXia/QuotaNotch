@@ -152,7 +152,25 @@ struct SettingsPreviewRunner {
                 }
             }
         }
+        let activity = AgentActivityStore.shared
+        let fixtures = activity.sessions
+        let receipts = descendants(host).compactMap { $0 as? AgentReadReceipt.ReceiptView }
+        precondition(!receipts.isEmpty, "Task rows have no read receipts")
+        activity.notchReadEnabled = false
+        let unreadBefore = activity.unread.count
+        for receipt in receipts { receipt.visibleSince = Date().addingTimeInterval(-2); receipt.check() }
+        precondition(activity.unread.count == unreadBefore, "Hover preview marked tasks read")
+        activity.notchReadEnabled = true
+        for receipt in receipts { receipt.visibleSince = Date().addingTimeInterval(-2); receipt.check() }
+        precondition(activity.unread.count < unreadBefore, "Explicitly opened visible rows were not read")
+        activity.configurePreview(fixtures)
+        activity.notchReadEnabled = false
         vm.close()
+        for layout in ["quota", "combined", "music", "tasks"] {
+            let suffix = layout == "quota" ? "" : "-" + layout
+            QuotaNotchStore.shared.enabled = layout == "quota" || layout == "combined"
+            MusicManager.shared.isPlaying = layout == "combined" || layout == "music"
+            coordinator.musicLiveActivityEnabled = true
         for headerHeight: CGFloat in [24, 32, 38] {
             vm.closedNotchSize.height = headerHeight
             for expanded in [false, true] {
@@ -160,11 +178,14 @@ struct SettingsPreviewRunner {
                 settle(); host.layoutSubtreeIfNeeded()
                 let bitmap = host.bitmapImageRepForCachingDisplay(in: host.bounds)!
                 host.cacheDisplay(in: host.bounds, to: bitmap)
-                try bitmap.representation(using: .png, properties: [:])!.write(to: output.appendingPathComponent("Notch-closed-\(Int(headerHeight))-\(expanded).png"))
+                try bitmap.representation(using: .png, properties: [:])!.write(to: output.appendingPathComponent("Notch-closed-\(Int(headerHeight))-\(expanded)\(suffix).png"))
                 let color = bitmap.colorAt(x: bitmap.pixelsWide / 2, y: 2)!.usingColorSpace(.deviceRGB)!
                 precondition(max(color.redComponent, max(color.greenComponent, color.blueComponent)) < 0.06, "Closed notch detached")
             }
         }
+        }
+        QuotaNotchStore.shared.enabled = true
+        MusicManager.shared.isPlaying = false
         AgentActivityStore.shared.compactExpanded = false
         window.orderOut(nil); window.contentView = nil; window.close()
         vm.destroy()

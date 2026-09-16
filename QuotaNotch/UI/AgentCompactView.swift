@@ -66,6 +66,7 @@ struct AgentCompactDock<Primary: View>: View {
         }
         .frame(height: height)
         .animation(motion, value: extra)
+        .onChange(of: visible) { _, value in if !value { store.compactExpanded = false } }
         .onHover { value in
             if value { retained = store.attention }
             withAnimation(motion) { hovering = value }
@@ -96,7 +97,7 @@ struct AgentCompactDock<Primary: View>: View {
             }
         } else {
             VStack(spacing: 0) {
-                glyph.scaleEffect(0.78).frame(height: 14)
+                glyph.scaleEffect(height < 28 ? 0.66 : 0.78).frame(height: height < 28 ? 12 : 14)
                 Text(summary.count > 99 ? "99+" : "\(summary.count)")
                     .font(.system(size: 10, weight: .medium)).monospacedDigit()
             }

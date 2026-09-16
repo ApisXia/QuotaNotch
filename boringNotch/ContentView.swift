@@ -154,7 +154,7 @@ struct ContentView: View {
                 Color.clear.frame(width: vm.closedNotchSize.width, height: vm.effectiveClosedNotchHeight)
                     .contentShape(Rectangle())
                     .onHover { handleHover($0) }
-                    .onTapGesture { openFromPointer() }
+                    .onTapGesture { openFromPointer(explicit: true) }
             }
         }
         .onPreferenceChange(AgentWingOffsetKey.self) { taskWingOffset = $0 }
@@ -462,9 +462,9 @@ struct ContentView: View {
         }
     }
 
-    private func openFromPointer() {
+    private func openFromPointer(explicit: Bool = false) {
         guard vm.notchState == .closed else { return }
-        agentStore.notchReadEnabled = false
+        agentStore.notchReadEnabled = explicit
         if agentStore.compactExpanded && agentStore.showAccessory {
             coordinator.currentView = .activity; doOpen(); return
         }

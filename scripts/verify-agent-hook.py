@@ -19,6 +19,11 @@ with tempfile.TemporaryDirectory() as temp:
     assert json.loads(data)["event"] == "PermissionRequest"
     assert stat.S_IMODE(output.stat().st_mode) == 0o600
     assert stat.S_IMODE(target.stat().st_mode) == 0o700
+    for name in ["UserPromptSubmit", "PreToolUse", "PostToolUse", "Stop", "SessionEnd"]:
+        r = subprocess.run([sys.argv[1], str(target)], input=json.dumps({**payload, "hook_event_name": name}), text=True, capture_output=True, timeout=3)
+        assert r.returncode == 0 and r.stdout == ""
+        assert json.loads(output.read_text())["event"] == name
+        assert "DO_NOT_PERSIST" not in output.read_text()
     for bad in ["malformed", json.dumps({**payload, "session_id": "../../escape"}), json.dumps({**payload, "hook_event_name": "unsupported"})]:
         r = subprocess.run([sys.argv[1], str(target)], input=bad, text=True, capture_output=True, timeout=3)
         assert r.returncode == 0 and not r.stdout

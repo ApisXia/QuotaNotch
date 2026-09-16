@@ -72,6 +72,8 @@ final class ClaudeActivityTests: XCTestCase {
         XCTAssertEqual(session.state, .running)
         ClaudeActivityParser.applyHook(["session_id": "one", "event": "Notification", "timestamp": "2026-09-16T12:00:03Z"], to: &session)
         XCTAssertEqual(session.state, .running)
+        ClaudeActivityParser.applyHook(["session_id": "one", "event": "Stop", "timestamp": "2026-09-16T12:00:04Z"], to: &session)
+        XCTAssertEqual(session.state, .running, "Stop handlers can continue a response")
     }
     func testClaudeHookPreservesSettingsAndRemovesOnlyOwnHandlers() throws {
         let original = Data(#"{"model":"custom","hooks":{"Stop":[{"hooks":[{"type":"command","command":"existing"}]}]}}"#.utf8)

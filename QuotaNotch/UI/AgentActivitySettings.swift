@@ -46,10 +46,11 @@ struct AgentActivitySettings: View {
             } header: { Text(AgentText.t("等待批准的识别", "Approval-wait detection")) }
             Section {
                 Text(store.home.path).font(.system(.caption, design: .monospaced)).textSelection(.enabled).fixedSize(horizontal: false, vertical: true)
+                Text(store.claudeHome.path).font(.system(.caption, design: .monospaced)).textSelection(.enabled).fixedSize(horizontal: false, vertical: true)
                 Button(AgentText.t("选择 Codex 数据目录…", "Choose Codex data folder…")) { chooseHome() }
                 Text(AgentText.t("仅在本机读取项目、任务名称和状态；不上传对话内容。远程 SSH、容器或云端任务只有在本机保留活动记录时才能显示。", "Reads project names, task titles and status locally; no conversation uploads. Remote SSH, container and cloud tasks appear only when their activity is recorded on this Mac."))
                     .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
-                if store.truncated { Text(AgentText.t("当前仅显示最近 2000 条任务记录。", "Showing the 2,000 most recent task records.")).foregroundStyle(.orange) }
+                if store.truncated { Text(AgentText.t("任务记录较多，当前显示数量已达上限。", "The task record limit has been reached.")).foregroundStyle(.orange) }
             } header: { Text(AgentText.t("数据来源", "Data source")) }
         }
         .navigationTitle(AgentText.t("任务监控", "Task monitor"))
@@ -86,7 +87,7 @@ struct AgentActivitySettings: View {
             try fm.createDirectory(at: configHome, withIntermediateDirectories: true)
             try updated.write(to: config, options: .atomic)
             try fm.setAttributes([.posixPermissions: 0o600], ofItemAtPath: config.path)
-            message = install ? AgentText.t("已安装。请在相应应用审阅并信任连接，等待批准的检测才会生效。", "Installed. Review and trust the connection in Codex to enable approval-wait detection.") : AgentText.t("已移除 QuotaNotch 的事件连接，其他配置已保留。", "Removed QuotaNotch hooks; other configuration is preserved.")
+            message = install ? AgentText.t("已安装。请在相应应用审阅并信任连接，等待批准的检测才会生效。", "Installed. Review and trust the connection in the selected app to enable approval-wait detection.") : AgentText.t("已移除 QuotaNotch 的事件连接，其他配置已保留。", "Removed QuotaNotch hooks; other configuration is preserved.")
             checkHooks()
         } catch { message = error.localizedDescription }
     }

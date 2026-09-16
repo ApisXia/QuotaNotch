@@ -7,6 +7,7 @@ actor ClaudeActivityRepository {
     let home: URL
     let hooks: URL
     private var entries: [URL] = []
+    private var discoveryTruncated = false
     private var discovered = Date.distantPast
     private var cursors: [String: AgentLogCursor] = [:]
     private var cache: [String: AgentSession] = [:]
@@ -18,18 +19,23 @@ actor ClaudeActivityRepository {
         let root = home.appendingPathComponent("projects")
         var result = AgentActivitySnapshot(hasSessionDirectory: fm.fileExists(atPath: root.path))
         if force || now.timeIntervalSince(discovered) > 8 {
-            entries = []
+            entries = []; discoveryTruncated = false
             if let walk = fm.enumerator(at: root, includingPropertiesForKeys: [.contentModificationDateKey], options: [.skipsHiddenFiles]) {
                 for case let url as URL in walk {
                     if url.lastPathComponent == "subagents" { walk.skipDescendants(); continue }
                     guard url.pathExtension == "jsonl", let changed = try? url.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate,
                           now.timeIntervalSince(changed) < 7 * 86400 else { continue }
                     entries.append(url)
-                    if entries.count >= 2000 { result.truncated = true; break }
+                    if entries.count >= 2000 { discoveryTruncated = true; break }
                 }
             }
+            let paths = Set(entries.map(\.path))
+            cache = cache.filter { paths.contains($0.key) }
+            cursors = cursors.filter { paths.contains($0.key) }
+            inodes = inodes.filter { paths.contains($0.key) }
             discovered = now
         }
+        result.truncated = discoveryTruncated
         var unique: [String: AgentSession] = [:]
         for url in entries {
             do {
@@ -46,6 +52,8 @@ actor ClaudeActivityRepository {
                     let head = try file.read(upToCount: 65536) ?? Data()
                     var headCursor = AgentLogCursor(); headCursor.consume(head) { ClaudeActivityParser.apply($0, to: &session) }
                     session.state = .unknown; session.turnID = ""; session.waitingCallID = nil
+                    session.updatedAt = .distantPast; session.startedAt = nil; session.finishedAt = nil
+                    session.userPrompt = ""; session.activityDetail = ""; session.tool = ""; session.toolCallID = ""; session.toolIsRunning = false; session.attentionRevision = ""
                     cursor.offset = size - 2 * 1024 * 1024; cursor.skipping = true
                 }
                 try file.seek(toOffset: cursor.offset)
@@ -56,8 +64,8 @@ actor ClaudeActivityRepository {
                 }
                 cursors[url.path] = cursor; cache[url.path] = session; inodes[url.path] = inode
                 guard !session.excluded, session.updatedAt != .distantPast else { continue }
-                if session.state.isActive && now.timeIntervalSince(session.updatedAt) > 12 * 3600 { session.state = .unknown }
-                if !session.state.isActive && now.timeIntervalSince(session.updatedAt) > 86400 { continue }
+                if session.state == .running && now.timeIntervalSince(session.updatedAt) > 12 * 3600 { session.state = .unknown }
+
                 session.projectRoot = AgentProjectResolver.repositoryRoot(for: session.cwd)
                 session.projectName = URL(fileURLWithPath: session.projectRoot).lastPathComponent
                 if session.projectName.isEmpty { session.projectName = "Claude Code" }
@@ -119,7 +127,8 @@ enum ClaudeActivityParser {
         case "PermissionRequest":
             session.state = .waiting; session.attentionRevision = AgentEventParser.revision(at)
         case "PreToolUse", "PostToolUse": session.state = .running; session.waitingCallID = nil
-        case "Stop": session.state = .completed; session.finishedAt = at; session.toolIsRunning = false
+        // Other Stop handlers can continue the response; transcript boundaries certify completion.
+        case "Stop": break
         case "SessionEnd": if session.state.isActive { session.state = .interrupted; session.finishedAt = at }
         default: return
         }
