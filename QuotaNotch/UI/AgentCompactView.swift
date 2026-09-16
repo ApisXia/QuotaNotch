@@ -128,7 +128,7 @@ struct AgentCompactDock<Primary: View>: View {
                 .auditNotchModule("task", mode: "widget")
                 .transition(.opacity)
         } else {
-            NotchMinimalLabel(metrics: metrics, number: countLabel) {
+            NotchMinimalIcon(metrics: metrics) {
                 // Paper outlines have intrinsic margins; normalize their visible ink to the brand mark.
                 glyph.scaleEffect(metrics.minimalIconSize / 16)
                     .frame(width: metrics.minimalIconSize, height: metrics.minimalIconSize)
@@ -145,18 +145,12 @@ struct AgentCompactDock<Primary: View>: View {
     }
 }
 
-/// Fixed rows keep the glyph center and numeric baseline identical across both minimal modules.
-struct NotchMinimalLabel<Icon: View>: View {
+/// The secondary module is one centered state symbol, with no caption or numeric badge.
+struct NotchMinimalIcon<Icon: View>: View {
     let metrics: NotchModuleMetrics
-    let number: String
     @ViewBuilder let icon: () -> Icon
     var body: some View {
-        VStack(spacing: metrics.minimalSpacing) {
-            icon().frame(width: metrics.minimalWidth, height: metrics.minimalIconRowHeight)
-            Text(number).font(.system(size: 8, weight: .medium)).monospacedDigit().fixedSize()
-                .frame(width: metrics.minimalWidth, height: metrics.minimalNumberHeight)
-        }
-        .frame(width: metrics.minimalWidth, height: metrics.minimalContentHeight)
+        icon().frame(width: metrics.minimalWidth, height: metrics.minimalIconSize)
     }
 }
 

@@ -297,12 +297,11 @@ struct QuotaPinnedWings: View {
     }
 
     private func minimalQuota(_ pin: QuotaPin, provider: QuotaProvider) -> some View {
-        NotchMinimalLabel(metrics: metrics,
-                          number: store.window(for: pin).map { QuotaText.percent($0.remainingPercent) } ?? "—") {
-            QuotaBrandMark(brand: provider.brand)
-                .frame(width: metrics.minimalIconSize, height: metrics.minimalIconSize)
+        NotchMinimalIcon(metrics: metrics) {
+            MinimalQuotaGlyph(brand: provider.brand,
+                              percent: store.window(for: pin)?.remainingPercent,
+                              stale: store.isStale(provider), size: metrics.minimalIconSize)
         }
-        .foregroundStyle(store.isStale(provider) ? .secondary : .primary)
         .frame(width: metrics.minimalWidth, height: height)
         .auditNotchModule("quota", mode: "minimal")
         .accessibilityElement(children: .ignore)
@@ -345,5 +344,32 @@ struct QuotaPinnedWings: View {
                           stale: store.isStale(provider),
                           showsBrand: showsMusic || activity.showAccessory, showsNumbers: store.pins.showsNumbers, size: iconSize)
             .auditNotchModule("quota")
+    }
+}
+
+/// A brand-centered quota symbol; the arc communicates remaining quota without numeric text.
+struct MinimalQuotaGlyph: View {
+    let brand: QuotaBrand
+    let percent: Double?
+    var stale = false
+    let size: CGFloat
+    @Environment(\.accessibilityReduceMotion) private var reduced
+    var body: some View {
+        let valid = percent?.isFinite == true
+        let ink = QuotaWarningInk(accent: brand.color, percent: percent, stale: stale)
+        let stroke: CGFloat = 1.1
+        ZStack {
+            Circle().inset(by: stroke / 2 + 0.25)
+                .stroke(ink.track, style: StrokeStyle(lineWidth: stroke, dash: !valid || stale ? [1.3, 1.6] : []))
+            if valid {
+                Circle().inset(by: stroke / 2 + 0.25).trim(from: 0, to: ink.warning.fraction)
+                    .stroke(ink.color, style: StrokeStyle(lineWidth: stroke, lineCap: .round))
+                    .rotationEffect(.degrees(-90))
+            }
+            QuotaBrandMark(brand: brand, muted: stale || !valid)
+                .frame(width: size * 0.48, height: size * 0.48)
+        }.frame(width: size, height: size)
+        .animation(reduced ? nil : .easeInOut(duration: 0.3), value: percent)
+        .accessibilityHidden(true)
     }
 }

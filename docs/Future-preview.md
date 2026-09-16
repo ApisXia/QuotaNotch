@@ -1,9 +1,10 @@
-# Future 286 preview
+# Future 287 preview
 
 This preview stays on `future`; stable 1.02 is unchanged.
 
 - Music and token retain their existing widgets. With token plus tasks or music plus tasks, each module gets an independent widget; tasks alone also use a widget.
 - With all three modules, music stays left while quota and tasks share the right wing. A divider centered in a 10-point gap softly morphs into a short chevron on hover; click it or swipe to exchange widget/minimal without changing total width. Clicking a task opens its panel directly.
+- Minimal modules use one centered graphic without numbers: a provider mark inside a thin quota arc, or a state-colored task paper glyph. Exact numbers remain in the widget and panel. Unknown quota has an empty dashed track; stale readings are muted.
 - White paper outlines and counts combine with state-colored inner marks and labels: blue working, orange waiting, green completed, red failed, purple interrupted, gray unknown. Running motion stays inside the glyph.
 - Clicking a task expands details inline; one row can be expanded at a time. Inputs and recent activity share the parent list's scrolling. Task clicks and notifications never create a details window.
 - Selecting All expands the same notch panel downward, with fixed width and a screen-relative height cap. The filter bar stays above the scrolling list. Leaving the task tab or closing restores the original window height.

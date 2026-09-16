@@ -117,24 +117,34 @@ struct SettingsPreviewRunner {
         precondition(!AgentText.activity(recent, now: now).contains(AgentText.t("修改文件", "file edit")))
         for height: CGFloat in [24, 32, 38] {
             let metrics = NotchModuleMetrics(widgetWidth: QuotaCompactMetrics.iconSize(height: height))
+            let samples: [Double?] = [nil, 0, 10, 42, 100]
+            let states: [AgentRunState] = [.unknown, .failed, .waiting, .running, .completed]
             try capture(HStack(spacing: 16) {
-                ForEach(["0", "42", "100", "99+"], id: \.self) { number in
-                    HStack(spacing: 6) {
-                        NotchMinimalLabel(metrics: metrics, number: number) {
-                            QuotaBrandMark(brand: .claude)
-                                .frame(width: metrics.minimalIconSize, height: metrics.minimalIconSize)
+                ForEach(0..<samples.count, id: \.self) { index in
+                    HStack(spacing: 8) {
+                        NotchMinimalIcon(metrics: metrics) {
+                            MinimalQuotaGlyph(brand: .claude, percent: samples[index], size: metrics.minimalIconSize)
                         }
-                        NotchMinimalLabel(metrics: metrics, number: number) {
-                            AgentPaperGlyph(kind: .running, running: true)
+                        NotchMinimalIcon(metrics: metrics) {
+                            AgentPaperGlyph(kind: AgentPaperGlyph.kind(states[index]), running: states[index] == .running,
+                                            accent: AgentText.color(states[index]))
                                 .scaleEffect(metrics.minimalIconSize / 16)
                                 .frame(width: metrics.minimalIconSize, height: metrics.minimalIconSize)
                         }
                     }
-                    .overlay(alignment: .bottom) { Color.white.opacity(0.15).frame(height: 0.5) }
                 }
             }.foregroundStyle(.white).frame(maxWidth: .infinity, maxHeight: .infinity)
-                .background(.black).preferredColorScheme(.dark), width: 240,
-                name: "Minimal-baselines-\(Int(height))", output: output, height: height)
+                .background(.black).preferredColorScheme(.dark), width: 280,
+                name: "Minimal-graphics-\(Int(height))", output: output, height: height)
+            try capture(HStack(spacing: 24) {
+                ForEach([QuotaProvider.claude, .codex, .gemini], id: \.self) { provider in
+                    HStack(spacing: 8) {
+                        MinimalQuotaGlyph(brand: provider.brand, percent: 65, size: metrics.minimalIconSize)
+                        MinimalQuotaGlyph(brand: provider.brand, percent: 65, stale: true, size: metrics.minimalIconSize)
+                    }
+                }
+            }.frame(maxWidth: .infinity, maxHeight: .infinity).background(.black).preferredColorScheme(.dark),
+                width: 220, name: "Minimal-brands-\(Int(height))", output: output, height: height)
             for expanded in [false, true] {
                 activity.compactExpanded = expanded
                 try capture(AgentCompactDock(primaryWidth: 24, height: height, open: {}) {
