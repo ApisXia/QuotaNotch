@@ -135,7 +135,7 @@ struct QuotaNotchView: View {
         return (store.pins.automatic ? QuotaText.localized("自动") + " · " : "") + "\(provider.title) · \(store.window(for: pin)?.localizedTitle ?? QuotaText.localized("已固定窗口"))"
     }
 
-    /// A single fixed row: status, paging and controls never scroll.
+    /// Keep controls and refresh status on separate rows so larger text has room.
     private var pinSettings: some View {
         VStack(spacing: 6) {
         HStack(spacing: 10) {
@@ -180,7 +180,10 @@ struct QuotaNotchView: View {
                     set: { value in store.updatePins { $0.showsNumbers = value } }
                 ))
                 Toggle("大字模式", isOn: $comfortable)
-                Button("通知与自动关注设置") { SettingsWindowController.shared.showWindow() }
+                Button("通知与自动关注设置") {
+                    UserDefaults.standard.set("Quota", forKey: "settingsSelectedTab")
+                    SettingsWindowController.shared.showWindow()
+                }
                 Button("复制诊断信息") { store.copyDiagnostics() }
                 Text("环内数字为剩余百分比，省略 % 号以保持紧凑。")
                 if let failure = store.results[provider]?.failure {
