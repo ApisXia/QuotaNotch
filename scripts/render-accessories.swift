@@ -16,7 +16,7 @@ struct RenderAccessories {
                     precondition(expanded.pixelsHigh == normal.pixelsHigh + count * 33 * 2, "Unexpected accessory height")
                     // Compare content before clipping: the bottom silhouette intentionally changes.
                     for y in 0..<normal.pixelsHigh { for x in 0..<normal.pixelsWide {
-                        if normal.colorAt(x: x, y: y) != expanded.colorAt(x: x, y: y) {
+                        if !samePixel(normal, expanded, x: x, y: y) {
                             for (name, bitmap) in [("Accessory-Before", normal), ("Accessory-After", expanded)] {
                                 try bitmap.representation(using: .png, properties: [:])!.write(to:
                                     URL(fileURLWithPath: "build/QuotaNotch-dist/\(name).png"))
@@ -31,6 +31,18 @@ struct RenderAccessories {
         try sheet.representation(using: .png, properties: [:])!.write(to:
             URL(fileURLWithPath: "build/QuotaNotch-dist/Accessory-Layout.png"))
         print("Verified 48 accessory layouts: stable primary pixels and width; 1–2 added rows across 6 widths.")
+    }
+
+    // macOS 15 can dither gradients by one 8-bit channel step between renders.
+    // Normalize to the same RGB space/depth; newer systems may render HDR bitmaps.
+    private static func samePixel(_ a: NSBitmapImageRep, _ b: NSBitmapImageRep, x: Int, y: Int) -> Bool {
+        func channels(_ bitmap: NSBitmapImageRep) -> [Int]? {
+            guard let color = bitmap.colorAt(x: x, y: y)?.usingColorSpace(.genericRGB) else { return nil }
+            return [color.redComponent, color.greenComponent, color.blueComponent, color.alphaComponent]
+                .map { Int((min(1, max(0, $0)) * 255).rounded()) }
+        }
+        guard let before = channels(a), let after = channels(b) else { return false }
+        return zip(before, after).allSatisfy { abs($0 - $1) <= 1 }
     }
 
     @MainActor private static func render<V: View>(_ view: V) throws -> NSBitmapImageRep {
