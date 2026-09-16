@@ -116,7 +116,7 @@ private struct AgentNotchTaskRow: View {
             if let caption = session.state.isActive ? AgentText.context(session, now: now) : AgentText.relativeTime(session.updatedAt, now: now) {
                 Text(caption).font(.system(size: 9)).foregroundStyle(.secondary).lineLimit(1)
             }
-        }.frame(width: 112, alignment: .trailing)
+        }.frame(width: 112, height: 26, alignment: .topTrailing)
     }
 }
 
