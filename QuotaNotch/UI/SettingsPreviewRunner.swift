@@ -170,6 +170,15 @@ struct SettingsPreviewRunner {
         activity.configurePreview(fixtures)
         activity.notchReadEnabled = false
         vm.close()
+        var compactWidths: [String: Int] = [:]
+        func blackWidth(_ bitmap: NSBitmapImageRep) -> Int {
+            let row = max(1, Int(5 * CGFloat(bitmap.pixelsHigh) / host.bounds.height))
+            let points = (0..<bitmap.pixelsWide).filter { x in
+                guard let c = bitmap.colorAt(x: x, y: row)?.usingColorSpace(.deviceRGB) else { return false }
+                return max(c.redComponent, max(c.greenComponent, c.blueComponent)) < 0.06
+            }
+            return (points.last ?? 0) - (points.first ?? 0)
+        }
         for layout in ["quota", "combined", "music", "tasks"] {
             let suffix = layout == "quota" ? "" : "-" + layout
             QuotaNotchStore.shared.configureSettingsPreview(paused: layout != "quota" && layout != "combined")
@@ -185,6 +194,23 @@ struct SettingsPreviewRunner {
                 try bitmap.representation(using: .png, properties: [:])!.write(to: output.appendingPathComponent("Notch-closed-\(Int(headerHeight))-\(expanded)\(suffix).png"))
                 let color = bitmap.colorAt(x: bitmap.pixelsWide / 2, y: 2)!.usingColorSpace(.deviceRGB)!
                 precondition(max(color.redComponent, max(color.greenComponent, color.blueComponent)) < 0.06, "Closed notch detached")
+                if layout == "quota" || layout == "combined" {
+                    let key = layout + String(Int(headerHeight))
+                    if !expanded { compactWidths[key] = blackWidth(bitmap) }
+                    else { precondition(abs(blackWidth(bitmap) - compactWidths[key]!) <= 1, "Swapping widget/minimal changed the total width") }
+                }
+            }
+            if layout == "combined" {
+                activity.configurePreview([]); activity.compactExpanded = false
+                settle(); host.layoutSubtreeIfNeeded()
+                let baseline = host.bitmapImageRepForCachingDisplay(in: host.bounds)!
+                host.cacheDisplay(in: host.bounds, to: baseline)
+                let scale = CGFloat(baseline.pixelsWide) / host.bounds.width
+                let budget = NotchModuleMetrics(widgetWidth: QuotaCompactMetrics.iconSize(height: headerHeight)).additionalWidth
+                precondition(CGFloat(compactWidths[layout + String(Int(headerHeight))]! - blackWidth(baseline)) <= budget * scale + 2,
+                             "Minimal exceeded one third of the existing widget footprint")
+                try baseline.representation(using: .png, properties: [:])!.write(to: output.appendingPathComponent("Notch-closed-\(Int(headerHeight))-widget-only.png"))
+                activity.configurePreview(fixtures)
             }
         }
         }

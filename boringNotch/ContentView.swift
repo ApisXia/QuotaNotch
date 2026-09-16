@@ -302,9 +302,10 @@ struct ContentView: View {
             }
             .transition(.opacity)
         } else if compactPresentation == .music {
-            HStack(spacing: 0) {
+            if agentStore.showAccessory {
+                musicAndTaskWings
+            } else {
                 MusicLiveActivity().contentShape(Rectangle()).onTapGesture { coordinator.currentView = .home; doOpen() }
-                AgentCompactDock(primaryWidth: 0, height: vm.effectiveClosedNotchHeight, open: openTasks) { EmptyView() }
             }
         } else {
             HStack(spacing: 0) {
@@ -357,6 +358,21 @@ struct ContentView: View {
     }
 
     @ViewBuilder
+    private var musicAndTaskWings: some View {
+        let height = vm.effectiveClosedNotchHeight
+        let size = max(0, height - 12)
+        return HStack(spacing: QuotaCompactMetrics.spacing) {
+            Button { coordinator.currentView = .home; doOpen() } label: {
+                Image(nsImage: musicManager.albumArt).resizable().scaledToFill()
+                    .frame(width: size, height: size)
+                    .clipShape(RoundedRectangle(cornerRadius: MusicPlayerImageSizes.cornerRadiusInset.closed))
+                    .frame(width: size, height: height)
+            }.buttonStyle(.plain)
+            Color.clear.frame(width: vm.closedNotchSize.width - cornerRadiusInsets.closed.top, height: height)
+            AgentCompactDock(primaryWidth: 0, height: height, anchorWidth: size, widgetWidth: size, open: openTasks) { EmptyView() }
+        }.frame(height: height)
+    }
+
     func MusicLiveActivity() -> some View {
         HStack(spacing: QuotaCompactMetrics.spacing) {
             Image(nsImage: musicManager.albumArt)

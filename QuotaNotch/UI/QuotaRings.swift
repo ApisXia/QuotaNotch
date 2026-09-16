@@ -235,8 +235,12 @@ struct QuotaPinnedWings: View {
     private var iconSize: CGFloat { QuotaCompactMetrics.iconSize(height: height, comfortable: comfortable) }
 
     private var tasksExpanded: Bool { activity.compactExpanded && activity.showAccessory }
-    private var leftWidth: CGFloat { tasksExpanded && !showsMusic ? max(18, iconSize) : iconSize }
-    private var rightPrimaryWidth: CGFloat { tasksExpanded ? (showsMusic ? 18 : 0) : iconSize }
+    private var metrics: NotchModuleMetrics { NotchModuleMetrics(widgetWidth: iconSize) }
+    private var leftWidth: CGFloat { tasksExpanded && !showsMusic ? metrics.minimalWidth : iconSize }
+    private var rightPrimaryWidth: CGFloat {
+        guard activity.showAccessory else { return iconSize }
+        return showsMusic ? (tasksExpanded ? metrics.minimalWidth : iconSize) : 0
+    }
 
     var body: some View {
         if let pin = store.activePin, let provider = pin.provider {
@@ -247,6 +251,7 @@ struct QuotaPinnedWings: View {
                     Group {
                         if showsMusic { albumWithActivity }
                         else if tasksExpanded { minimalQuota(pin, provider: provider) }
+                        else if activity.showAccessory { quotaIndicator(pin, provider: provider) }
                         else {
                             QuotaBrandMark(brand: provider.brand)
                                 .frame(width: iconSize, height: iconSize)
@@ -261,12 +266,12 @@ struct QuotaPinnedWings: View {
 
                 Color.clear.frame(width: centerWidth, height: height)
 
-                AgentCompactDock(primaryWidth: rightPrimaryWidth, height: height, anchorWidth: leftWidth, open: {
+                AgentCompactDock(primaryWidth: rightPrimaryWidth, height: height, anchorWidth: leftWidth, widgetWidth: iconSize, open: {
                     BoringViewCoordinator.shared.currentView = .activity
                     // The hosting notch commits its open state through the action below.
                     NotificationCenter.default.post(name: .agentOpenNotch, object: nil)
                 }) {
-                    if !tasksExpanded || showsMusic {
+                    if !activity.showAccessory || showsMusic {
                         Button { onSelect(provider) } label: {
                             Group {
                                 if tasksExpanded { minimalQuota(pin, provider: provider) }
@@ -290,11 +295,11 @@ struct QuotaPinnedWings: View {
 
     private func minimalQuota(_ pin: QuotaPin, provider: QuotaProvider) -> some View {
         VStack(spacing: 1) {
-            QuotaBrandMark(brand: provider.brand).frame(width: 10, height: 10)
+            QuotaBrandMark(brand: provider.brand).frame(width: min(10, metrics.minimalWidth), height: min(10, metrics.minimalWidth))
             Text(store.window(for: pin).map { QuotaText.percent($0.remainingPercent) } ?? "—")
-                .font(.system(size: 9, weight: .medium)).monospacedDigit()
+                .font(.system(size: 8, weight: .medium)).monospacedDigit().lineLimit(1).minimumScaleFactor(0.6)
                 .foregroundStyle(store.isStale(provider) ? .secondary : .primary)
-        }.frame(width: 18, height: height)
+        }.frame(width: metrics.minimalWidth, height: height)
             .accessibilityElement(children: .ignore)
             .accessibilityLabel(provider.title + " · " + reading(for: pin))
     }
@@ -332,6 +337,6 @@ struct QuotaPinnedWings: View {
         CompactQuotaGauge(brand: provider.brand,
                           percent: store.window(for: pin)?.remainingPercent,
                           stale: store.isStale(provider),
-                          showsBrand: showsMusic, showsNumbers: store.pins.showsNumbers, size: iconSize)
+                          showsBrand: showsMusic || activity.showAccessory, showsNumbers: store.pins.showsNumbers, size: iconSize)
     }
 }

@@ -4,7 +4,7 @@ import SwiftUI
 
 struct AgentWingOffsetKey: PreferenceKey {
     static var defaultValue: CGFloat = 0
-    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) { value = max(value, nextValue()) }
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) { value = nextValue() }
 }
 
 /// A common paper silhouette; position and outline remain readable with motion disabled.
@@ -40,6 +40,7 @@ struct AgentCompactDock<Primary: View>: View {
     let height: CGFloat
     var hasPrimary = true
     var anchorWidth: CGFloat? = nil
+    var widgetWidth: CGFloat? = nil
     let open: () -> Void
     @ViewBuilder let primary: () -> Primary
     @ObservedObject private var store = AgentActivityStore.shared
@@ -48,8 +49,9 @@ struct AgentCompactDock<Primary: View>: View {
     @State private var retained = AgentAttentionSummary()
     private var summary: AgentAttentionSummary { hovering && !store.attention.isVisible ? retained : store.attention }
     private var visible: Bool { store.enabled && summary.isVisible }
-    private var separator: CGFloat { hasPrimary && visible ? (hovering ? 16 : 8) : 0 }
-    private var taskWidth: CGFloat { visible ? (store.compactExpanded ? 82 : 20) : 0 }
+    private var metrics: NotchModuleMetrics { NotchModuleMetrics(widgetWidth: widgetWidth ?? max(0, height - 12)) }
+    private var separator: CGFloat { hasPrimary && visible ? metrics.dividerWidth : 0 }
+    private var taskWidth: CGFloat { visible ? (store.compactExpanded ? metrics.widgetWidth : metrics.minimalWidth) : 0 }
     private var extra: CGFloat { separator + taskWidth }
     private var motion: Animation? { reduced ? nil : .smooth(duration: 0.32) }
     var body: some View {
@@ -86,31 +88,29 @@ struct AgentCompactDock<Primary: View>: View {
     private var taskButton: some View {
         Button { store.notchReadEnabled = true; open() } label: {
             taskLabel.frame(width: taskWidth, height: height).contentShape(Rectangle())
-        }.buttonStyle(.plain).help(AgentText.t("打开任务", "Open tasks"))
+        }.buttonStyle(.plain).help(summaryLabel).accessibilityLabel(summaryLabel)
     }
     @ViewBuilder private var taskLabel: some View {
         if store.compactExpanded {
-            HStack(spacing: 6) {
-                glyph
-                VStack(alignment: .leading, spacing: 1) {
-                    Text(taskTitle).font(.system(size: 11, weight: .medium))
-                    Text(taskSubtitle).font(.system(size: 9)).foregroundStyle(.secondary)
-                }.lineLimit(1)
-            }
+            glyph.scaleEffect(metrics.widgetWidth / 18)
+                .frame(width: metrics.widgetWidth, height: metrics.widgetWidth)
+                .overlay(alignment: .bottomTrailing) {
+                    Text(countLabel).font(.system(size: max(6, min(8, metrics.widgetWidth * 0.4)), weight: .medium))
+                        .monospacedDigit().lineLimit(1).minimumScaleFactor(0.6)
+                        .padding(.horizontal, 1).background(.black, in: RoundedRectangle(cornerRadius: 2))
+                        .offset(x: 1, y: 2)
+                }
         } else {
-            VStack(spacing: 0) {
-                glyph.scaleEffect(height < 28 ? 0.66 : 0.78).frame(height: height < 28 ? 12 : 14)
-                Text(summary.count > 99 ? "99+" : "\(summary.count)")
-                    .font(.system(size: 10, weight: .medium)).monospacedDigit()
-            }
+            VStack(spacing: 1) {
+                glyph.scaleEffect(min(9, metrics.minimalWidth) / 18)
+                    .frame(width: metrics.minimalWidth, height: min(10, metrics.minimalWidth + 1))
+                Text(countLabel).font(.system(size: 8, weight: .medium)).monospacedDigit()
+                    .lineLimit(1).minimumScaleFactor(0.6)
+            }.frame(width: metrics.minimalWidth)
         }
     }
-    private var taskTitle: String { AgentText.t("\(summary.count) 个任务", "\(summary.count) tasks") }
-    private var taskSubtitle: String {
-        if summary.waiting > 0 { return AgentText.t("\(summary.waiting) 个等待", "\(summary.waiting) waiting") }
-        if summary.running > 0 { return AgentText.t("\(summary.running) 个进行中", "\(summary.running) working") }
-        return AgentText.t("\(summary.unread) 个未读", "\(summary.unread) unread")
-    }
+    private var summaryLabel: String { "\(summary.running) " + AgentText.state(.running) + " · \(summary.waiting) " + AgentText.state(.waiting) + " · \(summary.unread) " + AgentText.t("未读", "unread") }
+    private var countLabel: String { summary.count > 99 ? "99+" : "\(summary.count)" }
     private var glyph: some View {
         AgentPaperGlyph(kind: summary.kind, running: summary.running > 0)
             .foregroundStyle(summary.needsAction ? AgentText.color(.waiting) : .primary)

@@ -5,7 +5,7 @@ This preview stays on `future`; stable 1.02 is unchanged.
 - Tasks now share the closed notch row with the existing quota gauge. They no longer add a persistent row below the notch.
 - The task summary uses a small paper glyph and count. Horizontal swipe or the separator button expands/minimizes it. Hovering the separator reveals a chevron; only the central notch hover opens the full panel.
 - Swiping to the task widget also switches token to minimal (provider icon and number). Without music, token minimal sits on the left and the task widget on the right; with music, both share the right wing. Swiping back restores the token widget and task minimal.
-- The task minimal is narrower, and the rear paper outline has stronger contrast.
+- Task, token and music widgets share the same fixed icon size. Task widgets contain only the paper glyph and a count badge. A minimal and its divider together add at most one third of the existing widget footprint; switching token/task roles preserves the combined width. Both minimals stack their icon above their number. The rear paper outline has stronger contrast.
 - Token keeps its existing appearance in widget mode and remains the only pinnable module, with one pin slot. Project pins were removed.
 - Running and approval-waiting tasks remain visible. Finished unread tasks disappear from the compact summary after reading; reading never resolves a pending approval. Each task counts once, including mixed activity.
 - Read receipts require an explicitly opened task panel and a visible row; hover alone does not mark tasks read. Finished rows stay in the full list until cleared.
