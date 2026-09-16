@@ -8,6 +8,7 @@ extension QuotaProvider {
 
 /// A missing reading is an empty track and a dash, never a full or zero quota claim.
 struct QuotaRing: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let provider: QuotaProvider
     let percent: Double?
     var stale = false
@@ -29,7 +30,7 @@ struct QuotaRing: View {
                 .frame(width: size * 0.48, height: size * 0.48)
         }
         .frame(width: size, height: size)
-        .animation(.easeInOut(duration: 0.35), value: percent)
+        .animation(reduceMotion ? nil : .easeInOut(duration: 0.35), value: percent)
         .accessibilityHidden(true)
     }
 }
@@ -209,6 +210,7 @@ struct QuotaNotchView: View {
 /// One selection shares the physical cutout with music. Equal wings keep it centered.
 @MainActor
 struct QuotaPinnedWings: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @ObservedObject private var store = QuotaNotchStore.shared
     @ObservedObject private var music = MusicManager.shared
     let centerWidth: CGFloat
@@ -252,7 +254,7 @@ struct QuotaPinnedWings: View {
                 .accessibilityValue(reading(for: pin))
             }
             .frame(height: height)
-            .animation(.smooth(duration: 0.25), value: showsMusic)
+            .animation(reduceMotion ? nil : .smooth(duration: 0.25), value: showsMusic)
         }
     }
 
