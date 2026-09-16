@@ -162,7 +162,7 @@ struct ContentView: View {
                 transaction.disablesAnimations = true
             }
         }
-        .task { quotaStore.start() }
+        .task { quotaStore.start(); AgentActivityStore.shared.start() }
     }
 
     private var styledNotch: some View {
@@ -211,6 +211,10 @@ struct ContentView: View {
                             .contentShape(Rectangle())
                             .onTapGesture { openFromPointer() }
                         closedAccessoryContent
+                        AgentAccessoryView {
+                            coordinator.currentView = .activity
+                            doOpen()
+                        }
                     }
                 } else {
                     BoringHeader().frame(height: max(24, vm.effectiveClosedNotchHeight))
@@ -225,6 +229,8 @@ struct ContentView: View {
                         NotchHomeView(albumArtNamespace: albumArtNamespace)
                     case .aiUsage:
                         QuotaNotchView()
+                    case .activity:
+                        AgentNotchView()
                     }
                 }
                 .transition(

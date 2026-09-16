@@ -40,7 +40,7 @@ struct SettingsPreviewRunner {
                 color: .systemBlue, isSubscribed: false, isReminder: false)
         }
         for width: CGFloat in [700, 900] {
-            for page in ["General", "Quota", "Media", "Calendar", "Appearance", "System", "About"] {
+            for page in ["General", "Quota", "Activity", "Media", "Calendar", "Appearance", "System", "About"] {
                 UserDefaults.standard.set(page, forKey: "settingsSelectedTab")
                 try capture(SettingsView().environment(\.locale, Locale(identifier: language)), width: width,
                             name: "\(page)-\(Int(width))", output: output)
@@ -59,11 +59,49 @@ struct SettingsPreviewRunner {
             }
         }.formStyle(.grouped).environment(\.locale, Locale(identifier: language)), width: 500,
                     name: "Permissions", output: output)
-        print("Rendered all seven real settings pages at 700/900 widths, scroll positions, paused quotas and permission states: \(language)")
+        let activity = AgentActivityStore.shared
+        let now = Date()
+        let fixtureStates: [AgentRunState] = [.waiting, .waiting, .running, .running, .running, .completed, .failed, .interrupted, .unknown]
+        let fixtures = fixtureStates.enumerated().map { index, state -> AgentSession in
+            var s = AgentSession(id: String(format: "11111111-1111-4111-8111-%012d", index))
+            s.title = index == 0 ? AgentText.t("统一英文设置界面布局与多项目任务状态", "Align English settings and verify concurrent project task states") : AgentText.t("任务 \(index + 1)：验证布局与恢复逻辑", "Task \(index + 1): verify layout and recovery")
+            s.cwd = "/Users/demo/Projects/\(index % 3)/src"
+            s.projectRoot = "/Users/demo/Projects/\(index % 3)"
+            s.projectName = ["QuotaNotch", "A project with a deliberately long name", "Website"][index % 3]
+            s.state = state; s.surface = index % 2 == 0 ? .desktop : .vscode
+            s.turnID = "one"; s.startedAt = now.addingTimeInterval(-Double(150 + index * 90))
+            s.updatedAt = now.addingTimeInterval(-Double(index * 40))
+            if !state.isActive { s.finishedAt = now.addingTimeInterval(-30) }
+            return s
+        }
+        activity.configurePreview(fixtures)
+        precondition(activity.running == 3 && activity.waiting == 2)
+        activity.markAllRead(); precondition(activity.unread.isEmpty)
+        activity.configurePreview(fixtures)
+        activity.dismissFinished(); precondition(activity.visible.count == 5)
+        activity.configurePreview(fixtures)
+        for width: CGFloat in [760, 1000] {
+            for dark in [true, false] {
+                try capture(AgentActivityView().preferredColorScheme(dark ? .dark : .light), width: width,
+                            name: "Tasks-\(Int(width))-\(dark ? "dark" : "light")", output: output)
+            }
+        }
+        try capture(AgentNotchView().padding(18).background(.black).preferredColorScheme(.dark), width: 640,
+                    name: "Tasks-notch", output: output, height: 170)
+        for width: CGFloat in [165, 280, 430] {
+            try capture(PrimaryNotchLayout {
+                Color.black.frame(width: width, height: 32)
+                AgentAccessoryView(open: {})
+            }.background(.black).preferredColorScheme(.dark), width: width,
+                name: "Tasks-accessory-\(Int(width))", output: output, height: 64)
+        }
+        activity.configurePreview([])
+        try capture(AgentActivityView(), width: 760, name: "Tasks-empty", output: output)
+        print("Rendered real settings and task monitor in English/Chinese, narrow/wide and light/dark layouts: \(language)")
     }
 
-    @MainActor private static func capture<V: View>(_ view: V, width: CGFloat, name: String, output: URL) throws {
-        let size = NSSize(width: width, height: 600)
+    @MainActor private static func capture<V: View>(_ view: V, width: CGFloat, name: String, output: URL, height: CGFloat = 600) throws {
+        let size = NSSize(width: width, height: height)
         let host = NSHostingView(rootView: view)
         let window = NSWindow(contentRect: NSRect(origin: .zero, size: size), styleMask: [.titled], backing: .buffered, defer: false)
         window.isReleasedWhenClosed = false
