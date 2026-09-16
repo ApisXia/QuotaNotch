@@ -82,16 +82,6 @@ struct ContentView: View {
         )
     }
 
-    private var taskPanelHeight: CGFloat {
-        guard vm.notchState == .open, coordinator.currentView == .activity else { return openNotchSize.height }
-        let screen = vm.screenUUID.flatMap { NSScreen.screen(withUUID: $0) } ?? NSScreen.main
-        return agentStore.panelHeight(headerHeight: vm.effectiveClosedNotchHeight, screenHeight: screen?.frame.height ?? 900)
-    }
-    private func resizeTaskPanel() {
-        guard vm.notchState == .open else { return }
-        withAnimation(reduceMotion ? nil : .smooth(duration: 0.24)) { vm.notchSize.height = taskPanelHeight }
-    }
-
     private var showQuotaWings: Bool {
         compactPresentation == .quota || compactPresentation == .combined
     }
@@ -170,19 +160,16 @@ struct ContentView: View {
         .onPreferenceChange(AgentWingOffsetKey.self) { taskWingOffset = $0 }
         .onReceive(NotificationCenter.default.publisher(for: .agentOpenNotch)) { _ in
             coordinator.currentView = .activity; agentStore.notchReadEnabled = true
-            if vm.notchState == .closed { doOpen() } else { resizeTaskPanel() }
+            if vm.notchState == .closed { doOpen() }
         }
         .onChange(of: vm.notchState) { _, state in
             if state == .closed {
                 agentStore.notchReadEnabled = false
-                agentStore.panelExpanded = false
                 agentStore.expandedTaskID = nil
-            } else { resizeTaskPanel() }
+            }
         }
-        .onChange(of: taskPanelHeight) { _, _ in resizeTaskPanel() }
         .padding(.bottom, 8)
-        .frame(maxWidth: windowSize.width, maxHeight: max(windowSize.height, vm.notchSize.height + shadowPadding), alignment: .top)
-        .background(AgentNotchWindowSizing(height: max(windowSize.height, vm.notchSize.height + shadowPadding)))
+        .frame(maxWidth: windowSize.width, maxHeight: windowSize.height, alignment: .top)
         .compositingGroup()
         .preferredColorScheme(.dark)
         .environment(\.locale, QuotaLanguage.locale)

@@ -39,7 +39,7 @@ struct AgentNotchView: View {
                                         withAnimation(reduced ? nil : .smooth(duration: 0.24)) { store.toggleInlineDetails(session) }
                                     }
                                     if store.expandedTaskID == session.identity {
-                                        AgentInlineDetails(session: session).transition(.opacity)
+                                        AgentInlineDetails(session: session, compact: true).transition(.opacity)
                                     }
                                 }.id(session.identity)
                             }

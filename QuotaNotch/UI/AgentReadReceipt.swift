@@ -69,7 +69,20 @@ struct AgentSessionDetails: View {
 /// Details participate in the parent list's scrolling; they never create another window or scroller.
 struct AgentInlineDetails: View {
     let session: AgentSession
+    var compact = false
     var body: some View {
+        if compact {
+            VStack(alignment: .leading, spacing: 5) {
+                if !session.userPrompt.isEmpty {
+                    AgentCompactDetailField(title: AgentText.t("输入", "Input"), text: session.userPrompt)
+                }
+                AgentCompactDetailField(title: AgentText.t("最近", "Latest"),
+                    text: session.activityDetail.isEmpty ? AgentText.activity(session, now: AgentActivityStore.shared.now) : session.activityDetail)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, 9).padding(.vertical, 6)
+            .background(Color.primary.opacity(0.035), in: RoundedRectangle(cornerRadius: 5))
+        } else {
         VStack(alignment: .leading, spacing: 8) {
             Label(AgentText.activity(session, now: AgentActivityStore.shared.now), systemImage: "circle.fill")
                 .font(.system(size: 11)).foregroundStyle(AgentText.color(session.state))
@@ -85,24 +98,28 @@ struct AgentInlineDetails: View {
                 .font(.system(size: 10)).foregroundStyle(.secondary).textSelection(.enabled)
         }.fixedSize(horizontal: false, vertical: true).frame(maxWidth: .infinity, alignment: .leading)
         .padding(10).background(Color.primary.opacity(0.035), in: RoundedRectangle(cornerRadius: 6))
+        }
     }
 }
 
-struct AgentNotchWindowSizing: NSViewRepresentable {
-    let height: CGFloat
-    func makeNSView(context: Context) -> SizingView { SizingView() }
-    func updateNSView(_ view: SizingView, context: Context) { view.targetHeight = height; view.resize() }
-    final class SizingView: NSView {
-        var targetHeight: CGFloat = 210
-        override func hitTest(_ point: NSPoint) -> NSView? { nil }
-        override func viewDidMoveToWindow() { super.viewDidMoveToWindow(); resize() }
-        func resize() {
-            DispatchQueue.main.async { [weak self] in
-                guard let self, let window = self.window, abs(window.frame.height - self.targetHeight) > 0.5 else { return }
-                var frame = window.frame
-                frame.origin.y = frame.maxY - self.targetHeight
-                frame.size.height = self.targetHeight
-                window.setFrame(frame, display: true)
+/// Long text expands inside the existing list; the notch panel itself always keeps its height.
+private struct AgentCompactDetailField: View {
+    let title: String
+    let text: String
+    @State private var expanded = false
+    private var canExpand: Bool { text.count > 80 || text.contains("\n") }
+    var body: some View {
+        HStack(alignment: .top, spacing: 6) {
+            Text(title).font(.system(size: 10)).foregroundStyle(.secondary).frame(width: 34, alignment: .leading)
+            Text(text).font(.system(size: 11)).textSelection(.enabled)
+                .lineLimit(expanded ? nil : 2).fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            if canExpand {
+                Button { expanded.toggle() } label: {
+                    Image(systemName: expanded ? "chevron.up" : "chevron.down")
+                        .font(.system(size: 9, weight: .medium)).frame(width: 14, height: 14)
+                }.buttonStyle(.plain).foregroundStyle(.secondary)
+                    .help(expanded ? AgentText.t("收起全文", "Collapse text") : AgentText.t("展开全文", "Expand text"))
             }
         }
     }

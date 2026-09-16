@@ -27,9 +27,7 @@ import UserNotifications
     @Published var compactExpanded = false
     @Published var notchReadEnabled = false
     @Published var filter: AgentFilter = .all
-    @Published var panelExpanded = false
     @Published var expandedTaskID: String?
-    @Published private(set) var panelRowCapacity = 3
     @Published private var notchOrder: [String] = []
     var notchSessions: [AgentSession] {
         let ranks = Dictionary(uniqueKeysWithValues: notchOrder.enumerated().map { ($0.element, $0.offset) })
@@ -42,16 +40,10 @@ import UserNotifications
     }
     func selectNotchFilter(_ value: AgentFilter) {
         filter = value; notchReadEnabled = true
-        panelExpanded = value == .all
-        panelRowCapacity = panelExpanded ? min(8, max(3, visible.filter { value.contains($0.state) }.count)) : 3
         if let id = expandedTaskID, !visible.contains(where: { $0.identity == id && value.contains($0.state) }) { expandedTaskID = nil }
     }
     func toggleInlineDetails(_ session: AgentSession) {
         expandedTaskID = expandedTaskID == session.identity ? nil : session.identity
-    }
-    func panelHeight(headerHeight: CGFloat, screenHeight: CGFloat) -> CGFloat {
-        let requested = max(190, headerHeight + 42 + CGFloat(panelExpanded ? panelRowCapacity : 3) * 38 + (expandedTaskID == nil ? 0 : 180))
-        return min(requested, max(190, min(480, screenHeight * 0.55)))
     }
     private var polling: Task<Void, Never>?
     private var repository: AgentActivityRepository

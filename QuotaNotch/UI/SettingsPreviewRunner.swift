@@ -313,7 +313,7 @@ struct SettingsPreviewRunner {
 
     @MainActor private static func captureTaskPanel(output: URL, fixtures: [AgentSession]) throws {
         let store = AgentActivityStore.shared
-        store.configurePreview(fixtures); store.panelExpanded = false; store.expandedTaskID = nil
+        store.configurePreview(fixtures); store.expandedTaskID = nil
         store.filter = .all; store.retainNotchOrder(); store.notchReadEnabled = false
         let vm = BoringViewModel(); vm.hideOnClosed = false
         let coordinator = BoringViewCoordinator.shared
@@ -335,12 +335,14 @@ struct SettingsPreviewRunner {
             try bitmap.representation(using: .png, properties: [:])!.write(to: output.appendingPathComponent(name + ".png"))
             verifyPresentation(abs(window.frame.maxY - top) < 1 && window.frame.width == width, "Task panel moved away from its top edge or changed width")
             verifyPresentation(NSApp.windows.filter(\.isVisible).count == windowCount, "Task interaction opened an extra window")
+            verifyPresentation(vm.notchSize.height == initialHeight && window.frame.height == windowSize.height,
+                               "Task filtering or inline details changed the fixed panel height")
         }
         try snapshot("Task-panel-compact")
         let unread = store.unread.count
         store.selectNotchFilter(.all)
         try snapshot("Task-panel-all")
-        verifyPresentation(vm.notchSize.height > initialHeight, "All did not expand the same panel")
+        verifyPresentation(vm.notchSize.height == initialHeight, "All resized the fixed panel")
         verifyPresentation(store.unread.count == unread, "Selecting All marked unseen tasks read")
         let scrolls = descendants(host).compactMap { $0 as? NSScrollView }
         verifyPresentation(scrolls.contains { ($0.documentView?.bounds.height ?? 0) > $0.contentView.bounds.height }, "All tasks are not scrollable")
@@ -350,6 +352,11 @@ struct SettingsPreviewRunner {
         store.toggleInlineDetails(fixtures[1])
         try snapshot("Task-panel-second-inline")
         verifyPresentation(store.expandedTaskID == fixtures[1].identity, "Only one inline row should be expanded")
+        var longTask = fixtures[1]
+        longTask.userPrompt = String(repeating: AgentText.t("检查多个项目的任务状态和界面对齐。", "Check concurrent project task states and alignment. "), count: 12)
+        longTask.activityDetail = "exec_command\n" + String(repeating: "swift test --parallel\n", count: 5)
+        store.configurePreview([longTask] + fixtures.filter { $0.identity != longTask.identity })
+        try snapshot("Task-panel-long-text")
         let originalOrder = store.notchSessions.map(\.identity)
         var newTask = fixtures[0]
         newTask.id = "22222222-2222-4222-8222-222222222222"
@@ -362,7 +369,7 @@ struct SettingsPreviewRunner {
         vm.close(); settle()
         verifyPresentation(abs(window.frame.height - windowSize.height) < 1, "Closing left an oversized input window")
         window.orderOut(nil); window.contentView = nil; window.close(); vm.destroy()
-        store.configurePreview(fixtures); store.expandedTaskID = nil; store.panelExpanded = false
+        store.configurePreview(fixtures); store.expandedTaskID = nil
     }
 
     @MainActor private static func capture<V: View>(_ view: V, width: CGFloat, name: String, output: URL, height: CGFloat = 600) throws {
