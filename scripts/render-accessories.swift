@@ -16,7 +16,13 @@ struct RenderAccessories {
                     precondition(expanded.pixelsHigh == normal.pixelsHigh + count * 33 * 2, "Unexpected accessory height")
                     // Compare content before clipping: the bottom silhouette intentionally changes.
                     for y in 0..<normal.pixelsHigh { for x in 0..<normal.pixelsWide {
-                        precondition(normal.colorAt(x: x, y: y) == expanded.colorAt(x: x, y: y), "Primary content moved")
+                        if normal.colorAt(x: x, y: y) != expanded.colorAt(x: x, y: y) {
+                            for (name, bitmap) in [("Accessory-Before", normal), ("Accessory-After", expanded)] {
+                                try bitmap.representation(using: .png, properties: [:])!.write(to:
+                                    URL(fileURLWithPath: "build/QuotaNotch-dist/\(name).png"))
+                            }
+                            fatalError("Primary mismatch: width=\(width) mode=\(mode) rows=\(count) x=\(x) y=\(y) before=\(String(describing: normal.colorAt(x: x, y: y))) after=\(String(describing: expanded.colorAt(x: x, y: y)))")
+                        }
                     } }
                 }
             }

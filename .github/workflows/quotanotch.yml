@@ -63,6 +63,7 @@ jobs:
         if: ${{ inputs.preview_only == true }}
         run: bash scripts/render-refinement.sh
       - name: Upload native UX preview
+        if: ${{ always() }}
         uses: actions/upload-artifact@v4
         with:
           name: Compact-UX-${{ github.sha }}
