@@ -64,6 +64,7 @@ struct AgentPaperGlyph: View {
 struct AgentTaskStateMark: View {
     static let size: CGFloat = 6
     let state: AgentRunState
+    var animate = true
     @Environment(\.accessibilityReduceMotion) private var reduced
     private let stroke = StrokeStyle(lineWidth: 0.85, lineCap: .round, lineJoin: .round)
 
@@ -78,8 +79,8 @@ struct AgentTaskStateMark: View {
     @ViewBuilder private var glyph: some View {
         switch state {
         case .running:
-            TimelineView(.animation(minimumInterval: 1.0 / 15, paused: reduced)) { timeline in
-                let angle = reduced ? 0 : timeline.date.timeIntervalSinceReferenceDate
+            TimelineView(.animation(minimumInterval: 1.0 / 15, paused: reduced || !animate)) { timeline in
+                let angle = reduced || !animate ? 0 : timeline.date.timeIntervalSinceReferenceDate
                     .truncatingRemainder(dividingBy: 2.4) / 2.4 * 360
                 Circle().trim(from: 0.12, to: 0.9).stroke(style: stroke)
                     .padding(0.5).rotationEffect(.degrees(angle))

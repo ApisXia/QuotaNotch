@@ -113,14 +113,13 @@ struct SettingsPreviewRunner {
             try capture(VStack(alignment: .leading, spacing: 14) {
                 ForEach(AgentRunState.allCases, id: \.self) { state in
                     HStack(spacing: 18) {
-                        AgentTaskStateMark(state: state).frame(width: 12)
-                        AgentTaskStateMark(state: state).scaleEffect(3).frame(width: 22, height: 22)
+                        AgentTaskStateMark(state: state, animate: !reduced).frame(width: 12)
+                        AgentTaskStateMark(state: state, animate: !reduced).scaleEffect(3).frame(width: 22, height: 22)
                         Text(AgentText.state(state)).font(.system(size: 11)).foregroundStyle(.white)
                         Spacer()
                     }
                 }
-            }.padding(16).background(.black).preferredColorScheme(.dark)
-                .environment(\.accessibilityReduceMotion, reduced), width: 300,
+            }.padding(16).background(.black).preferredColorScheme(.dark), width: 300,
                 name: "Task-state-marks-\(reduced ? "still" : "motion")", output: output, height: 250)
         }
         var recent = fixtures[2]
