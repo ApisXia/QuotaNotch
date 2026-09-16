@@ -139,7 +139,7 @@ jobs:
         with:
           name: QuotaNotch-macOS-${{ github.sha }}
           path: release-files
-      - name: Publish QuotaNotch 1.01 from the verified main build
+      - name: Publish QuotaNotch 1.02 from the verified main build
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
