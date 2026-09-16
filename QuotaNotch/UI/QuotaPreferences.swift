@@ -72,8 +72,8 @@ struct QuotaPreferences: View {
                 set: { value in store.updatePins { $0.showsNumbers = value } }))
             Text("数字表示剩余百分比。固定窗口在 AI 额度页选择；音乐播放时左侧显示封面与动效，右侧显示额度。")
                 .font(.caption).foregroundStyle(.secondary)
-            if store.pins.selected != nil {
-                Text("Manual fallback: \(pinTitle(store.pins.selected!))")
+            if let manual = store.pins.selected {
+                Text("Manual fallback: \(pinTitle(manual))")
                     .font(.caption).fixedSize(horizontal: false, vertical: true)
                 Button("Clear manual selection") { store.updatePins { $0.selected = nil } }
             }

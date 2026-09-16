@@ -62,8 +62,11 @@ final class QuotaNotchStore: ObservableObject {
         notificationsDenied = settings.authorizationStatus == .denied
         if notificationsDenied {
             notificationStatus = QuotaText.localized("请在系统设置中允许通知")
+        } else if UserDefaults.standard.bool(forKey: "quotaNotifications") {
+            let allowed = settings.authorizationStatus == .authorized || settings.authorizationStatus == .provisional
+            notificationStatus = QuotaText.localized(allowed ? "通知已启用" : "请在系统设置中允许通知")
         } else {
-            notificationStatus = QuotaText.localized(UserDefaults.standard.bool(forKey: "quotaNotifications") ? "通知已启用" : "Notifications are off. Your threshold is saved.")
+            notificationStatus = QuotaText.localized("Notifications are off. Your threshold is saved.")
         }
     }
 
@@ -206,6 +209,9 @@ final class QuotaNotchStore: ObservableObject {
     }
 
     func refresh(providerOnly: QuotaProvider? = nil) async {
+        #if SETTINGS_PREVIEW
+        return // This executable only renders fixture data, even if an action requests a refresh.
+        #endif
         guard enabled, !refreshing else { return }
         let requestGeneration = generation
         now = Date()

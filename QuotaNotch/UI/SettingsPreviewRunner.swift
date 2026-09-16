@@ -10,7 +10,7 @@ import EventKit
 struct SettingsPreviewRunner {
     @MainActor static func main() throws {
         let app = NSApplication.shared
-        app.setActivationPolicy(.accessory)
+        app.setActivationPolicy(.regular)
         let language = UserDefaults.standard.stringArray(forKey: "AppleLanguages")?.first ?? "en"
         let output = URL(fileURLWithPath: "build/Settings-previews/\(language)")
         try FileManager.default.createDirectory(at: output, withIntermediateDirectories: true)
@@ -21,7 +21,13 @@ struct SettingsPreviewRunner {
         Defaults[.showCalendar] = true
         Defaults[.useCustomAccentColor] = true
         Defaults[.enableSneakPeek] = true
+        Defaults[.mediaController] = .youtubeMusic
         QuotaNotchStore.shared.configureSettingsPreview(paused: false)
+        let store = QuotaNotchStore.shared
+        let manual = store.pins.selected
+        store.setProvider(.claude, enabled: false)
+        precondition(store.pins.selected == manual && store.activePin == nil, "Pausing a service must preserve its manual choice without displaying it")
+        store.configureSettingsPreview(paused: false)
         let calendar = CalendarManager.shared
         calendar.calendarAuthorizationStatus = .fullAccess
         calendar.reminderAuthorizationStatus = .notDetermined
@@ -57,8 +63,18 @@ struct SettingsPreviewRunner {
         window.isReleasedWhenClosed = false
         window.contentView = host
         window.setContentSize(size)
-        window.orderFrontRegardless()
+        NSApp.activate(ignoringOtherApps: true)
+        window.makeKeyAndOrderFront(nil)
         settle()
+        if name.hasPrefix("General") {
+            Defaults[.notchHeightMode] = .matchMenuBar
+            Defaults[.nonNotchHeightMode] = .matchRealNotchSize
+            settle()
+            Defaults[.notchHeightMode] = .custom
+            Defaults[.nonNotchHeightMode] = .custom
+            settle()
+            precondition(Defaults[.notchHeight] == 35 && Defaults[.nonNotchHeight] == 29, "Switching sizing modes lost custom heights")
+        }
         let scrollViews = descendants(host).compactMap { $0 as? NSScrollView }
         // The sidebar has its own scroll view; select the widest one for page content.
         let scroll = scrollViews.max { $0.frame.width < $1.frame.width }

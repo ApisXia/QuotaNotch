@@ -29,7 +29,7 @@ struct SettingsView: View {
                 NavigationLink(value: "About") { Label("关于", systemImage: "info.circle") }
             }
             .listStyle(.sidebar)
-            .navigationSplitViewColumnWidth(min: 170, ideal: 180, max: 220)
+            .navigationSplitViewColumnWidth(min: 200, ideal: 200, max: 240)
         } detail: {
             Group {
                 switch selectedTab {
@@ -94,11 +94,11 @@ struct GeneralSettings: View {
                 }
             }
             Section("System features") {
-                Defaults.Toggle("Show menu bar icon", key: .menubarIcon)
-                LaunchAtLogin.Toggle("Launch at login")
+                Defaults.Toggle(key: .menubarIcon) { Text("Show menu bar icon").fixedSize(horizontal: false, vertical: true) }
+                LaunchAtLogin.Toggle(QuotaText.localized("Launch at login"))
             }
             Section("Displays") {
-                Defaults.Toggle("Show on all displays", key: .showOnAllDisplays)
+                Defaults.Toggle(key: .showOnAllDisplays) { Text("Show on all displays").fixedSize(horizontal: false, vertical: true) }
                     .onChange(of: showOnAllDisplays) {
                         NotificationCenter.default.post(name: .showOnAllDisplaysChanged, object: nil)
                     }
@@ -114,7 +114,7 @@ struct GeneralSettings: View {
                     }
                 }
                 .disabled(showOnAllDisplays)
-                Defaults.Toggle("Automatically switch displays", key: .automaticallySwitchDisplay)
+                Defaults.Toggle(key: .automaticallySwitchDisplay) { Text("Automatically switch displays").fixedSize(horizontal: false, vertical: true) }
                     .onChange(of: automaticallySwitchDisplay) {
                         NotificationCenter.default.post(name: .automaticallySwitchDisplayChanged, object: nil)
                     }
@@ -158,16 +158,16 @@ struct GeneralSettings: View {
                 SettingsHint("Custom heights are remembered when switching modes.")
             }
             Section("Notch behavior") {
-                Defaults.Toggle("Open notch on hover", key: .openNotchOnHover)
+                Defaults.Toggle(key: .openNotchOnHover) { Text("Open notch on hover").fixedSize(horizontal: false, vertical: true) }
                 if openNotchOnHover {
                     SettingsSlider("Hover delay", value: $minimumHoverDuration, range: 0...1, step: 0.1, suffix: "s", decimals: 1)
                 }
-                Defaults.Toggle("Enable haptic feedback", key: .enableHaptics)
+                Defaults.Toggle(key: .enableHaptics) { Text("Enable haptic feedback").fixedSize(horizontal: false, vertical: true) }
                 Toggle("Remember last tab", isOn: $coordinator.openLastTabByDefault)
-                Defaults.Toggle("Extend hover area", key: .extendHoverArea)
-                Defaults.Toggle("Cover menu bar behind the notch", key: .hideTitleBar)
-                Defaults.Toggle("Show notch on lock screen", key: .showOnLockScreen)
-                Defaults.Toggle("Hide from screen recording", key: .hideFromScreenRecording)
+                Defaults.Toggle(key: .extendHoverArea) { Text("Extend hover area").fixedSize(horizontal: false, vertical: true) }
+                Defaults.Toggle(key: .hideTitleBar) { Text("Cover menu bar behind the notch").fixedSize(horizontal: false, vertical: true) }
+                Defaults.Toggle(key: .showOnLockScreen) { Text("Show notch on lock screen").fixedSize(horizontal: false, vertical: true) }
+                Defaults.Toggle(key: .hideFromScreenRecording) { Text("Hide from screen recording").fixedSize(horizontal: false, vertical: true) }
             }
             Section("快捷键") {
                 SettingsField("展开／收起刘海") { KeyboardShortcuts.Recorder(for: .toggleNotchOpen) }
@@ -201,7 +201,7 @@ struct HUD: View {
     var body: some View {
         Form {
             Section("Volume & Brightness") {
-                Defaults.Toggle("Replace system HUD", key: .hudReplacement)
+                Defaults.Toggle(key: .hudReplacement) { Text("Replace system HUD").fixedSize(horizontal: false, vertical: true) }
                     .toggleStyle(.switch)
                     .disabled(!accessibilityAuthorized && !hudReplacement)
                 SettingsHint("Volume and brightness appear below the current notch content in every display mode.")
@@ -226,17 +226,17 @@ struct HUD: View {
                         Text("Gradient").tag(true)
                     }
                 }
-                Defaults.Toggle("Enable glowing effect", key: .systemEventIndicatorShadow)
-                Defaults.Toggle("Tint progress bar with accent color", key: .systemEventIndicatorUseAccent)
-                Defaults.Toggle("Show percentage", key: .showClosedNotchHUDPercentage)
+                Defaults.Toggle(key: .systemEventIndicatorShadow) { Text("Enable glowing effect").fixedSize(horizontal: false, vertical: true) }
+                Defaults.Toggle(key: .systemEventIndicatorUseAccent) { Text("Tint progress bar with accent color").fixedSize(horizontal: false, vertical: true) }
+                Defaults.Toggle(key: .showClosedNotchHUDPercentage) { Text("Show percentage").fixedSize(horizontal: false, vertical: true) }
             }
             .disabled(!hudReplacement || !accessibilityAuthorized)
             Section("Battery") {
-                Defaults.Toggle("Show battery indicator", key: .showBatteryIndicator)
-                Defaults.Toggle("Show power status notifications", key: .showPowerStatusNotifications)
-                Defaults.Toggle("Show battery percentage", key: .showBatteryPercentage)
+                Defaults.Toggle(key: .showBatteryIndicator) { Text("Show battery indicator").fixedSize(horizontal: false, vertical: true) }
+                Defaults.Toggle(key: .showPowerStatusNotifications) { Text("Show power status notifications").fixedSize(horizontal: false, vertical: true) }
+                Defaults.Toggle(key: .showBatteryPercentage) { Text("Show battery percentage").fixedSize(horizontal: false, vertical: true) }
                     .disabled(!showBatteryIndicator && !showPowerStatusNotifications)
-                Defaults.Toggle("Show power status icons", key: .showPowerStatusIcons)
+                Defaults.Toggle(key: .showPowerStatusIcons) { Text("Show power status icons").fixedSize(horizontal: false, vertical: true) }
                     .disabled(!showBatteryIndicator)
                 SettingsHint("Power status notifications work independently of the battery indicator. Status icons are always shown in notifications.")
             }
@@ -302,9 +302,9 @@ struct Media: View {
                 MusicSlotConfigurationView()
             }
             Section("Player Appearance") {
-                Defaults.Toggle("Colored spectrogram", key: .coloredSpectrogram)
-                Defaults.Toggle("Player tinting", key: .playerColorTinting)
-                Defaults.Toggle("Enable blur effect behind album art", key: .lightingEffect)
+                Defaults.Toggle(key: .coloredSpectrogram) { Text("Colored spectrogram").fixedSize(horizontal: false, vertical: true) }
+                Defaults.Toggle(key: .playerColorTinting) { Text("Player tinting").fixedSize(horizontal: false, vertical: true) }
+                Defaults.Toggle(key: .lightingEffect) { Text("Enable blur effect behind album art").fixedSize(horizontal: false, vertical: true) }
                 SettingsField("Slider color") {
                     Picker("Slider color", selection: $sliderColor) {
                         ForEach(SliderColorEnum.allCases, id: \.self) { Text(LocalizedStringKey($0.rawValue)).tag($0) }
@@ -327,13 +327,13 @@ struct CalendarSettings: View {
     var body: some View {
         Form {
             Section("Display") {
-                Defaults.Toggle("Show calendar", key: .showCalendar)
+                Defaults.Toggle(key: .showCalendar) { Text("Show calendar").fixedSize(horizontal: false, vertical: true) }
                 if !showCalendar { SettingsHint("Preferences are saved and apply when this feature is enabled.") }
                 Group {
-                    Defaults.Toggle("Hide completed reminders", key: .hideCompletedReminders)
-                    Defaults.Toggle("Hide all-day events", key: .hideAllDayEvents)
-                    Defaults.Toggle("Auto-scroll to next event", key: .autoScrollToNextEvent)
-                    Defaults.Toggle("Always show full event titles", key: .showFullEventTitles)
+                    Defaults.Toggle(key: .hideCompletedReminders) { Text("Hide completed reminders").fixedSize(horizontal: false, vertical: true) }
+                    Defaults.Toggle(key: .hideAllDayEvents) { Text("Hide all-day events").fixedSize(horizontal: false, vertical: true) }
+                    Defaults.Toggle(key: .autoScrollToNextEvent) { Text("Auto-scroll to next event").fixedSize(horizontal: false, vertical: true) }
+                    Defaults.Toggle(key: .showFullEventTitles) { Text("Always show full event titles").fixedSize(horizontal: false, vertical: true) }
                 }.disabled(!showCalendar)
             }
             Section("Calendars") {
@@ -583,10 +583,7 @@ struct Appearance: View {
             } header: {
                 Text("Accent color")
             } footer: {
-                Text("Choose between your system accent color or customize it with your own selection.")
-                    .multilineTextAlignment(.leading)
-                    .foregroundStyle(.secondary)
-                    .font(.caption)
+                SettingsHint("Choose between your system accent color or customize it with your own selection.")
             }
             .onAppear {
                 initializeAccentColorState()
@@ -594,7 +591,7 @@ struct Appearance: View {
             
             Section("General") {
                 Toggle("Always show tabs", isOn: $coordinator.alwaysShowTabs)
-                Defaults.Toggle("Show settings icon in notch", key: .settingsIconInNotch)
+                Defaults.Toggle(key: .settingsIconInNotch) { Text("Show settings icon in notch").fixedSize(horizontal: false, vertical: true) }
             }
             Section {
                 Defaults.Toggle(key: .enableShadow) {

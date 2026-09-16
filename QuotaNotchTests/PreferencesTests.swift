@@ -50,6 +50,7 @@ final class SettingsSelectionTests: XCTestCase {
     }
     func testClickingAnExistingControlDoesNotDuplicateIt() {
         XCTAssertEqual(SettingsSelection.inserting("play", into: ["", "play", "next"], empty: ""), ["", "play", "next"])
+        XCTAssertEqual(SettingsSelection.inserting("play", into: ["play", "play", "next"], empty: ""), ["play", "", "next"])
     }
     func testDropMovesExistingControlAndClearsLegacyDuplicates() {
         XCTAssertEqual(SettingsSelection.inserting("play", into: ["play", "play", "next"], empty: "", destination: 2), ["", "", "play"])

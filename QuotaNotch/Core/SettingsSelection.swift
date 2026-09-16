@@ -9,8 +9,8 @@ enum SettingsSelection {
         if let destination {
             guard slots.indices.contains(destination) else { return nil }
             target = destination
-        } else if slots.contains(value) {
-            return slots
+        } else if let existing = slots.firstIndex(of: value) {
+            target = existing
         } else if let available = slots.firstIndex(of: empty) {
             target = available
         } else {
