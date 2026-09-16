@@ -5,7 +5,10 @@ import SwiftUI
 struct AgentNotchView: View {
     @ObservedObject private var store = AgentActivityStore.shared
     @Environment(\.accessibilityReduceMotion) private var reduced
-    private var tasks: [AgentSession] { store.notchSessions.filter { store.filter.contains($0.state) } }
+    private var tasks: [AgentSession] {
+        // Keep a row being read in place if its live status leaves the current filter.
+        store.notchSessions.filter { store.filter.contains($0.state) || store.expandedTaskID == $0.identity }
+    }
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             HStack(spacing: 8) {
