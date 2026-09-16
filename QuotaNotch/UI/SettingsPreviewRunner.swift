@@ -251,6 +251,7 @@ struct SettingsPreviewRunner {
                 if scenario.music { expected["music"] = "widget" }
                 if scenario.tasks { expected["task"] = shared && !expanded ? "minimal" : "widget" }
                 if shared { expected["divider"] = "switchable" }
+                if scenario.tasks && !scenario.quota && !scenario.music { expected["task-summary"] = "widget" }
                 verifyPresentation(renderedModules == expected,
                     "Wrong presentation in \(layout), height \(headerHeight), selection \(expanded): \(renderedModules), expected \(expected)")
                 modeAudit.append(["case": layout, "height": headerHeight, "taskSelected": expanded, "rendered": renderedModules])
@@ -357,6 +358,14 @@ struct SettingsPreviewRunner {
         longTask.activityDetail = "exec_command\n" + String(repeating: "swift test --parallel\n", count: 5)
         store.configurePreview([longTask] + fixtures.filter { $0.identity != longTask.identity })
         try snapshot("Task-panel-long-text")
+        // Reading keeps the current row stable, then removes it when browsing ends.
+        if let finished = store.visible.first(where: { !$0.state.isActive }) {
+            store.markRead(finished, keepVisible: true)
+            verifyPresentation(store.visible.contains { $0.identity == finished.identity }, "Reading removed the row mid-browse")
+            store.finishReading()
+            verifyPresentation(!store.visible.contains { $0.identity == finished.identity }, "All retained a read historical session")
+        }
+        store.configurePreview(fixtures); store.retainNotchOrder()
         let originalOrder = store.notchSessions.map(\.identity)
         var newTask = fixtures[0]
         newTask.id = "22222222-2222-4222-8222-222222222222"

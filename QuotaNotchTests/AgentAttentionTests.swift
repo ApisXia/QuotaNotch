@@ -107,3 +107,32 @@ final class ClaudeActivityTests: XCTestCase {
         XCTAssertEqual(replaced.sessions.first?.projectName, "demo")
     }
 }
+
+final class AgentCurrentSessionsTests: XCTestCase {
+    func testNewTurnReplacesOldResultWithoutMergingProjectsOrProviders() {
+        let old = AgentSession(id: "one", state: .completed, turnID: "old", updatedAt: Date(timeIntervalSince1970: 1))
+        var current = old; current.state = .running; current.turnID = "new"; current.updatedAt = Date(timeIntervalSince1970: 2)
+        var other = old; other.id = "two"
+        var claude = current; claude.provider = .claude
+        let latest = AgentCurrentSessions.latest([current, old, other, claude])
+        XCTAssertEqual(latest.count, 3)
+        XCTAssertEqual(latest.first { $0.identity == current.identity }, current)
+    }
+    func testReadHistoryLeavesButActiveSessionsStay() {
+        for state in AgentRunState.allCases {
+            let session = AgentSession(id: "one", state: state)
+            XCTAssertEqual(AgentCurrentSessions.includes(session, acknowledged: [:]), state.isActive || state.isUnreadEvent)
+            XCTAssertEqual(AgentCurrentSessions.includes(session, acknowledged: [session.identity: session.eventID]), state.isActive)
+        }
+    }
+    func testReadingRetentionIsBoundToCurrentEvent() {
+        var session = AgentSession(id: "one", state: .completed, turnID: "old")
+        let read = [session.identity: session.eventID]
+        XCTAssertTrue(AgentCurrentSessions.includes(session, acknowledged: read, retained: read))
+        XCTAssertFalse(AgentCurrentSessions.includes(session, acknowledged: read))
+        session.turnID = "new"
+        XCTAssertTrue(AgentCurrentSessions.includes(session, acknowledged: read), "A new result must be unread")
+        let newRead = [session.identity: session.eventID]
+        XCTAssertFalse(AgentCurrentSessions.includes(session, acknowledged: newRead, retained: read), "An old reading receipt cannot retain a later read event")
+    }
+}

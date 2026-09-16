@@ -53,6 +53,7 @@ struct AgentNotchView: View {
             }
         }
         .onAppear { store.retainNotchOrder() }
+        .onDisappear { store.finishReading() }
         .onChange(of: store.visible.map(\.identity)) { _, _ in store.retainNotchOrder() }
         .padding(.horizontal, 5).frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
     }
@@ -241,6 +242,7 @@ struct AgentActivityView: View {
             Button(AgentText.t("好", "OK")) { store.actionMessage = nil }
         } message: { Text(store.actionMessage ?? "") }
         .task { store.start() }
+        .onDisappear { store.finishReading() }
     }
 
     private var projectSummary: String {

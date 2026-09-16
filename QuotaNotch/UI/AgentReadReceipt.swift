@@ -34,7 +34,7 @@ struct AgentReadReceipt: NSViewRepresentable {
                   visibleRect.width >= bounds.width * 0.8, visibleRect.height >= bounds.height * 0.8 else { visibleSince = nil; return }
             if visibleSince == nil { visibleSince = Date() }
             guard Date().timeIntervalSince(visibleSince!) >= 0.85 else { return }
-            AgentActivityStore.shared.markRead(session); acknowledged = true
+            AgentActivityStore.shared.markRead(session, keepVisible: true); acknowledged = true
         }
         deinit { timer?.invalidate() }
     }

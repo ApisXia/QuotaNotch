@@ -240,3 +240,53 @@ extension View {
         #endif
     }
 }
+
+/// Task-only layout: the task glyph and a two-line summary flank the physical camera.
+struct AgentTaskOnlyWings: View {
+    let centerWidth: CGFloat
+    let height: CGFloat
+    let open: () -> Void
+    @ObservedObject private var store = AgentActivityStore.shared
+    @State private var selectedID: String?
+    @State private var selectedAt = Date.distantPast
+    private var iconWidth: CGFloat { max(0, height - 12) }
+    private var textWidth: CGFloat { 112 }
+    private var candidates: [AgentSession] {
+        store.visible.filter { $0.state.isActive || store.isUnread($0) }.sorted {
+            if $0.state.priority != $1.state.priority { return $0.state.priority < $1.state.priority }
+            return $0.updatedAt > $1.updatedAt
+        }
+    }
+    private var selected: AgentSession? { candidates.first { $0.identity == selectedID } ?? candidates.first }
+    var body: some View {
+        HStack(spacing: QuotaCompactMetrics.spacing) {
+            AgentCompactDock(primaryWidth: 0, height: height, anchorWidth: iconWidth, widgetWidth: iconWidth, open: open) { EmptyView() }
+            Color.clear.frame(width: centerWidth, height: height)
+            Button(action: open) {
+                VStack(alignment: .leading, spacing: 1) {
+                    if let session = selected {
+                        Text(session.projectName.isEmpty ? session.displayTitle : session.projectName)
+                            .font(.system(size: height < 28 ? 9 : 10, weight: .medium)).foregroundStyle(.white)
+                        Text(AgentText.activity(session, now: store.now))
+                            .font(.system(size: height < 28 ? 8 : 9)).foregroundStyle(AgentText.color(session.state))
+                    }
+                }
+                .lineLimit(1).truncationMode(.tail)
+                .frame(width: textWidth, height: height, alignment: .leading)
+                .contentShape(Rectangle()).auditNotchModule("task-summary")
+            }.buttonStyle(.plain)
+        }
+        .frame(height: height)
+        .preference(key: AgentWingOffsetKey.self, value: (textWidth - iconWidth) / 2)
+        .onAppear { selectSummary() }
+        .onChange(of: store.now) { _, _ in selectSummary() }
+        .onChange(of: candidates.map(\.eventID)) { _, _ in selectSummary() }
+    }
+    private func selectSummary() {
+        guard let next = candidates.first else { selectedID = nil; return }
+        let current = candidates.first { $0.identity == selectedID }
+        if current == nil || next.state.priority < current!.state.priority || Date().timeIntervalSince(selectedAt) >= 4 {
+            if selectedID != next.identity { selectedID = next.identity; selectedAt = Date() }
+        }
+    }
+}

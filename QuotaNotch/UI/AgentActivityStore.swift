@@ -24,6 +24,7 @@ import UserNotifications
     }
     @Published private var acknowledged: [String: String]
     @Published private var dismissed: [String: String]
+    @Published private var retainedReadEvents: [String: String] = [:]
     @Published var compactExpanded = false
     @Published var notchReadEnabled = false
     @Published var filter: AgentFilter = .all
@@ -77,7 +78,13 @@ import UserNotifications
         #endif
     }
 
-    var visible: [AgentSession] { sessions.filter { dismissed[$0.identity] != $0.eventID || $0.state.isActive } }
+    var visible: [AgentSession] {
+        sessions.filter {
+            ($0.state.isActive || dismissed[$0.identity] != $0.eventID)
+                && AgentCurrentSessions.includes($0, acknowledged: acknowledged, retained: retainedReadEvents)
+        }
+    }
+    func finishReading() { retainedReadEvents = [:] }
     var running: Int { visible.filter { $0.state == .running }.count }
     var waiting: Int { visible.filter { $0.state == .waiting }.count }
     var unread: [AgentSession] {
@@ -87,7 +94,8 @@ import UserNotifications
     var attention: AgentAttentionSummary { AgentAttentionSummary.make(visible, acknowledged: acknowledged) }
     var showAccessory: Bool { enabled && attention.isVisible }
     func isUnread(_ session: AgentSession) -> Bool { session.state.isUnreadEvent && acknowledged[session.identity] != session.eventID }
-    func markRead(_ session: AgentSession) {
+    func markRead(_ session: AgentSession, keepVisible: Bool = false) {
+        if keepVisible { retainedReadEvents[session.identity] = session.eventID }
         acknowledged[session.identity] = session.eventID; saveReadState()
     }
     func markAllRead() { for session in sessions { acknowledged[session.identity] = session.eventID }; saveReadState() }
@@ -136,7 +144,7 @@ import UserNotifications
             }
         }; truncated = snapshot.truncated
         connected = snapshot.hasDatabase || snapshot.hasSessionDirectory
-        sessions = snapshot.sessions; ready = true
+        sessions = AgentCurrentSessions.latest(snapshot.sessions); ready = true
         for session in sessions {
             if !baseline && lastEvents[session.identity] == nil {
                 // Starting the app must not replay yesterday's completions.
@@ -190,12 +198,9 @@ import UserNotifications
 
     #if SETTINGS_PREVIEW
     func configurePreview(_ sessions: [AgentSession]) {
-        self.sessions = sessions.sorted {
-            if $0.state.priority != $1.state.priority { return $0.state.priority < $1.state.priority }
-            return $0.updatedAt > $1.updatedAt
-        }
+        self.sessions = AgentCurrentSessions.latest(sessions)
         ready = true; connected = true; baseline = true
-        acknowledged = [:]; dismissed = [:]
+        acknowledged = [:]; dismissed = [:]; retainedReadEvents = [:]
     }
     #endif
 }

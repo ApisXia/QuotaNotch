@@ -37,3 +37,24 @@ struct AgentAttentionSummary: Equatable {
 extension AgentRunState {
     var isUnreadEvent: Bool { [.waiting, .completed, .failed, .interrupted].contains(self) }
 }
+
+/// A live inbox, not a transcript archive. One current record owns each provider/session identity.
+enum AgentCurrentSessions {
+    static func latest(_ sessions: [AgentSession]) -> [AgentSession] {
+        var unique: [String: AgentSession] = [:]
+        for session in sessions {
+            if let old = unique[session.identity], old.updatedAt > session.updatedAt { continue }
+            unique[session.identity] = session
+        }
+        return unique.values.sorted {
+            if $0.state.priority != $1.state.priority { return $0.state.priority < $1.state.priority }
+            if $0.updatedAt != $1.updatedAt { return $0.updatedAt > $1.updatedAt }
+            return $0.identity < $1.identity
+        }
+    }
+    static func includes(_ session: AgentSession, acknowledged: [String: String], retained: [String: String] = [:]) -> Bool {
+        session.state.isActive
+            || (session.state.isUnreadEvent && acknowledged[session.identity] != session.eventID)
+            || retained[session.identity] == session.eventID
+    }
+}

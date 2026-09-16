@@ -166,6 +166,7 @@ struct ContentView: View {
             if state == .closed {
                 agentStore.notchReadEnabled = false
                 agentStore.expandedTaskID = nil
+                agentStore.finishReading()
             }
         }
         .padding(.bottom, 8)
@@ -310,13 +311,11 @@ struct ContentView: View {
             } else {
                 MusicLiveActivity().contentShape(Rectangle()).onTapGesture { coordinator.currentView = .home; doOpen() }
             }
+        } else if agentStore.showAccessory && vm.effectiveClosedNotchHeight > 0 && !eventPresentation.replacesPrimary {
+            AgentTaskOnlyWings(centerWidth: vm.closedNotchSize.width - cornerRadiusInsets.closed.top,
+                               height: vm.effectiveClosedNotchHeight, open: openTasks)
         } else {
-            HStack(spacing: 0) {
-                Color.clear.frame(width: vm.closedNotchSize.width - 20, height: vm.effectiveClosedNotchHeight)
-                if vm.effectiveClosedNotchHeight > 0 && !eventPresentation.replacesPrimary {
-                    AgentCompactDock(primaryWidth: 0, height: vm.effectiveClosedNotchHeight, hasPrimary: false, open: openTasks) { EmptyView() }
-                }
-            }
+            Color.clear.frame(width: vm.closedNotchSize.width - 20, height: vm.effectiveClosedNotchHeight)
         }
     }
 
