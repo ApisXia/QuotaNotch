@@ -2,6 +2,11 @@ name: QuotaNotch macOS app
 
 on:
   workflow_dispatch:
+    inputs:
+      preview_only:
+        description: Render the original/refined comparison without building an installer
+        type: boolean
+        default: false
   push:
     branches: ['feature/quotanotch-ai-usage', main]
   pull_request:
@@ -34,6 +39,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           persist-credentials: false
+          fetch-depth: 0
       - uses: maxim-lobanov/setup-xcode@v1
         with:
           xcode-version: '26.0'
@@ -51,14 +57,19 @@ jobs:
           build/render-compact
           swiftc -parse-as-library QuotaNotch/Design/*.swift QuotaNotch/Core/QuotaWarning.swift QuotaNotch/Core/QuotaLocalization.swift QuotaNotch/Core/QuotaModels.swift scripts/render-warning.swift -o build/render-warning
           build/render-warning
+      - name: Render original and refined proportions
+        if: ${{ inputs.preview_only == true }}
+        run: bash scripts/render-refinement.sh
       - name: Upload native UX preview
         uses: actions/upload-artifact@v4
         with:
           name: Compact-UX-${{ github.sha }}
-          path: build/QuotaNotch-dist/Compact-UX.png
+          path: build/QuotaNotch-dist/*.png
       - name: Resolve app dependencies
+        if: ${{ inputs.preview_only != true }}
         run: xcodebuild -resolvePackageDependencies -project boringNotch.xcodeproj -scheme boringNotch
       - name: Build universal app
+        if: ${{ inputs.preview_only != true }}
         run: |
           xcodebuild build \
             -project boringNotch.xcodeproj -scheme boringNotch \
@@ -68,16 +79,21 @@ jobs:
             CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO \
             DEVELOPMENT_TEAM='' CODE_SIGN_IDENTITY=''
       - name: Verify compiled English and Chinese translations
+        if: ${{ inputs.preview_only != true }}
         run: python3 scripts/verify-localization.py build/DerivedData/Build/Products/Release/QuotaNotch.app
       - name: Render English and Chinese usage layouts
+        if: ${{ inputs.preview_only != true }}
         run: bash scripts/render-localized-usage.sh
       - name: Verify and render compiled status icon
+        if: ${{ inputs.preview_only != true }}
         run: |
           swiftc -parse-as-library scripts/render-status-icon.swift -o build/render-status-icon
           build/render-status-icon build/DerivedData/Build/Products/Release/QuotaNotch.app
       - name: Package app and corresponding source
+        if: ${{ inputs.preview_only != true }}
         run: bash scripts/package-quotanotch.sh
       - name: Upload installable app, source and checksums
+        if: ${{ inputs.preview_only != true }}
         uses: actions/upload-artifact@v4
         with:
           name: QuotaNotch-macOS-${{ github.sha }}
