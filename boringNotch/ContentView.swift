@@ -82,6 +82,16 @@ struct ContentView: View {
         )
     }
 
+    private var taskPanelHeight: CGFloat {
+        guard vm.notchState == .open, coordinator.currentView == .activity else { return openNotchSize.height }
+        let screen = vm.screenUUID.flatMap { NSScreen.screen(withUUID: $0) } ?? NSScreen.main
+        return agentStore.panelHeight(headerHeight: vm.effectiveClosedNotchHeight, screenHeight: screen?.frame.height ?? 900)
+    }
+    private func resizeTaskPanel() {
+        guard vm.notchState == .open else { return }
+        withAnimation(reduceMotion ? nil : .smooth(duration: 0.24)) { vm.notchSize.height = taskPanelHeight }
+    }
+
     private var showQuotaWings: Bool {
         compactPresentation == .quota || compactPresentation == .combined
     }
@@ -159,14 +169,20 @@ struct ContentView: View {
         }
         .onPreferenceChange(AgentWingOffsetKey.self) { taskWingOffset = $0 }
         .onReceive(NotificationCenter.default.publisher(for: .agentOpenNotch)) { _ in
-            guard vm.notchState == .closed else { return }
-            coordinator.currentView = .activity; agentStore.notchReadEnabled = true; doOpen()
+            coordinator.currentView = .activity; agentStore.notchReadEnabled = true
+            if vm.notchState == .closed { doOpen() } else { resizeTaskPanel() }
         }
         .onChange(of: vm.notchState) { _, state in
-            if state == .closed { agentStore.notchReadEnabled = false }
+            if state == .closed {
+                agentStore.notchReadEnabled = false
+                agentStore.panelExpanded = false
+                agentStore.expandedTaskID = nil
+            } else { resizeTaskPanel() }
         }
+        .onChange(of: taskPanelHeight) { _, _ in resizeTaskPanel() }
         .padding(.bottom, 8)
-        .frame(maxWidth: windowSize.width, maxHeight: windowSize.height, alignment: .top)
+        .frame(maxWidth: windowSize.width, maxHeight: max(windowSize.height, vm.notchSize.height + shadowPadding), alignment: .top)
+        .background(AgentNotchWindowSizing(height: max(windowSize.height, vm.notchSize.height + shadowPadding)))
         .compositingGroup()
         .preferredColorScheme(.dark)
         .environment(\.locale, QuotaLanguage.locale)
@@ -484,8 +500,7 @@ struct ContentView: View {
     private func openFromPointer(explicit: Bool = false) {
         guard vm.notchState == .closed else { return }
         agentStore.notchReadEnabled = explicit
-        if agentStore.showAccessory && (compactPresentation == .none ||
-            (compactPresentation == .combined && agentStore.compactExpanded)) {
+        if agentStore.showAccessory && compactPresentation == .none {
             coordinator.currentView = .activity; doOpen(); return
         }
         let presentation = compactPresentation

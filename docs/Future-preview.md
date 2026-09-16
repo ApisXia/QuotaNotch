@@ -1,19 +1,14 @@
-# Future 285 preview
+# Future 286 preview
 
 This preview stays on `future`; stable 1.02 is unchanged.
 
-- Tasks now share the closed notch row with the existing quota gauge. They no longer add a persistent row below the notch.
-- The task summary uses a small paper glyph and count. Click a minimal to promote it to widget, then click the widget to view details. Horizontal swipe or the separator button exchanges the two modes. Swiping is enabled only in the shared right wing when all three modules are present, excluding the physical camera area. Hovering the separator reveals a chevron; only the central notch hover opens the full panel.
-- Swiping to the task widget also switches token to minimal (provider icon and number). Only the three-module layout uses minimal: music stays left, with token and tasks sharing the right wing. Without music, token and tasks are independent widgets on opposite sides; music plus tasks also uses two independent widgets. Tasks alone always use a widget. Swiping back restores the token widget and task minimal.
-- Task, token and music widgets share the same fixed icon size. Task widgets contain only the paper glyph and a count badge. Each minimal is 16 points wide with a 4-point separator; switching token/task roles preserves the combined width. Both minimals share fixed icon and number rows, with equal baselines and a stable font size. The task widget count stays inside its bounds. The running animation moves only the inner mark, keeping the outline still.
-- Token keeps its existing appearance in widget mode and remains the only pinnable module, with one pin slot. Project pins were removed.
-- Running and approval-waiting tasks remain visible. Finished unread tasks disappear from the compact summary after reading; reading never resolves a pending approval. Each task counts once, including mixed activity.
-- Read receipts require an explicitly opened task panel and a visible row; hover alone does not mark tasks read. Finished rows stay in the full list until cleared.
-- Four quick filters: active, completed, other, all. Larger provider/source labels, restrained colors, and custom paper glyphs replace success/error symbols.
-- Local Claude Code transcripts are read alongside Codex, with current request/tool activity where available. Code sessions from Desktop or VS Code appear when they leave local transcripts; source labels depend on transcript metadata. Claude Chat/Cowork and remote sessions without local records are not covered.
-- Optional Codex and Claude Code event connections detect approval waits. They preserve other hooks and never approve operations. Existing connections can be updated from monitoring settings.
-- Clicking any task or its notification shows details inside QuotaNotch. There are no external app/session links or Claude resume commands. Status, latest input and activity remain visible, with live updates.
+- Music and token retain their existing widgets. With token plus tasks or music plus tasks, each module gets an independent widget; tasks alone also use a widget.
+- All three modules use a fixed layout: music left, quota widget and task minimal right. A static divider has equal space on both sides. There is no mode switching, swipe gesture, or hover arrow. Clicking tasks opens their panel directly.
+- White paper outlines and counts combine with state-colored inner marks and labels: blue working, orange waiting, green completed, red failed, purple interrupted, gray unknown. Running motion stays inside the glyph.
+- Clicking a task expands details inline; one row can be expanded at a time. Inputs and recent activity share the parent list's scrolling. Task clicks and notifications never create a details window.
+- Selecting All expands the same notch panel downward, with fixed width and a screen-relative height cap. The filter bar stays above the scrolling list. Leaving the task tab or closing restores the original window height.
+- Live task updates preserve the list order while browsing. Selecting All does not mark everything read: read receipts still require explicit opening and sufficient visible time.
+- Token remains the only pinnable module, with one slot. Project/source information, quick filters, and local Codex/Claude Code monitoring remain available.
+- Local transcript availability still governs coverage: Claude Chat/Cowork and remote sessions without local records are not monitored. Optional hooks observe approval waits and never approve operations.
 
-Validation includes parser and repository fixtures, all read/unread state combinations, repeated approvals, hook preservation/privacy, universal app compilation, and actual English/Chinese UI screenshots at 24/32/38-pixel notch heights.
-
-Future 285 validates all eight presence combinations (including empty), both remembered selections, and transitions between them at all three header heights. Independent widgets ignore the remembered shared-wing selection, have no separator or switching gesture, and open details with one click.
+Validation includes the existing parser/hook/read-receipt tests, all eight presence combinations, playback transitions, state-color screenshots, and actual same-window panel expansion/inline details/scrolling checks in English and Chinese.

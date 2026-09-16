@@ -11,6 +11,7 @@ struct AgentWingOffsetKey: PreferenceKey {
 struct AgentPaperGlyph: View {
     let kind: AgentAttentionKind
     var running = false
+    var accent: Color? = nil
     @Environment(\.accessibilityReduceMotion) private var reduced
     var body: some View {
         TimelineView(.animation(minimumInterval: 1.0 / 15, paused: !running || reduced)) { timeline in
@@ -18,19 +19,40 @@ struct AgentPaperGlyph: View {
             let spread: CGFloat = kind == .completed ? 1 : kind == .waiting ? 4 : kind == .mixed ? 3 : 2.5
             ZStack {
                 RoundedRectangle(cornerRadius: 2.2).strokeBorder(lineWidth: 1.1)
-                    .frame(width: 10, height: 12).offset(x: -spread / 2, y: -spread / 2).opacity(0.78)
+                    .foregroundStyle(Color.primary.opacity(0.78))
+                    .frame(width: 10, height: 12).offset(x: -spread / 2, y: -spread / 2)
                 RoundedRectangle(cornerRadius: 2.2).fill(Color(nsColor: .windowBackgroundColor))
                     .frame(width: 10, height: 12).opacity(0.15)
                 RoundedRectangle(cornerRadius: 2.2).strokeBorder(lineWidth: 1.05)
+                    .foregroundStyle(Color.primary.opacity(0.95))
                     .frame(width: 10, height: 12).offset(x: spread / 2, y: spread / 2)
-                if running {
-                    Capsule().frame(width: 3.5, height: 1.1)
-                        .offset(x: spread / 2 + drift, y: spread / 2)
-                } else if kind == .other {
-                    Capsule().frame(width: 4, height: 1).offset(x: 1.2, y: 2)
-                }
+                Group {
+                    if running {
+                        Capsule().frame(width: 4.5, height: 2)
+                            .offset(x: spread / 2 + drift, y: spread / 2 - 2)
+                    } else if kind == .waiting {
+                        HStack(spacing: 1.5) {
+                            Capsule().frame(width: 1.5, height: 4)
+                            Capsule().frame(width: 1.5, height: 4)
+                        }.offset(x: spread / 2, y: spread / 2 - 2)
+                    } else if kind == .completed {
+                        Circle().frame(width: 3.5, height: 3.5).offset(x: spread / 2, y: spread / 2 - 2)
+                    } else {
+                        Capsule().frame(width: 4.5, height: 2).offset(x: spread / 2, y: spread / 2 - 2)
+                    }
+                }.foregroundStyle(statusColor)
             }.frame(width: 18, height: 18)
         }.accessibilityHidden(true)
+    }
+    private var statusColor: Color {
+        if let accent { return accent }
+        switch kind {
+        case .running: return AgentText.color(.running)
+        case .waiting: return AgentText.color(.waiting)
+        case .completed: return AgentText.color(.completed)
+        case .other: return AgentText.color(.interrupted)
+        case .mixed: return AgentText.color(running ? .running : .waiting)
+        }
     }
     static func kind(_ state: AgentRunState) -> AgentAttentionKind {
         switch state { case .running: return .running; case .waiting: return .waiting
@@ -48,14 +70,12 @@ struct AgentCompactDock<Primary: View>: View {
     @ViewBuilder let primary: () -> Primary
     @ObservedObject private var store = AgentActivityStore.shared
     @Environment(\.accessibilityReduceMotion) private var reduced
-    @State private var hovering = false
-    @State private var retained = AgentAttentionSummary()
-    private var summary: AgentAttentionSummary { hovering && !store.attention.isVisible ? retained : store.attention }
+    private var summary: AgentAttentionSummary { store.attention }
     private var visible: Bool { store.enabled && summary.isVisible }
     private var metrics: NotchModuleMetrics { NotchModuleMetrics(widgetWidth: widgetWidth ?? max(0, height - 12)) }
     // A task only yields space when quota actually shares this wing (all three modules present).
     private var sharesWing: Bool { hasPrimary && primaryWidth > 0 }
-    private var showsTaskWidget: Bool { !sharesWing || store.compactExpanded }
+    private var showsTaskWidget: Bool { !sharesWing }
     private var separator: CGFloat { sharesWing && visible ? metrics.dividerWidth : 0 }
     private var taskWidth: CGFloat { visible ? (showsTaskWidget ? metrics.widgetWidth : metrics.minimalWidth) : 0 }
     private var extra: CGFloat { separator + taskWidth }
@@ -65,11 +85,10 @@ struct AgentCompactDock<Primary: View>: View {
             if sharesWing { primary().frame(width: primaryWidth, height: height) }
             if visible {
                 if sharesWing {
-                    Button { withAnimation(motion) { store.compactExpanded.toggle() } } label: {
-                        ChevronDivider(expanded: hovering, reversed: store.compactExpanded)
-                            .frame(width: separator, height: height).contentShape(Rectangle())
-                            .auditNotchModule("switcher", mode: "enabled")
-                    }.buttonStyle(.plain).help(store.compactExpanded ? AgentText.t("收起任务摘要", "Minimize tasks") : AgentText.t("展开任务摘要", "Expand tasks"))
+                    Color.clear.frame(width: separator, height: height)
+                        .overlay { Capsule().fill(Color.white.opacity(0.38)).frame(width: 1, height: min(14, height - 12)) }
+                        .auditNotchModule("divider", mode: "static")
+                        .accessibilityHidden(true)
                 }
                 taskButton
             }
@@ -78,27 +97,16 @@ struct AgentCompactDock<Primary: View>: View {
         .contentShape(Rectangle())
         .animation(motion, value: extra)
         .animation(motion, value: primaryWidth)
-        .onChange(of: visible) { _, value in if !value { store.compactExpanded = false } }
-        .onHover { value in
-            if value { retained = store.attention }
-            withAnimation(motion) { hovering = value }
-            if !value && !store.showAccessory { store.compactExpanded = false }
-        }
-        .modifier(AgentModuleSwitchGesture(enabled: visible && sharesWing))
         .preference(key: AgentWingOffsetKey.self, value: (primaryWidth + extra - (anchorWidth ?? primaryWidth)) / 2)
     }
     private var taskButton: some View {
         Button {
-            if !showsTaskWidget {
-                withAnimation(motion) { store.compactExpanded = true }
-            } else {
-                store.notchReadEnabled = true
-                open()
-            }
+            store.notchReadEnabled = true
+            open()
         } label: {
             taskLabel.frame(width: taskWidth, height: height).contentShape(Rectangle())
         }.buttonStyle(.plain).help(summaryLabel).accessibilityLabel(summaryLabel)
-            .accessibilityHint(showsTaskWidget ? AgentText.t("查看任务详情", "View task details") : AgentText.t("切换到任务 widget", "Show task widget"))
+            .accessibilityHint(AgentText.t("查看任务详情", "View task details"))
     }
     @ViewBuilder private var taskLabel: some View {
         if showsTaskWidget {
@@ -124,8 +132,8 @@ struct AgentCompactDock<Primary: View>: View {
     private var summaryLabel: String { "\(summary.running) " + AgentText.state(.running) + " · \(summary.waiting) " + AgentText.state(.waiting) + " · \(summary.unread) " + AgentText.t("未读", "unread") }
     private var countLabel: String { summary.count > 99 ? "99+" : "\(summary.count)" }
     private var glyph: some View {
-        AgentPaperGlyph(kind: summary.kind, running: summary.running > 0)
-            .foregroundStyle(summary.needsAction ? AgentText.color(.waiting) : .primary)
+        AgentPaperGlyph(kind: summary.kind, running: summary.running > 0,
+                        accent: AgentText.color(summary.waiting > 0 ? .waiting : summary.needsAction ? .failed : summary.running > 0 ? .running : summary.kind == .completed ? .completed : .interrupted))
     }
 }
 
@@ -141,65 +149,6 @@ struct NotchMinimalLabel<Icon: View>: View {
                 .frame(width: metrics.minimalWidth, height: metrics.minimalNumberHeight)
         }
         .frame(width: metrics.minimalWidth, height: metrics.minimalContentHeight)
-    }
-}
-
-struct AgentModuleSwitchGesture: ViewModifier {
-    let enabled: Bool
-    @ObservedObject private var store = AgentActivityStore.shared
-    @Environment(\.accessibilityReduceMotion) private var reduced
-    private func select(_ expanded: Bool) {
-        guard enabled else { return }
-        withAnimation(reduced ? nil : .smooth(duration: 0.32)) { store.compactExpanded = expanded }
-    }
-    func body(content: Content) -> some View {
-        content
-            .simultaneousGesture(DragGesture(minimumDistance: 12).onEnded { value in
-                guard abs(value.translation.width) > abs(value.translation.height) else { return }
-                select(value.translation.width > 0)
-            }, including: enabled ? .all : .none)
-            .background {
-                if enabled { AgentHorizontalScroll { right in select(right) } }
-            }
-    }
-}
-
-private struct ChevronDivider: View {
-    let expanded: Bool
-    let reversed: Bool
-    var body: some View {
-        ZStack {
-            Capsule().frame(width: 1.1, height: 7).offset(y: -3.3)
-                .rotationEffect(.degrees(expanded ? (reversed ? 34 : -34) : -5), anchor: .center)
-            Capsule().frame(width: 1.1, height: 7).offset(y: 3.3)
-                .rotationEffect(.degrees(expanded ? (reversed ? -34 : 34) : 5), anchor: .center)
-        }.foregroundStyle(.white.opacity(expanded ? 0.75 : 0.20))
-    }
-}
-
-/// A local event monitor only observes horizontal gestures inside its own window rectangle.
-private struct AgentHorizontalScroll: NSViewRepresentable {
-    let action: (Bool) -> Void
-    func makeNSView(context: Context) -> ScrollRegion { let view = ScrollRegion(); view.action = action; return view }
-    func updateNSView(_ view: ScrollRegion, context: Context) { view.action = action }
-    final class ScrollRegion: NSView {
-        var action: ((Bool) -> Void)?
-        var monitor: Any?
-        var last: TimeInterval = 0
-        override func hitTest(_ point: NSPoint) -> NSView? { nil }
-        override func viewDidMoveToWindow() {
-            super.viewDidMoveToWindow()
-            if let monitor { NSEvent.removeMonitor(monitor); self.monitor = nil }
-            guard window != nil else { return }
-            monitor = NSEvent.addLocalMonitorForEvents(matching: .scrollWheel) { [weak self] event in
-                guard let self, self.window === event.window,
-                      self.bounds.contains(self.convert(event.locationInWindow, from: nil)),
-                      abs(event.scrollingDeltaX) > abs(event.scrollingDeltaY), abs(event.scrollingDeltaX) > 4 else { return event }
-                if event.timestamp - self.last > 0.45 { self.last = event.timestamp; self.action?(event.scrollingDeltaX < 0) }
-                return nil
-            }
-        }
-        deinit { if let monitor { NSEvent.removeMonitor(monitor) } }
     }
 }
 

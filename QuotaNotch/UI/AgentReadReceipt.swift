@@ -40,18 +40,6 @@ struct AgentReadReceipt: NSViewRepresentable {
     }
 }
 
-@MainActor enum AgentSessionDetailsWindow {
-    private static var controller: NSWindowController?
-    static func show(_ session: AgentSession) {
-        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 520, height: 430),
-                              styleMask: [.titled, .closable, .resizable], backing: .buffered, defer: false)
-        window.title = session.projectName; window.isReleasedWhenClosed = false
-        window.contentView = NSHostingView(rootView: AgentSessionDetails(session: session))
-        controller?.close(); controller = NSWindowController(window: window)
-        window.center(); window.makeKeyAndOrderFront(nil); NSApp.activate(ignoringOtherApps: true)
-    }
-}
-
 struct AgentSessionDetails: View {
     private let initialSession: AgentSession
     @ObservedObject private var store = AgentActivityStore.shared
@@ -74,6 +62,48 @@ struct AgentSessionDetails: View {
                 Text(session.cwd).font(.caption).foregroundStyle(.secondary).textSelection(.enabled)
 
             }.frame(maxWidth: .infinity, alignment: .leading).padding(20)
+        }
+    }
+}
+
+/// Details participate in the parent list's scrolling; they never create another window or scroller.
+struct AgentInlineDetails: View {
+    let session: AgentSession
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Label(AgentText.activity(session, now: AgentActivityStore.shared.now), systemImage: "circle.fill")
+                .font(.system(size: 11)).foregroundStyle(AgentText.color(session.state))
+            if !session.userPrompt.isEmpty {
+                Text(AgentText.t("本轮输入", "Your request")).font(.system(size: 10, weight: .medium)).foregroundStyle(.secondary)
+                Text(session.userPrompt).font(.system(size: 11)).textSelection(.enabled)
+            }
+            if !session.activityDetail.isEmpty {
+                Text(AgentText.t("最近活动", "Recent activity")).font(.system(size: 10, weight: .medium)).foregroundStyle(.secondary)
+                Text(session.activityDetail).font(.system(size: 11)).textSelection(.enabled)
+            }
+            Text(session.projectRoot.isEmpty ? session.cwd : session.projectRoot)
+                .font(.system(size: 10)).foregroundStyle(.secondary).textSelection(.enabled)
+        }.fixedSize(horizontal: false, vertical: true).frame(maxWidth: .infinity, alignment: .leading)
+        .padding(10).background(Color.primary.opacity(0.035), in: RoundedRectangle(cornerRadius: 6))
+    }
+}
+
+struct AgentNotchWindowSizing: NSViewRepresentable {
+    let height: CGFloat
+    func makeNSView(context: Context) -> SizingView { SizingView() }
+    func updateNSView(_ view: SizingView, context: Context) { view.targetHeight = height; view.resize() }
+    final class SizingView: NSView {
+        var targetHeight: CGFloat = 210
+        override func hitTest(_ point: NSPoint) -> NSView? { nil }
+        override func viewDidMoveToWindow() { super.viewDidMoveToWindow(); resize() }
+        func resize() {
+            DispatchQueue.main.async { [weak self] in
+                guard let self, let window = self.window, abs(window.frame.height - self.targetHeight) > 0.5 else { return }
+                var frame = window.frame
+                frame.origin.y = frame.maxY - self.targetHeight
+                frame.size.height = self.targetHeight
+                window.setFrame(frame, display: true)
+            }
         }
     }
 }

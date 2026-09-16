@@ -5,7 +5,7 @@ import Foundation
 struct NotchModuleMetrics {
     let widgetWidth: CGFloat
     var minimalWidth: CGFloat { widgetWidth > 0 ? 16 : 0 }
-    var dividerWidth: CGFloat { widgetWidth > 0 ? 4 : 0 }
+    var dividerWidth: CGFloat { widgetWidth > 0 ? 8 : 0 }
     var additionalWidth: CGFloat { minimalWidth + dividerWidth }
     var minimalContentHeight: CGFloat { max(18, min(22, widgetWidth)) }
     var minimalNumberHeight: CGFloat { 9 }

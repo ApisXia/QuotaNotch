@@ -24,9 +24,38 @@ import UserNotifications
     }
     @Published private var acknowledged: [String: String]
     @Published private var dismissed: [String: String]
+    #if SETTINGS_PREVIEW
+    // Regression input: stale selections must have no influence on the fixed layout.
     @Published var compactExpanded = false
+    #endif
     @Published var notchReadEnabled = false
     @Published var filter: AgentFilter = .all
+    @Published var panelExpanded = false
+    @Published var expandedTaskID: String?
+    @Published private(set) var panelRowCapacity = 3
+    @Published private var notchOrder: [String] = []
+    var notchSessions: [AgentSession] {
+        let ranks = Dictionary(uniqueKeysWithValues: notchOrder.enumerated().map { ($0.element, $0.offset) })
+        return visible.sorted { (ranks[$0.identity] ?? Int.max) < (ranks[$1.identity] ?? Int.max) }
+    }
+    func retainNotchOrder() {
+        let ids = visible.map(\.identity)
+        notchOrder = notchOrder.filter { ids.contains($0) }
+        notchOrder += ids.filter { !notchOrder.contains($0) }
+    }
+    func selectNotchFilter(_ value: AgentFilter) {
+        filter = value; notchReadEnabled = true
+        panelExpanded = value == .all
+        panelRowCapacity = panelExpanded ? min(8, max(3, visible.filter { value.contains($0.state) }.count)) : 3
+        if let id = expandedTaskID, !visible.contains(where: { $0.identity == id && value.contains($0.state) }) { expandedTaskID = nil }
+    }
+    func toggleInlineDetails(_ session: AgentSession) {
+        expandedTaskID = expandedTaskID == session.identity ? nil : session.identity
+    }
+    func panelHeight(headerHeight: CGFloat, screenHeight: CGFloat) -> CGFloat {
+        let requested = max(190, headerHeight + 42 + CGFloat(panelExpanded ? panelRowCapacity : 3) * 38 + (expandedTaskID == nil ? 0 : 180))
+        return min(requested, max(190, min(480, screenHeight * 0.55)))
+    }
     private var polling: Task<Void, Never>?
     private var repository: AgentActivityRepository
     private var claudeRepository: ClaudeActivityRepository
@@ -165,8 +194,9 @@ import UserNotifications
     var isMonitorVisible: Bool { AgentActivityWindow.shared.window?.isKeyWindow == true }
 
     func showDetails(_ session: AgentSession) {
-        AgentSessionDetailsWindow.show(session)
-        markRead(session)
+        selectNotchFilter(.all)
+        expandedTaskID = session.identity
+        NotificationCenter.default.post(name: .agentOpenNotch, object: nil)
     }
 
     #if SETTINGS_PREVIEW
@@ -192,7 +222,7 @@ final class AgentNotificationDelegate: NSObject, UNUserNotificationCenterDelegat
             if let id {
                 let store = AgentActivityStore.shared
                 if let session = store.sessions.first(where: { (identity != nil ? $0.identity == identity : $0.id == id) }) { store.showDetails(session) }
-                else { AgentActivityWindow.shared.show() }
+                else { store.selectNotchFilter(.all); NotificationCenter.default.post(name: .agentOpenNotch, object: nil) }
             }
             completionHandler()
         }
@@ -253,14 +283,14 @@ enum AgentText {
         switch source { case .desktop: return "Codex"; case .vscode: return "VS Code"; case .cli: return "CLI"; case .unknown: return "Codex" }
     }
     static func color(_ state: AgentRunState) -> Color {
-        if state == .waiting || state == .failed {
-            return Color(nsColor: NSColor(name: nil) { appearance in
-                appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
-                    ? NSColor(srgbRed: 0.83, green: 0.70, blue: 0.49, alpha: 1)
-                    : NSColor(srgbRed: 0.48, green: 0.32, blue: 0.12, alpha: 1)
-            })
+        switch state {
+        case .running: return Color(nsColor: .systemBlue)
+        case .waiting: return Color(nsColor: .systemOrange)
+        case .completed: return Color(nsColor: .systemGreen)
+        case .failed: return Color(nsColor: .systemRed)
+        case .interrupted: return Color(nsColor: .systemPurple)
+        case .unknown: return .secondary
         }
-        return .primary
     }
     static func source(_ session: AgentSession) -> String {
         let name = session.provider == .claude ? "Claude Code" : "Codex"

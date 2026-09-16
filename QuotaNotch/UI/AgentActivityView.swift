@@ -4,11 +4,13 @@ import SwiftUI
 
 struct AgentNotchView: View {
     @ObservedObject private var store = AgentActivityStore.shared
+    @Environment(\.accessibilityReduceMotion) private var reduced
+    private var tasks: [AgentSession] { store.notchSessions.filter { store.filter.contains($0.state) } }
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             HStack(spacing: 8) {
                 ForEach(AgentFilter.allCases, id: \.self) { filter in
-                    Button { store.filter = filter; store.notchReadEnabled = true } label: {
+                    Button { withAnimation(reduced ? nil : .smooth(duration: 0.24)) { store.selectNotchFilter(filter) } } label: {
                         Text(filter.title).font(.system(size: 11, weight: .medium))
                             .foregroundStyle(store.filter == filter ? .white : .gray)
                             .padding(.horizontal, 7).padding(.vertical, 3)
@@ -16,24 +18,39 @@ struct AgentNotchView: View {
                     }.buttonStyle(.plain)
                 }
                 Spacer(minLength: 4)
-                Button { AgentActivityWindow.shared.show() } label: {
-                    HStack(spacing: 4) {
-                        Text(AgentText.t("全部 \(store.visible.count) 项", "All \(store.visible.count) tasks"))
-                        Image(systemName: "chevron.right").font(.system(size: 8, weight: .semibold))
-                    }.font(.system(size: 11))
-                }.buttonStyle(.plain).foregroundStyle(.primary)
-            }.frame(height: 18)
-            if store.visible.filter({ store.filter.contains($0.state) }).isEmpty {
+                Text(AgentText.t("\(tasks.count) 项", "\(tasks.count) tasks"))
+                    .font(.system(size: 10)).foregroundStyle(.secondary).monospacedDigit()
+            }.frame(height: 22)
+            if tasks.isEmpty {
                 Text(store.enabled ? AgentText.t("当前筛选下没有任务。", "No tasks match this filter.") : AgentText.t("任务监控已暂停。", "Task monitoring is paused."))
                     .font(.callout).foregroundStyle(.secondary).frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
-                VStack(spacing: 3) {
-                    ForEach(Array(store.visible.filter { store.filter.contains($0.state) }.prefix(3)), id: \.identity) { session in
-                        AgentNotchTaskRow(session: session, now: store.now) { store.showDetails(session) }
+                ScrollViewReader { proxy in
+                    ScrollView {
+                        LazyVStack(spacing: 4) {
+                            ForEach(tasks, id: \.identity) { session in
+                                VStack(spacing: 3) {
+                                    AgentNotchTaskRow(session: session, now: store.now,
+                                                      expanded: store.expandedTaskID == session.identity) {
+                                        store.notchReadEnabled = true
+                                        withAnimation(reduced ? nil : .smooth(duration: 0.24)) { store.toggleInlineDetails(session) }
+                                    }
+                                    if store.expandedTaskID == session.identity {
+                                        AgentInlineDetails(session: session).transition(.opacity)
+                                    }
+                                }.id(session.identity)
+                            }
+                        }.padding(.bottom, 2)
                     }
+                    .onChange(of: store.expandedTaskID) { _, id in
+                        if let id { withAnimation(reduced ? nil : .smooth(duration: 0.24)) { proxy.scrollTo(id, anchor: .top) } }
+                    }
+                    .onAppear { if let id = store.expandedTaskID { proxy.scrollTo(id, anchor: .top) } }
                 }
             }
         }
+        .onAppear { store.retainNotchOrder() }
+        .onChange(of: store.visible.map(\.identity)) { _, _ in store.retainNotchOrder() }
         .padding(.horizontal, 5).frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
     }
 }
@@ -41,15 +58,17 @@ struct AgentNotchView: View {
 private struct AgentNotchTaskRow: View {
     let session: AgentSession
     let now: Date
+    let expanded: Bool
     let open: () -> Void
     @State private var hovering = false
     var body: some View {
         Button(action: open) {
             HStack(spacing: 8) {
-                AgentPaperGlyph(kind: AgentPaperGlyph.kind(session.state), running: session.state == .running)
-                    .foregroundStyle(AgentText.color(session.state))
+                AgentPaperGlyph(kind: AgentPaperGlyph.kind(session.state), running: session.state == .running, accent: AgentText.color(session.state))
                 identity
                 status
+                Image(systemName: "chevron.right").font(.system(size: 8, weight: .medium))
+                    .rotationEffect(.degrees(expanded ? 90 : 0)).foregroundStyle(.secondary).frame(width: 8)
             }
             .padding(.horizontal, 7).frame(height: 34)
             .background(hovering ? Color.white.opacity(0.10) : Color.white.opacity(0.045), in: RoundedRectangle(cornerRadius: 6))
@@ -298,8 +317,9 @@ struct AgentTaskRow: View {
     let session: AgentSession
     @ObservedObject var store: AgentActivityStore
     var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
         HStack(alignment: .top, spacing: 10) {
-            AgentPaperGlyph(kind: AgentPaperGlyph.kind(session.state), running: session.state == .running).foregroundStyle(AgentText.color(session.state))
+            AgentPaperGlyph(kind: AgentPaperGlyph.kind(session.state), running: session.state == .running, accent: AgentText.color(session.state))
                 .frame(width: 20).padding(.top, 3)
             VStack(alignment: .leading, spacing: 7) {
                 HStack(spacing: 6) {
@@ -320,15 +340,17 @@ struct AgentTaskRow: View {
             Menu {
                 Button(AgentText.t("标为已读", "Mark as read")) { store.markRead(session) }
                 Divider()
-                Button(AgentText.t("任务详情", "Task details")) { store.showDetails(session) }
+                Button(AgentText.t("任务详情", "Task details")) { store.toggleInlineDetails(session) }
                 Button(AgentText.t("复制根目录", "Copy root folder")) { NSPasteboard.general.clearContents(); NSPasteboard.general.setString(session.projectRoot, forType: .string) }
                 Button(AgentText.t("复制会话 ID", "Copy session ID")) { NSPasteboard.general.clearContents(); NSPasteboard.general.setString(session.id, forType: .string) }
             } label: { Image(systemName: "ellipsis") }.menuStyle(.borderlessButton).menuIndicator(.hidden).frame(width: 18).padding(.top, 2)
         }
         .padding(.vertical, 14).contentShape(Rectangle())
         .background(AgentReadReceipt(session: session))
-        .onTapGesture { store.showDetails(session) }
+        .onTapGesture { store.toggleInlineDetails(session) }
         .help(session.projectName + "\n" + session.projectRoot + "\n" + session.displayTitle)
+        if store.expandedTaskID == session.identity { AgentInlineDetails(session: session).padding(.bottom, 10) }
+        }
     }
 }
 

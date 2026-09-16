@@ -95,6 +95,20 @@ struct SettingsPreviewRunner {
                         name: "Task-details-\(session.provider.rawValue)", output: output, height: 430)
         }
         try captureNotchSwitching(output: output)
+        try captureTaskPanel(output: output, fixtures: fixtures)
+        for dark in [true, false] {
+            try capture(VStack(alignment: .leading, spacing: 12) {
+                ForEach([AgentRunState.running, .waiting, .completed, .failed, .interrupted, .unknown], id: \.self) { state in
+                    HStack(spacing: 14) {
+                        AgentPaperGlyph(kind: AgentPaperGlyph.kind(state), running: state == .running, accent: AgentText.color(state))
+                        Text(AgentText.state(state)).font(.system(size: 12)).foregroundStyle(AgentText.color(state))
+                        Spacer()
+                        Text("Project · Codex").font(.system(size: 12)).foregroundStyle(.primary)
+                    }
+                }
+            }.padding(20).background(Color(nsColor: .windowBackgroundColor)).preferredColorScheme(dark ? .dark : .light),
+                width: 380, name: "Task-state-colors-\(dark)", output: output, height: 220)
+        }
         var recent = fixtures[2]
         recent.updatedAt = now; recent.tool = "apply_patch"
         precondition(AgentText.activity(recent, now: now).contains(AgentText.t("修改文件", "file edit")))
@@ -223,10 +237,10 @@ struct SettingsPreviewRunner {
                 settle(); host.layoutSubtreeIfNeeded()
                 let shared = scenario.quota && scenario.music && scenario.tasks
                 var expected: [String: String] = [:]
-                if scenario.quota { expected["quota"] = shared && expanded ? "minimal" : "widget" }
+                if scenario.quota { expected["quota"] = "widget" }
                 if scenario.music { expected["music"] = "widget" }
-                if scenario.tasks { expected["task"] = shared && !expanded ? "minimal" : "widget" }
-                if shared { expected["switcher"] = "enabled" }
+                if scenario.tasks { expected["task"] = shared ? "minimal" : "widget" }
+                if shared { expected["divider"] = "static" }
                 verifyPresentation(renderedModules == expected,
                     "Wrong presentation in \(layout), height \(headerHeight), selection \(expanded): \(renderedModules), expected \(expected)")
                 modeAudit.append(["case": layout, "height": headerHeight, "taskSelected": expanded, "rendered": renderedModules])
@@ -267,8 +281,8 @@ struct SettingsPreviewRunner {
                     settle(); host.layoutSubtreeIfNeeded()
                     let expected = playback == "idle"
                         ? ["quota": "widget", "task": "widget"]
-                        : ["music": "widget", "quota": expanded ? "minimal" : "widget",
-                           "task": expanded ? "widget" : "minimal", "switcher": "enabled"]
+                        : ["music": "widget", "quota": "widget",
+                           "task": "minimal", "divider": "static"]
                     verifyPresentation(renderedModules == expected, "Playback transition \(playback) retained the wrong presentation: \(renderedModules)")
                     modeAudit.append(["case": playback, "height": headerHeight, "taskSelected": expanded, "rendered": renderedModules])
                     let bitmap = host.bitmapImageRepForCachingDisplay(in: host.bounds)!
@@ -285,6 +299,60 @@ struct SettingsPreviewRunner {
         AgentActivityStore.shared.compactExpanded = false
         window.orderOut(nil); window.contentView = nil; window.close()
         vm.destroy()
+    }
+
+    @MainActor private static func captureTaskPanel(output: URL, fixtures: [AgentSession]) throws {
+        let store = AgentActivityStore.shared
+        store.configurePreview(fixtures); store.panelExpanded = false; store.expandedTaskID = nil
+        store.filter = .all; store.retainNotchOrder(); store.notchReadEnabled = false
+        let vm = BoringViewModel(); vm.hideOnClosed = false
+        let coordinator = BoringViewCoordinator.shared
+        coordinator.currentView = .activity
+        QuotaNotchStore.shared.menuOpen = true
+        defer { QuotaNotchStore.shared.menuOpen = false }
+        let host = NSHostingView(rootView: ContentView().environmentObject(vm)
+            .transaction { $0.animation = nil; $0.disablesAnimations = true })
+        let window = NSWindow(contentRect: NSRect(origin: .zero, size: windowSize), styleMask: [.borderless], backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false; window.contentView = host; window.orderFront(nil)
+        vm.open(); settle(); host.layoutSubtreeIfNeeded()
+        let top = window.frame.maxY, width = window.frame.width
+        let windowCount = NSApp.windows.filter(\.isVisible).count
+        let initialHeight = vm.notchSize.height
+        func snapshot(_ name: String) throws {
+            settle(); host.layoutSubtreeIfNeeded()
+            let bitmap = host.bitmapImageRepForCachingDisplay(in: host.bounds)!
+            host.cacheDisplay(in: host.bounds, to: bitmap)
+            try bitmap.representation(using: .png, properties: [:])!.write(to: output.appendingPathComponent(name + ".png"))
+            verifyPresentation(abs(window.frame.maxY - top) < 1 && window.frame.width == width, "Task panel moved away from its top edge or changed width")
+            verifyPresentation(NSApp.windows.filter(\.isVisible).count == windowCount, "Task interaction opened an extra window")
+        }
+        try snapshot("Task-panel-compact")
+        let unread = store.unread.count
+        store.selectNotchFilter(.all)
+        try snapshot("Task-panel-all")
+        verifyPresentation(vm.notchSize.height > initialHeight, "All did not expand the same panel")
+        verifyPresentation(store.unread.count == unread, "Selecting All marked unseen tasks read")
+        let scrolls = descendants(host).compactMap { $0 as? NSScrollView }
+        verifyPresentation(scrolls.contains { ($0.documentView?.bounds.height ?? 0) > $0.contentView.bounds.height }, "All tasks are not scrollable")
+        store.showDetails(fixtures[0])
+        try snapshot("Task-panel-inline")
+        verifyPresentation(store.expandedTaskID == fixtures[0].identity, "Details did not expand inline")
+        store.toggleInlineDetails(fixtures[1])
+        try snapshot("Task-panel-second-inline")
+        verifyPresentation(store.expandedTaskID == fixtures[1].identity, "Only one inline row should be expanded")
+        let originalOrder = store.notchSessions.map(\.identity)
+        var newTask = fixtures[0]
+        newTask.id = "22222222-2222-4222-8222-222222222222"
+        newTask.updatedAt = Date()
+        store.configurePreview([newTask] + fixtures); store.retainNotchOrder()
+        verifyPresentation(Array(store.notchSessions.prefix(originalOrder.count)).map(\.identity) == originalOrder, "A new task reordered visible rows")
+        coordinator.currentView = .home
+        try snapshot("Task-panel-back-home")
+        verifyPresentation(vm.notchSize.height == openNotchSize.height, "Leaving tasks did not restore the standard panel height")
+        vm.close(); settle()
+        verifyPresentation(abs(window.frame.height - windowSize.height) < 1, "Closing left an oversized input window")
+        window.orderOut(nil); window.contentView = nil; window.close(); vm.destroy()
+        store.configurePreview(fixtures); store.expandedTaskID = nil; store.panelExpanded = false
     }
 
     @MainActor private static func capture<V: View>(_ view: V, width: CGFloat, name: String, output: URL, height: CGFloat = 600) throws {
