@@ -168,7 +168,7 @@ struct SettingsPreviewRunner {
         vm.close()
         for layout in ["quota", "combined", "music", "tasks"] {
             let suffix = layout == "quota" ? "" : "-" + layout
-            QuotaNotchStore.shared.enabled = layout == "quota" || layout == "combined"
+            QuotaNotchStore.shared.configureSettingsPreview(paused: layout != "quota" && layout != "combined")
             MusicManager.shared.isPlaying = layout == "combined" || layout == "music"
             coordinator.musicLiveActivityEnabled = true
         for headerHeight: CGFloat in [24, 32, 38] {
@@ -184,7 +184,7 @@ struct SettingsPreviewRunner {
             }
         }
         }
-        QuotaNotchStore.shared.enabled = true
+        QuotaNotchStore.shared.configureSettingsPreview(paused: false)
         MusicManager.shared.isPlaying = false
         AgentActivityStore.shared.compactExpanded = false
         window.orderOut(nil); window.contentView = nil; window.close()
