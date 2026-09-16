@@ -145,7 +145,10 @@ struct SettingsPreviewRunner {
         QuotaNotchStore.shared.configureSettingsPreview(paused: false)
         QuotaNotchStore.shared.menuOpen = true // Keep the fixture open without simulating pointer input.
         defer { QuotaNotchStore.shared.menuOpen = false }
+        var renderedModules: [String: String] = [:]
+        var modeAudit: [[String: Any]] = []
         let host = NSHostingView(rootView: ContentView().environmentObject(vm)
+            .onPreferenceChange(NotchModuleAuditKey.self) { renderedModules = $0 }
             .transaction { $0.animation = nil; $0.disablesAnimations = true }
             .background(Color(red: 0.25, green: 0.15, blue: 0.35)))
         let window = NSWindow(contentRect: NSRect(origin: .zero, size: windowSize),
@@ -198,22 +201,41 @@ struct SettingsPreviewRunner {
             }
             return (points.last ?? 0) - (points.first ?? 0)
         }
-        for layout in ["quota", "combined", "music", "tasks"] {
+        // Expectations describe presence, not the implementation's compactExpanded flag.
+        let cases: [(name: String, quota: Bool, music: Bool, tasks: Bool)] = [
+            ("quota", true, false, true), ("combined", true, true, true),
+            ("music", false, true, true), ("tasks", false, false, true),
+            ("quota-only", true, false, false), ("music-only", false, true, false),
+            ("quota-music", true, true, false), ("empty", false, false, false)
+        ]
+        for scenario in cases {
+            let layout = scenario.name
             let suffix = layout == "quota" ? "" : "-" + layout
-            QuotaNotchStore.shared.configureSettingsPreview(paused: layout != "quota" && layout != "combined")
-            MusicManager.shared.isPlaying = layout == "combined" || layout == "music"
+            QuotaNotchStore.shared.configureSettingsPreview(paused: !scenario.quota)
+            MusicManager.shared.isPlaying = scenario.music
+            MusicManager.shared.isPlayerIdle = !scenario.music
+            activity.configurePreview(scenario.tasks ? fixtures : [])
             coordinator.musicLiveActivityEnabled = true
         for headerHeight: CGFloat in [24, 32, 38] {
             vm.closedNotchSize.height = headerHeight
             for expanded in [false, true] {
                 AgentActivityStore.shared.compactExpanded = expanded
                 settle(); host.layoutSubtreeIfNeeded()
+                let shared = scenario.quota && scenario.music && scenario.tasks
+                var expected: [String: String] = [:]
+                if scenario.quota { expected["quota"] = shared && expanded ? "minimal" : "widget" }
+                if scenario.music { expected["music"] = "widget" }
+                if scenario.tasks { expected["task"] = shared && !expanded ? "minimal" : "widget" }
+                if shared { expected["switcher"] = "enabled" }
+                precondition(renderedModules == expected,
+                    "Wrong presentation in \(layout), height \(headerHeight), selection \(expanded): \(renderedModules), expected \(expected)")
+                modeAudit.append(["case": layout, "height": headerHeight, "taskSelected": expanded, "rendered": renderedModules])
                 let bitmap = host.bitmapImageRepForCachingDisplay(in: host.bounds)!
                 host.cacheDisplay(in: host.bounds, to: bitmap)
                 try bitmap.representation(using: .png, properties: [:])!.write(to: output.appendingPathComponent("Notch-closed-\(Int(headerHeight))-\(expanded)\(suffix).png"))
                 let color = bitmap.colorAt(x: bitmap.pixelsWide / 2, y: 2)!.usingColorSpace(.deviceRGB)!
                 precondition(max(color.redComponent, max(color.greenComponent, color.blueComponent)) < 0.06, "Closed notch detached")
-                if layout == "quota" || layout == "combined" {
+                if scenario.tasks {
                     let key = layout + String(Int(headerHeight))
                     if !expanded { compactWidths[key] = blackWidth(bitmap) }
                     else { precondition(abs(blackWidth(bitmap) - compactWidths[key]!) <= 1, "Swapping widget/minimal changed the total width") }
@@ -234,7 +256,32 @@ struct SettingsPreviewRunner {
         }
         }
         QuotaNotchStore.shared.configureSettingsPreview(paused: false)
+        activity.configurePreview(fixtures)
+        for headerHeight: CGFloat in [24, 32, 38] {
+            vm.closedNotchSize.height = headerHeight
+            for expanded in [false, true] {
+                activity.compactExpanded = expanded
+                for playback in ["playing", "paused", "idle", "resumed"] {
+                    MusicManager.shared.isPlaying = playback == "playing" || playback == "resumed"
+                    MusicManager.shared.isPlayerIdle = playback == "idle"
+                    settle(); host.layoutSubtreeIfNeeded()
+                    let expected = playback == "idle"
+                        ? ["quota": "widget", "task": "widget"]
+                        : ["music": "widget", "quota": expanded ? "minimal" : "widget",
+                           "task": expanded ? "widget" : "minimal", "switcher": "enabled"]
+                    precondition(renderedModules == expected, "Playback transition \(playback) retained the wrong presentation: \(renderedModules)")
+                    modeAudit.append(["case": playback, "height": headerHeight, "taskSelected": expanded, "rendered": renderedModules])
+                    let bitmap = host.bitmapImageRepForCachingDisplay(in: host.bounds)!
+                    host.cacheDisplay(in: host.bounds, to: bitmap)
+                    try bitmap.representation(using: .png, properties: [:])!.write(to: output.appendingPathComponent("Notch-transition-\(Int(headerHeight))-\(expanded)-\(playback).png"))
+                }
+            }
+        }
+        try JSONSerialization.data(withJSONObject: modeAudit, options: [.prettyPrinted, .sortedKeys])
+            .write(to: output.appendingPathComponent("Notch-presentation-audit.json"))
+        print("Verified \(modeAudit.count) actual rendered presentations, including playback transitions")
         MusicManager.shared.isPlaying = false
+        MusicManager.shared.isPlayerIdle = true
         AgentActivityStore.shared.compactExpanded = false
         window.orderOut(nil); window.contentView = nil; window.close()
         vm.destroy()

@@ -1,10 +1,10 @@
-# Future 284 preview
+# Future 285 preview
 
 This preview stays on `future`; stable 1.02 is unchanged.
 
 - Tasks now share the closed notch row with the existing quota gauge. They no longer add a persistent row below the notch.
-- The task summary uses a small paper glyph and count. Click a minimal to promote it to widget, then click the widget to view details. Horizontal swipe or the separator button exchanges the two modes. Swiping works on either token/task wing, excluding the physical camera area. Hovering the separator reveals a chevron; only the central notch hover opens the full panel.
-- Swiping to the task widget also switches token to minimal (provider icon and number). Without music, token minimal sits on the left and the task widget on the right; with music, both share the right wing. Swiping back restores the token widget and task minimal.
+- The task summary uses a small paper glyph and count. Click a minimal to promote it to widget, then click the widget to view details. Horizontal swipe or the separator button exchanges the two modes. Swiping is enabled only in the shared right wing when all three modules are present, excluding the physical camera area. Hovering the separator reveals a chevron; only the central notch hover opens the full panel.
+- Swiping to the task widget also switches token to minimal (provider icon and number). Only the three-module layout uses minimal: music stays left, with token and tasks sharing the right wing. Without music, token and tasks are independent widgets on opposite sides; music plus tasks also uses two independent widgets. Tasks alone always use a widget. Swiping back restores the token widget and task minimal.
 - Task, token and music widgets share the same fixed icon size. Task widgets contain only the paper glyph and a count badge. Each minimal is 16 points wide with a 4-point separator; switching token/task roles preserves the combined width. Both minimals share fixed icon and number rows, with equal baselines and a stable font size. The task widget count stays inside its bounds. The running animation moves only the inner mark, keeping the outline still.
 - Token keeps its existing appearance in widget mode and remains the only pinnable module, with one pin slot. Project pins were removed.
 - Running and approval-waiting tasks remain visible. Finished unread tasks disappear from the compact summary after reading; reading never resolves a pending approval. Each task counts once, including mixed activity.
@@ -15,3 +15,5 @@ This preview stays on `future`; stable 1.02 is unchanged.
 - Clicking any task or its notification shows details inside QuotaNotch. There are no external app/session links or Claude resume commands. Status, latest input and activity remain visible, with live updates.
 
 Validation includes parser and repository fixtures, all read/unread state combinations, repeated approvals, hook preservation/privacy, universal app compilation, and actual English/Chinese UI screenshots at 24/32/38-pixel notch heights.
+
+Future 285 validates all eight presence combinations (including empty), both remembered selections, and transitions between them at all three header heights. Independent widgets ignore the remembered shared-wing selection, have no separator or switching gesture, and open details with one click.

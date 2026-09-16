@@ -53,18 +53,22 @@ struct AgentCompactDock<Primary: View>: View {
     private var summary: AgentAttentionSummary { hovering && !store.attention.isVisible ? retained : store.attention }
     private var visible: Bool { store.enabled && summary.isVisible }
     private var metrics: NotchModuleMetrics { NotchModuleMetrics(widgetWidth: widgetWidth ?? max(0, height - 12)) }
-    private var separator: CGFloat { hasPrimary && visible ? metrics.dividerWidth : 0 }
-    private var taskWidth: CGFloat { visible ? (store.compactExpanded ? metrics.widgetWidth : metrics.minimalWidth) : 0 }
+    // A task only yields space when quota actually shares this wing (all three modules present).
+    private var sharesWing: Bool { hasPrimary && primaryWidth > 0 }
+    private var showsTaskWidget: Bool { !sharesWing || store.compactExpanded }
+    private var separator: CGFloat { sharesWing && visible ? metrics.dividerWidth : 0 }
+    private var taskWidth: CGFloat { visible ? (showsTaskWidget ? metrics.widgetWidth : metrics.minimalWidth) : 0 }
     private var extra: CGFloat { separator + taskWidth }
     private var motion: Animation? { reduced ? nil : .smooth(duration: 0.32) }
     var body: some View {
         HStack(spacing: 0) {
-            if hasPrimary { primary().frame(width: primaryWidth, height: height) }
+            if sharesWing { primary().frame(width: primaryWidth, height: height) }
             if visible {
-                if hasPrimary {
+                if sharesWing {
                     Button { withAnimation(motion) { store.compactExpanded.toggle() } } label: {
                         ChevronDivider(expanded: hovering, reversed: store.compactExpanded)
                             .frame(width: separator, height: height).contentShape(Rectangle())
+                            .auditNotchModule("switcher", mode: "enabled")
                     }.buttonStyle(.plain).help(store.compactExpanded ? AgentText.t("收起任务摘要", "Minimize tasks") : AgentText.t("展开任务摘要", "Expand tasks"))
                 }
                 taskButton
@@ -80,12 +84,12 @@ struct AgentCompactDock<Primary: View>: View {
             withAnimation(motion) { hovering = value }
             if !value && !store.showAccessory { store.compactExpanded = false }
         }
-        .modifier(AgentModuleSwitchGesture(enabled: visible))
+        .modifier(AgentModuleSwitchGesture(enabled: visible && sharesWing))
         .preference(key: AgentWingOffsetKey.self, value: (primaryWidth + extra - (anchorWidth ?? primaryWidth)) / 2)
     }
     private var taskButton: some View {
         Button {
-            if !store.compactExpanded {
+            if !showsTaskWidget {
                 withAnimation(motion) { store.compactExpanded = true }
             } else {
                 store.notchReadEnabled = true
@@ -94,10 +98,10 @@ struct AgentCompactDock<Primary: View>: View {
         } label: {
             taskLabel.frame(width: taskWidth, height: height).contentShape(Rectangle())
         }.buttonStyle(.plain).help(summaryLabel).accessibilityLabel(summaryLabel)
-            .accessibilityHint(store.compactExpanded ? AgentText.t("查看任务详情", "View task details") : AgentText.t("切换到任务 widget", "Show task widget"))
+            .accessibilityHint(showsTaskWidget ? AgentText.t("查看任务详情", "View task details") : AgentText.t("切换到任务 widget", "Show task widget"))
     }
     @ViewBuilder private var taskLabel: some View {
-        if store.compactExpanded {
+        if showsTaskWidget {
             glyph.scaleEffect(metrics.widgetWidth / 16)
                 .frame(width: metrics.widgetWidth, height: metrics.widgetWidth)
                 .overlay(alignment: .bottomTrailing) {
@@ -105,6 +109,7 @@ struct AgentCompactDock<Primary: View>: View {
                         .monospacedDigit().fixedSize()
                         .padding(.horizontal, 1).background(.black, in: RoundedRectangle(cornerRadius: 2))
                 }
+                .auditNotchModule("task", mode: "widget")
                 .transition(.opacity)
         } else {
             NotchMinimalLabel(metrics: metrics, number: countLabel) {
@@ -112,6 +117,7 @@ struct AgentCompactDock<Primary: View>: View {
                 glyph.scaleEffect(metrics.minimalIconSize / 16)
                     .frame(width: metrics.minimalIconSize, height: metrics.minimalIconSize)
             }
+            .auditNotchModule("task", mode: "minimal")
             .transition(.opacity)
         }
     }
@@ -199,4 +205,24 @@ private struct AgentHorizontalScroll: NSViewRepresentable {
 
 extension Notification.Name {
     static let agentOpenNotch = Notification.Name("QuotaNotch.agentOpenNotch")
+}
+
+// The isolated preview observes the modules actually rendered, independently of fixture expectations.
+// The installable build has no audit preferences or state.
+#if SETTINGS_PREVIEW
+struct NotchModuleAuditKey: PreferenceKey {
+    static var defaultValue: [String: String] = [:]
+    static func reduce(value: inout [String: String], nextValue: () -> [String: String]) {
+        value.merge(nextValue(), uniquingKeysWith: { _, new in new })
+    }
+}
+#endif
+extension View {
+    @ViewBuilder func auditNotchModule(_ name: String, mode: String = "widget") -> some View {
+        #if SETTINGS_PREVIEW
+        self.preference(key: NotchModuleAuditKey.self, value: [name: mode])
+        #else
+        self
+        #endif
+    }
 }

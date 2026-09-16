@@ -234,9 +234,9 @@ struct QuotaPinnedWings: View {
     @AppStorage("quotaComfortable") private var comfortable = false
     private var iconSize: CGFloat { QuotaCompactMetrics.iconSize(height: height, comfortable: comfortable) }
 
-    private var tasksExpanded: Bool { activity.compactExpanded && activity.showAccessory }
+    private var tasksExpanded: Bool { showsMusic && activity.compactExpanded && activity.showAccessory }
     private var metrics: NotchModuleMetrics { NotchModuleMetrics(widgetWidth: iconSize) }
-    private var leftWidth: CGFloat { tasksExpanded && !showsMusic ? metrics.minimalWidth : iconSize }
+    private var leftWidth: CGFloat { iconSize }
     private var rightPrimaryWidth: CGFloat {
         guard activity.showAccessory else { return iconSize }
         return showsMusic ? (tasksExpanded ? metrics.minimalWidth : iconSize) : 0
@@ -247,24 +247,22 @@ struct QuotaPinnedWings: View {
             HStack(spacing: QuotaCompactMetrics.spacing) {
                 Button {
                     if showsMusic { onMusic() }
-                    else if tasksExpanded { restoreQuotaWidget() }
                     else { onSelect(provider) }
                 } label: {
                     Group {
                         if showsMusic { albumWithActivity }
-                        else if tasksExpanded { minimalQuota(pin, provider: provider) }
                         else if activity.showAccessory { quotaIndicator(pin, provider: provider) }
                         else {
                             QuotaBrandMark(brand: provider.brand)
                                 .frame(width: iconSize, height: iconSize)
+                                .auditNotchModule("quota")
                         }
                     }
                     .frame(width: leftWidth, height: height)
                     .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
-                .modifier(AgentModuleSwitchGesture(enabled: activity.showAccessory && !showsMusic))
-                .help(showsMusic ? QuotaText.localized("打开音乐") : tasksExpanded ? AgentText.t("切换到额度 widget", "Show quota widget") : QuotaText.format("打开 %@ 额度", provider.title))
+                .help(showsMusic ? QuotaText.localized("打开音乐") : QuotaText.format("打开 %@ 额度", provider.title))
                 .accessibilityLabel(showsMusic ? QuotaText.localized("打开音乐") : QuotaText.format("打开 %@ 额度", provider.title))
 
                 Color.clear.frame(width: centerWidth, height: height)
@@ -310,6 +308,7 @@ struct QuotaPinnedWings: View {
         }
         .foregroundStyle(store.isStale(provider) ? .secondary : .primary)
         .frame(width: metrics.minimalWidth, height: height)
+        .auditNotchModule("quota", mode: "minimal")
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(provider.title + " · " + reading(for: pin))
     }
@@ -320,6 +319,7 @@ struct QuotaPinnedWings: View {
             .frame(width: iconSize, height: iconSize)
             .clipShape(RoundedRectangle(cornerRadius: MusicPlayerImageSizes.cornerRadiusInset.closed))
             .matchedGeometryEffect(id: "albumArt", in: albumArtNamespace)
+            .auditNotchModule("music")
             .overlay(alignment: .bottomTrailing) {
                 Group {
                         AudioSpectrumView(isPlaying: $music.isPlaying)
@@ -348,5 +348,6 @@ struct QuotaPinnedWings: View {
                           percent: store.window(for: pin)?.remainingPercent,
                           stale: store.isStale(provider),
                           showsBrand: showsMusic || activity.showAccessory, showsNumbers: store.pins.showsNumbers, size: iconSize)
+            .auditNotchModule("quota")
     }
 }

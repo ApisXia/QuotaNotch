@@ -371,6 +371,7 @@ struct ContentView: View {
             Color.clear.frame(width: vm.closedNotchSize.width - cornerRadiusInsets.closed.top, height: height)
             AgentCompactDock(primaryWidth: 0, height: height, anchorWidth: size, widgetWidth: size, open: openTasks) { EmptyView() }
         }.frame(height: height)
+        .auditNotchModule("music")
     }
 
     func MusicLiveActivity() -> some View {
@@ -465,6 +466,7 @@ struct ContentView: View {
             height: vm.effectiveClosedNotchHeight,
             alignment: .center
         )
+        .auditNotchModule("music")
     }
 
     private func openTasks() {
@@ -482,7 +484,8 @@ struct ContentView: View {
     private func openFromPointer(explicit: Bool = false) {
         guard vm.notchState == .closed else { return }
         agentStore.notchReadEnabled = explicit
-        if agentStore.compactExpanded && agentStore.showAccessory {
+        if agentStore.showAccessory && (compactPresentation == .none ||
+            (compactPresentation == .combined && agentStore.compactExpanded)) {
             coordinator.currentView = .activity; doOpen(); return
         }
         let presentation = compactPresentation
