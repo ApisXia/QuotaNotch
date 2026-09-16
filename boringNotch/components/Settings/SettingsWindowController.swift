@@ -54,6 +54,8 @@ class SettingsWindowController: NSWindowController {
         window.isExcludedFromWindowsMenu = false
         
         // Configure window to be a standard document-style window
+        window.contentMinSize = NSSize(width: 700, height: 500)
+        window.setFrameAutosaveName("QuotaNotchSettingsWindow")
         window.isRestorable = true
         window.identifier = NSUserInterfaceItemIdentifier("BoringNotchSettingsWindow")
         
@@ -82,7 +84,9 @@ class SettingsWindowController: NSWindowController {
         // Show the window with proper ordering
         window?.orderFrontRegardless()
         window?.makeKeyAndOrderFront(nil)
-        window?.center()
+        if UserDefaults.standard.string(forKey: "NSWindow Frame QuotaNotchSettingsWindow") == nil {
+            window?.center()
+        }
         
         // Activate the app and ensure window gets focus
         NSApp.activate(ignoringOtherApps: true)

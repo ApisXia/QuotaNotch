@@ -67,6 +67,9 @@ class MusicManager: ObservableObject {
 
     // MARK: - Initialization
     init() {
+        #if SETTINGS_PREVIEW
+        return // Fixture build never starts media controllers or permission helpers.
+        #endif
         // Listen for changes to the default controller preference
         NotificationCenter.default.publisher(for: Notification.Name.mediaControllerChanged)
             .sink { [weak self] _ in

@@ -104,6 +104,27 @@ jobs:
           if-no-files-found: error
           retention-days: 30
 
+
+      - name: Build isolated settings preview executable
+        if: ${{ inputs.preview_only != true }}
+        run: |
+          xcodebuild build -quiet -project boringNotch.xcodeproj -scheme boringNotch \
+            -configuration Release -destination 'generic/platform=macOS' \
+            -derivedDataPath build/DerivedData ARCHS=arm64 ONLY_ACTIVE_ARCH=YES \
+            SWIFT_ACTIVE_COMPILATION_CONDITIONS=SETTINGS_PREVIEW \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO DEVELOPMENT_TEAM='' CODE_SIGN_IDENTITY=''
+      - name: Render actual English and Chinese settings pages
+        if: ${{ inputs.preview_only != true }}
+        run: |
+          build/DerivedData/Build/Products/Release/QuotaNotch.app/Contents/MacOS/QuotaNotch -AppleLanguages '(en)'
+          build/DerivedData/Build/Products/Release/QuotaNotch.app/Contents/MacOS/QuotaNotch -AppleLanguages '(zh-Hans)'
+      - name: Upload settings page screenshots
+        if: ${{ always() && inputs.preview_only != true }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: Settings-UX-${{ github.sha }}
+          path: build/Settings-previews/**
+
   publish-release:
     needs: build
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'

@@ -13,6 +13,7 @@ struct MusicSlotConfigurationView: View {
     @Default(.musicControlSlots) private var musicControlSlots
     @ObservedObject private var musicManager = MusicManager.shared
     @State private var draggedSlot: MusicControlButton?
+    @State private var pendingControl: MusicControlButton?
 
     private let fixedSlotCount: Int = 5
 
@@ -27,6 +28,7 @@ struct MusicSlotConfigurationView: View {
                 Button("Reset to Defaults") {
                     withAnimation {
                         musicControlSlots = MusicControlButton.defaultLayout
+                        pendingControl = nil
                     }
                 }
                 .buttonStyle(.borderless)
@@ -38,7 +40,13 @@ struct MusicSlotConfigurationView: View {
     }
 
     private var previewSection: some View {
-        HStack(alignment: .top, spacing: 12) {
+        ViewThatFits(in: .horizontal) {
+            HStack(alignment: .top, spacing: 12) { slotsPreview; trashPreview }
+            VStack(alignment: .leading, spacing: 12) { slotsPreview; trashPreview }
+        }
+    }
+
+    private var slotsPreview: some View {
             HStack(spacing: 6) {
                 ForEach(0..<fixedSlotCount, id: \.self) { index in
                     let slot = slotValue(at: index)
@@ -68,12 +76,30 @@ struct MusicSlotConfigurationView: View {
                                 }
                         }
                     }
+                    .overlay {
+                        if let pendingControl {
+                            Button {
+                                if let slots = SettingsSelection.inserting(pendingControl, into: musicControlSlots, empty: .none, destination: index) {
+                                    musicControlSlots = slots
+                                }
+                                self.pendingControl = nil
+                            } label: {
+                                RoundedRectangle(cornerRadius: 8).stroke(Color.accentColor, lineWidth: 2)
+                                    .contentShape(Rectangle())
+                            }
+                            .buttonStyle(.plain)
+                            .accessibilityLabel(Text("Replace slot \(index + 1)"))
+                        }
+                    }
                 }
             }
             .padding(12)
             .background(Color(NSColor.controlBackgroundColor))
             .cornerRadius(8)
 
+    }
+
+    private var trashPreview: some View {
             VStack(spacing: 8) {
                 ZStack {
                     RoundedRectangle(cornerRadius: 10)
@@ -97,21 +123,25 @@ struct MusicSlotConfigurationView: View {
                     .lineLimit(2)
                     .frame(width: 72)
             }
-        }
     }
 
     private var slotConfigurationSection: some View {
         VStack(alignment: .leading, spacing: 8) {
-            HStack {
+            VStack(alignment: .leading, spacing: 4) {
                 Text("Layout Preview")
                     .font(.headline)
                     .foregroundStyle(.secondary)
-                Spacer()
-                Text("Drag items in the preview to reorder or drop from the palette")
+                Text("Drag to reorder. Click a control to add it; when full, choose a slot to replace.")
+                    .fixedSize(horizontal: false, vertical: true)
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
             }
             previewSection
+            if let pendingControl {
+                SettingsHint("All slots are full. Choose a slot to replace, or cancel.")
+                Button("Cancel") { self.pendingControl = nil }
+                Text(LocalizedStringKey(pendingControl.label)).font(.caption).foregroundStyle(.secondary)
+            }
 
             Divider()
 
@@ -120,8 +150,7 @@ struct MusicSlotConfigurationView: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
 
-                ScrollView(.horizontal) {
-                    HStack(spacing: 12) {
+                LazyVGrid(columns: [GridItem(.adaptive(minimum: 84), spacing: 12)], alignment: .leading, spacing: 12) {
                         ForEach(MusicControlButton.pickerOptions, id: \.self) { control in
                             VStack(spacing: 6) {
                                 ZStack {
@@ -142,25 +171,23 @@ struct MusicSlotConfigurationView: View {
                                     return NSItemProvider(object: NSString(string: "control:\(control.rawValue)"))
                                 }
                                 .onTapGesture {
-                                    if let idx = musicControlSlots.firstIndex(of: .none) {
-                                        updateSlot(control, at: idx)
+                                    if let slots = SettingsSelection.inserting(control, into: musicControlSlots, empty: .none) {
+                                        musicControlSlots = slots
+                                        pendingControl = nil
                                     } else {
-                                        withAnimation { updateSlot(control, at: 0) }
+                                        pendingControl = control
                                     }
                                 }
 
-                                Text(control.label)
+                                Text(LocalizedStringKey(control.label))
                                     .font(.caption2)
                                     .foregroundStyle(.secondary)
-                                    .frame(width: 60)
                                     .multilineTextAlignment(.center)
-                                    .lineLimit(2)
+                                    .fixedSize(horizontal: false, vertical: true)
                             }
                         }
-                    }
-                    .padding(.vertical, 4)
                 }
-                .scrollIndicators(.visible)
+                .padding(.vertical, 4)
             }
         }
     }
@@ -334,14 +361,10 @@ struct MusicSlotConfigurationView: View {
         } else if raw.hasPrefix("control:") {
             let val = raw.replacingOccurrences(of: "control:", with: "")
             if let control = MusicControlButton(rawValue: val) {
-                // If this control already exists in another slot, clear that original slot
-                var slots = musicControlSlots
-                if let existing = slots.firstIndex(of: control), existing != toIndex {
-                    slots[existing] = .none
+                if let slots = SettingsSelection.inserting(control, into: musicControlSlots, empty: .none, destination: toIndex) {
                     musicControlSlots = slots
+                    pendingControl = nil
                 }
-
-                updateSlot(control, at: toIndex)
             }
         }
     }

@@ -90,6 +90,9 @@ class BoringViewCoordinator: ObservableObject {
     private var hudReplacementCancellable: AnyCancellable?
 
     private init() {
+        #if SETTINGS_PREVIEW
+        return // Fixture build never starts media controllers or permission helpers.
+        #endif
         // Perform migration from name-based to UUID-based storage
         if preferredScreenUUID == nil, let legacyName = legacyPreferredScreenName {
             // Try to find screen by name and migrate to UUID

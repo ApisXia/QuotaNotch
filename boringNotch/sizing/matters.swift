@@ -70,6 +70,8 @@ enum MusicPlayerImageSizes {
             notchHeight = Defaults[.nonNotchHeight]
             if Defaults[.nonNotchHeightMode] == .matchMenuBar {
                 notchHeight = screen.frame.maxY - screen.visibleFrame.maxY
+            } else if Defaults[.nonNotchHeightMode] == .matchRealNotchSize {
+                notchHeight = 32
             }
         }
     }

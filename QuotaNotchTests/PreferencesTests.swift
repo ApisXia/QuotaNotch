@@ -38,3 +38,35 @@ final class PreferencesTests: XCTestCase {
         XCTAssertEqual(QuotaLanguage.stored(in: defaults), .system)
     }
 }
+
+final class SettingsSelectionTests: XCTestCase {
+    func testClickFillsAnEmptySlotWithoutChangingExistingControls() {
+        XCTAssertEqual(SettingsSelection.inserting("volume", into: ["previous", "play", ""], empty: ""), ["previous", "play", "volume"])
+    }
+    func testFullLayoutRequiresAnExplicitReplacement() {
+        let slots = ["previous", "play", "next"]
+        XCTAssertNil(SettingsSelection.inserting("volume", into: slots, empty: ""))
+        XCTAssertEqual(SettingsSelection.inserting("volume", into: slots, empty: "", destination: 1), ["previous", "volume", "next"])
+    }
+    func testClickingAnExistingControlDoesNotDuplicateIt() {
+        XCTAssertEqual(SettingsSelection.inserting("play", into: ["", "play", "next"], empty: ""), ["", "play", "next"])
+    }
+    func testDropMovesExistingControlAndClearsLegacyDuplicates() {
+        XCTAssertEqual(SettingsSelection.inserting("play", into: ["play", "play", "next"], empty: "", destination: 2), ["", "", "play"])
+        XCTAssertNil(SettingsSelection.inserting("play", into: ["play"], empty: "", destination: 5))
+    }
+    func testSavedCandidatesRemainEditableWithoutResults() {
+        let pin = QuotaPin(providerID: "claude", windowID: "five_hour")
+        var pins = QuotaPins()
+        pins.candidates = [pin]
+        XCTAssertEqual(pins.editableCandidates(available: []), [pin])
+        XCTAssertEqual(pins.editableCandidates(available: [pin]), [pin])
+    }
+    func testSavedUnavailableCandidatesAppearAlongsideAvailableWindows() {
+        let old = QuotaPin(providerID: "claude", windowID: "seven_day")
+        let new = QuotaPin(providerID: "codex", windowID: "primary_window")
+        var pins = QuotaPins()
+        pins.candidates = [old]
+        XCTAssertEqual(pins.editableCandidates(available: [new, new]), [new, old])
+    }
+}

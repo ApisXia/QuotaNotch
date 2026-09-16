@@ -1,7 +1,7 @@
 // QuotaNotch additions, 2026. SPDX-License-Identifier: GPL-3.0-only
 import Foundation
 
-struct QuotaPin: Codable, Equatable, Sendable {
+struct QuotaPin: Codable, Hashable, Sendable {
     let providerID: String
     let windowID: String
     var provider: QuotaProvider? { QuotaProvider(rawValue: providerID) }

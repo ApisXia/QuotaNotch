@@ -1,22 +1,16 @@
-//
-//  SettingsView.swift
-//  boringNotch
-//
-//  Created by Richard Kunkli on 07/08/2024.
-//
-
+// SPDX-License-Identifier: GPL-3.0-only
 import Defaults
 import EventKit
 import KeyboardShortcuts
 import LaunchAtLogin
 import Sparkle
 import SwiftUI
-import SwiftUIIntrospect
 
 struct SettingsView: View {
     @AppStorage("settingsSelectedTab") private var selectedTab = "General"
-    @State private var accentColorUpdateTrigger = UUID()
-
+    // Observe the actual preferences without destroying page state when a color changes.
+    @Default(.useCustomAccentColor) private var useCustomAccentColor
+    @Default(.customAccentColorData) private var customAccentColorData
     let updaterController: SPUStandardUpdaterController?
 
     init(updaterController: SPUStandardUpdaterController? = nil) {
@@ -28,612 +22,394 @@ struct SettingsView: View {
             List(selection: $selectedTab) {
                 NavigationLink(value: "General") { Label("通用", systemImage: "gearshape") }
                 NavigationLink(value: "Quota") { Label("AI 额度", systemImage: "chart.pie") }
-                NavigationLink(value: "Calendar") { Label("日历", systemImage: "calendar") }
                 NavigationLink(value: "Media") { Label("音乐", systemImage: "music.note") }
-                NavigationLink(value: "Appearance") { Label("外观与提示", systemImage: "circle.lefthalf.filled") }
+                NavigationLink(value: "Calendar") { Label("Calendars & Reminders", systemImage: "calendar") }
+                NavigationLink(value: "Appearance") { Label("外观", systemImage: "circle.lefthalf.filled") }
+                NavigationLink(value: "System") { Label("System Indicators", systemImage: "slider.horizontal.3") }
                 NavigationLink(value: "About") { Label("关于", systemImage: "info.circle") }
             }
-            .listStyle(SidebarListStyle())
-            .tint(.effectiveAccent)
-            .toolbar(removing: .sidebarToggle)
-            .navigationSplitViewColumnWidth(200)
+            .listStyle(.sidebar)
+            .navigationSplitViewColumnWidth(min: 170, ideal: 180, max: 220)
         } detail: {
             Group {
                 switch selectedTab {
-                case "General":
-                    GeneralSettings()
-                case "Appearance":
-                    QuotaAppearancePreferences()
-                case "Calendar":
-                    CalendarSettings()
-                case "Media":
-                    Media()
-                case "Quota":
-                    QuotaPreferences()
-                case "About":
-                    if let controller = updaterController {
-                        About(updaterController: controller)
-                    } else {
-                        // Fallback with a default controller
-                        About(
-                            updaterController: SPUStandardUpdaterController(
-                                startingUpdater: false, updaterDelegate: nil,
-                                userDriverDelegate: nil))
-                    }
-                default:
-                    GeneralSettings()
+                case "Quota": QuotaPreferences()
+                case "Media": Media()
+                case "Calendar": CalendarSettings()
+                case "Appearance": Appearance()
+                case "System": HUD()
+                case "About": About(updaterController: updaterController ?? SPUStandardUpdaterController(
+                    startingUpdater: false, updaterDelegate: nil, userDriverDelegate: nil))
+                default: GeneralSettings()
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
         .navigationSplitViewStyle(.balanced)
         .toolbar(removing: .sidebarToggle)
-        .toolbar {
-            ToolbarItem(placement: .principal) {
-                Text("")
-                    .frame(width: 0, height: 0)
-                    .accessibilityHidden(true)
-            }
-        }
         .formStyle(.grouped)
-        .frame(width: 700)
+        .frame(minWidth: 700, minHeight: 500)
         .background(Color(NSColor.windowBackgroundColor))
-        .tint(.effectiveAccent)
-        .id(accentColorUpdateTrigger)
-        .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("AccentColorChanged"))) { _ in
-            accentColorUpdateTrigger = UUID()
+        .tint(settingsAccent)
+    }
+
+    private var settingsAccent: Color {
+        if useCustomAccentColor, let data = customAccentColorData,
+           let color = try? NSKeyedUnarchiver.unarchivedObject(ofClass: NSColor.self, from: data) {
+            return Color(nsColor: color)
         }
+        return .accentColor
     }
 }
 
 struct GeneralSettings: View {
     @State private var language = QuotaLanguage.stored()
     private let startingLanguage = QuotaLanguage.atLaunch
-    @State private var screens: [(uuid: String, name: String)] = NSScreen.screens.compactMap { screen in
-        guard let uuid = screen.displayUUID else { return nil }
-        return (uuid, screen.localizedName)
-    }
-    @EnvironmentObject var vm: BoringViewModel
-    @ObservedObject var coordinator = BoringViewCoordinator.shared
-
-    @Default(.showEmojis) var showEmojis
-    @Default(.minimumHoverDuration) var minimumHoverDuration
-    @Default(.nonNotchHeight) var nonNotchHeight
-    @Default(.nonNotchHeightMode) var nonNotchHeightMode
-    @Default(.notchHeight) var notchHeight
-    @Default(.notchHeightMode) var notchHeightMode
-    @Default(.showOnAllDisplays) var showOnAllDisplays
-    @Default(.automaticallySwitchDisplay) var automaticallySwitchDisplay
-    @Default(.openNotchOnHover) var openNotchOnHover
-    
+    @State private var screens: [(uuid: String, name: String)] = []
+    @ObservedObject private var coordinator = BoringViewCoordinator.shared
+    @Default(.minimumHoverDuration) private var minimumHoverDuration
+    @Default(.nonNotchHeight) private var nonNotchHeight
+    @Default(.nonNotchHeightMode) private var nonNotchHeightMode
+    @Default(.notchHeight) private var notchHeight
+    @Default(.notchHeightMode) private var notchHeightMode
+    @Default(.showOnAllDisplays) private var showOnAllDisplays
+    @Default(.automaticallySwitchDisplay) private var automaticallySwitchDisplay
+    @Default(.openNotchOnHover) private var openNotchOnHover
+    @Default(.hideNotchOption) private var hideNotchOption
 
     var body: some View {
         Form {
             Section("语言 / Language") {
-                Picker("应用语言", selection: $language) {
-                    Text("跟随系统").tag(QuotaLanguage.system)
-                    Text(verbatim: "简体中文").tag(QuotaLanguage.chinese)
-                    Text(verbatim: "English").tag(QuotaLanguage.english)
+                SettingsField("应用语言") {
+                    Picker("应用语言", selection: $language) {
+                        Text("跟随系统").tag(QuotaLanguage.system)
+                        Text(verbatim: "简体中文").tag(QuotaLanguage.chinese)
+                        Text(verbatim: "English").tag(QuotaLanguage.english)
+                    }
                 }
                 .onChange(of: language) { _, value in value.save() }
                 if language != startingLanguage {
-                    Text("重启后应用新语言，账户和固定设置会保留。")
-                        .font(.caption).foregroundStyle(.secondary)
+                    SettingsHint("重启后应用新语言，账户和固定设置会保留。")
                     Button("重启并应用 / Restart to apply") { ApplicationRelauncher.restart() }
                 }
             }
-
-            Section {
-                Toggle(isOn: Binding(
-                    get: { Defaults[.menubarIcon] },
-                    set: { Defaults[.menubarIcon] = $0 }
-                )) {
-                    Text("Show menu bar icon")
-                }
-                .tint(.effectiveAccent)
+            Section("System features") {
+                Defaults.Toggle("Show menu bar icon", key: .menubarIcon)
                 LaunchAtLogin.Toggle("Launch at login")
-                Defaults.Toggle(key: .showOnAllDisplays) {
-                    Text("Show on all displays")
-                }
-                .onChange(of: showOnAllDisplays) {
-                    NotificationCenter.default.post(
-                        name: Notification.Name.showOnAllDisplaysChanged, object: nil)
-                }
-                Picker("Preferred display", selection: $coordinator.preferredScreenUUID) {
-                    ForEach(screens, id: \.uuid) { screen in
-                        Text(screen.name).tag(screen.uuid as String?)
+            }
+            Section("Displays") {
+                Defaults.Toggle("Show on all displays", key: .showOnAllDisplays)
+                    .onChange(of: showOnAllDisplays) {
+                        NotificationCenter.default.post(name: .showOnAllDisplaysChanged, object: nil)
                     }
-                }
-                .onChange(of: NSScreen.screens) {
-                    screens = NSScreen.screens.compactMap { screen in
-                        guard let uuid = screen.displayUUID else { return nil }
-                        return (uuid, screen.localizedName)
+                SettingsField("Preferred display") {
+                    Picker("Preferred display", selection: $coordinator.preferredScreenUUID) {
+                        if coordinator.preferredScreenUUID == nil { Text("Choose a display").tag(nil as String?) }
+                        if let saved = coordinator.preferredScreenUUID, !screens.contains(where: { $0.uuid == saved }) {
+                            Text("Saved display (disconnected)").tag(saved as String?)
+                        }
+                        ForEach(screens, id: \.uuid) { screen in
+                            Text(screen.name).tag(screen.uuid as String?)
+                        }
                     }
                 }
                 .disabled(showOnAllDisplays)
-                
-                Defaults.Toggle(key: .automaticallySwitchDisplay) {
-                    Text("Automatically switch displays")
-                }
+                Defaults.Toggle("Automatically switch displays", key: .automaticallySwitchDisplay)
                     .onChange(of: automaticallySwitchDisplay) {
-                        NotificationCenter.default.post(
-                            name: Notification.Name.automaticallySwitchDisplayChanged, object: nil)
+                        NotificationCenter.default.post(name: .automaticallySwitchDisplayChanged, object: nil)
                     }
                     .disabled(showOnAllDisplays)
-            } header: {
-                Text("System features")
-            }
-
-            Section {
-                Picker(
-                    selection: $notchHeightMode,
-                    label:
-                        Text("Notch height on notch displays")
-                ) {
-                    Text("Match real notch height")
-                        .tag(WindowHeightMode.matchRealNotchSize)
-                    Text("Match menu bar height")
-                        .tag(WindowHeightMode.matchMenuBar)
-                    Text("Custom height")
-                        .tag(WindowHeightMode.custom)
+                if showOnAllDisplays {
+                    SettingsHint("Display preferences are saved and apply when showing on one display.")
                 }
-                .onChange(of: notchHeightMode) {
-                    switch notchHeightMode {
-                    case .matchRealNotchSize:
-                        notchHeight = 38
-                    case .matchMenuBar:
-                        notchHeight = 44
-                    case .custom:
-                        notchHeight = 38
+                SettingsField("Full screen behavior") {
+                    Picker("Full screen behavior", selection: $hideNotchOption) {
+                        Text("Hide for all apps").tag(HideNotchOption.always)
+                        Text("Never hide").tag(HideNotchOption.never)
                     }
-                    NotificationCenter.default.post(
-                        name: Notification.Name.notchHeightChanged, object: nil)
                 }
+                SettingsHint("Applies to the entire notch, including music and AI usage.")
+            }
+            Section("Notch sizing") {
+                SettingsField("Notch height on notch displays") {
+                    Picker("Notch height on notch displays", selection: $notchHeightMode) {
+                        Text("Match real notch height").tag(WindowHeightMode.matchRealNotchSize)
+                        Text("Match menu bar height").tag(WindowHeightMode.matchMenuBar)
+                        Text("Custom height").tag(WindowHeightMode.custom)
+                    }
+                }
+                .onChange(of: notchHeightMode) { notifySizeChange() }
                 if notchHeightMode == .custom {
-                    Slider(value: $notchHeight, in: 15...45, step: 1) {
-                        Text("Custom notch size - \(notchHeight, specifier: "%.0f")")
-                    }
-                    .onChange(of: notchHeight) {
-                        NotificationCenter.default.post(
-                            name: Notification.Name.notchHeightChanged, object: nil)
+                    SettingsSlider("Custom height", value: $notchHeight, range: 15...45, step: 1, suffix: "pt")
+                        .onChange(of: notchHeight) { notifySizeChange() }
+                }
+                SettingsField("Notch height on non-notch displays") {
+                    Picker("Notch height on non-notch displays", selection: $nonNotchHeightMode) {
+                        Text("Match menu bar height").tag(WindowHeightMode.matchMenuBar)
+                        Text("Standard height").tag(WindowHeightMode.matchRealNotchSize)
+                        Text("Custom height").tag(WindowHeightMode.custom)
                     }
                 }
-                Picker("Notch height on non-notch displays", selection: $nonNotchHeightMode) {
-                    Text("Match menubar height")
-                        .tag(WindowHeightMode.matchMenuBar)
-                    Text("Match real notch height")
-                        .tag(WindowHeightMode.matchRealNotchSize)
-                    Text("Custom height")
-                        .tag(WindowHeightMode.custom)
-                }
-                .onChange(of: nonNotchHeightMode) {
-                    switch nonNotchHeightMode {
-                    case .matchMenuBar:
-                        nonNotchHeight = 24
-                    case .matchRealNotchSize:
-                        nonNotchHeight = 32
-                    case .custom:
-                        nonNotchHeight = 32
-                    }
-                    NotificationCenter.default.post(
-                        name: Notification.Name.notchHeightChanged, object: nil)
-                }
+                .onChange(of: nonNotchHeightMode) { notifySizeChange() }
                 if nonNotchHeightMode == .custom {
-                    Slider(value: $nonNotchHeight, in: 0...40, step: 1) {
-                        Text("Custom notch size - \(nonNotchHeight, specifier: "%.0f")")
-                    }
-                    .onChange(of: nonNotchHeight) {
-                        NotificationCenter.default.post(
-                            name: Notification.Name.notchHeightChanged, object: nil)
-                    }
+                    SettingsSlider("Custom height", value: $nonNotchHeight, range: 0...40, step: 1, suffix: "pt")
+                        .onChange(of: nonNotchHeight) { notifySizeChange() }
                 }
-            } header: {
-                Text("Notch sizing")
+                SettingsHint("Custom heights are remembered when switching modes.")
             }
-
-            NotchBehaviour()
-
+            Section("Notch behavior") {
+                Defaults.Toggle("Open notch on hover", key: .openNotchOnHover)
+                if openNotchOnHover {
+                    SettingsSlider("Hover delay", value: $minimumHoverDuration, range: 0...1, step: 0.1, suffix: "s", decimals: 1)
+                }
+                Defaults.Toggle("Enable haptic feedback", key: .enableHaptics)
+                Toggle("Remember last tab", isOn: $coordinator.openLastTabByDefault)
+                Defaults.Toggle("Extend hover area", key: .extendHoverArea)
+                Defaults.Toggle("Cover menu bar behind the notch", key: .hideTitleBar)
+                Defaults.Toggle("Show notch on lock screen", key: .showOnLockScreen)
+                Defaults.Toggle("Hide from screen recording", key: .hideFromScreenRecording)
+            }
             Section("快捷键") {
-                KeyboardShortcuts.Recorder("展开／收起刘海", name: .toggleNotchOpen)
-                KeyboardShortcuts.Recorder("显示音乐信息", name: .toggleSneakPeek)
+                SettingsField("展开／收起刘海") { KeyboardShortcuts.Recorder(for: .toggleNotchOpen) }
+                SettingsField("显示音乐信息") { KeyboardShortcuts.Recorder(for: .toggleSneakPeek) }
             }
         }
-        .toolbar {
-            Button("Quit app") {
-                NSApp.terminate(self)
-            }
-            .controlSize(.extraLarge)
-        }
-        .accentColor(.effectiveAccent)
         .navigationTitle("General")
-
+        .toolbar { Button("Quit app") { NSApp.terminate(self) } }
+        .onAppear { reloadScreens() }
+        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didChangeScreenParametersNotification)) { _ in reloadScreens() }
     }
 
-    @ViewBuilder
-    func NotchBehaviour() -> some View {
-        Section {
-            Defaults.Toggle(key: .openNotchOnHover) {
-                Text("Open notch on hover")
-            }
-            Defaults.Toggle(key: .enableHaptics) {
-                    Text("Enable haptic feedback")
-            }
-            Toggle("Remember last tab", isOn: $coordinator.openLastTabByDefault)
-            if openNotchOnHover {
-                Slider(value: $minimumHoverDuration, in: 0...1, step: 0.1) {
-                    HStack {
-                        Text("Hover delay")
-                        Spacer()
-                        Text("\(minimumHoverDuration, specifier: "%.1f")s")
-                            .foregroundStyle(.secondary)
-                    }
-                }
-                .onChange(of: minimumHoverDuration) {
-                    NotificationCenter.default.post(
-                        name: Notification.Name.notchHeightChanged, object: nil)
-                }
-            }
-        } header: {
-            Text("Notch behavior")
+    private func reloadScreens() {
+        screens = NSScreen.screens.compactMap { screen in
+            screen.displayUUID.map { (uuid: $0, name: screen.localizedName) }
         }
     }
-}
-
-struct Charge: View {
-    var body: some View {
-        Form {
-            Section {
-                Defaults.Toggle(key: .showBatteryIndicator) {
-                    Text("Show battery indicator")
-                }
-                Defaults.Toggle(key: .showPowerStatusNotifications) {
-                    Text("Show power status notifications")
-                }
-            } header: {
-                Text("General")
-            }
-            Section {
-                Defaults.Toggle(key: .showBatteryPercentage) {
-                    Text("Show battery percentage")
-                }
-                Defaults.Toggle(key: .showPowerStatusIcons) {
-                    Text("Show power status icons")
-                }
-            } header: {
-                Text("Battery Information")
-            }
-        }
-        .onAppear {
-            Task { @MainActor in
-                await XPCHelperClient.shared.isAccessibilityAuthorized()
-            }
-        }
-        .accentColor(.effectiveAccent)
-        .navigationTitle("Battery")
+    private func notifySizeChange() {
+        NotificationCenter.default.post(name: .notchHeightChanged, object: nil)
     }
 }
 
 struct HUD: View {
-    @EnvironmentObject var vm: BoringViewModel
-    @Default(.enableGradient) var enableGradient
-    @Default(.optionKeyAction) var optionKeyAction
-    @Default(.hudReplacement) var hudReplacement
-    @ObservedObject var coordinator = BoringViewCoordinator.shared
+    @Default(.enableGradient) private var enableGradient
+    @Default(.optionKeyAction) private var optionKeyAction
+    @Default(.hudReplacement) private var hudReplacement
+    @Default(.showBatteryIndicator) private var showBatteryIndicator
+    @Default(.showPowerStatusNotifications) private var showPowerStatusNotifications
     @State private var accessibilityAuthorized = false
-    
+
     var body: some View {
         Form {
-            Section {
-                HStack {
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("Replace system HUD")
-                            .font(.headline)
-                        Text("Replaces the standard macOS volume, display brightness, and keyboard brightness HUDs with a custom design.")
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
-                            .fixedSize(horizontal: false, vertical: true)
-                    }
-                    Spacer(minLength: 40)
-                    Defaults.Toggle("", key: .hudReplacement)
-                    .labelsHidden()
+            Section("Volume & Brightness") {
+                Defaults.Toggle("Replace system HUD", key: .hudReplacement)
                     .toggleStyle(.switch)
-                    .controlSize(.large)
-                    .disabled(!accessibilityAuthorized)
-                }
-                
+                    .disabled(!accessibilityAuthorized && !hudReplacement)
+                SettingsHint("Volume and brightness appear below the current notch content in every display mode.")
                 if !accessibilityAuthorized {
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text("Accessibility access is required to replace the system HUD.")
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
-
-                        HStack(spacing: 12) {
-                            Button("Request Accessibility") {
-                                XPCHelperClient.shared.requestAccessibilityAuthorization()
-                            }
-                            .buttonStyle(.borderedProminent)
-                        }
+                    SettingsHint("Accessibility access is required to replace the system HUD.")
+                    Button("Request Accessibility") {
+                        XPCHelperClient.shared.requestAccessibilityAuthorization()
                     }
-                    .padding(.top, 6)
+                } else if !hudReplacement {
+                    SettingsHint("Preferences are saved and apply when this feature is enabled.")
                 }
             }
-            
-            Section {
-                Picker("Option key behaviour", selection: $optionKeyAction) {
-                    ForEach(OptionKeyAction.allCases) { opt in
-                        Text(LocalizedStringKey(opt.rawValue)).tag(opt)
+            Section("Indicator Appearance") {
+                SettingsField("Option key behaviour") {
+                    Picker("Option key behaviour", selection: $optionKeyAction) {
+                        ForEach(OptionKeyAction.allCases) { Text(LocalizedStringKey($0.rawValue)).tag($0) }
                     }
                 }
-                
-                Picker("Progress bar style", selection: $enableGradient) {
-                    Text("Hierarchical")
-                        .tag(false)
-                    Text("Gradient")
-                        .tag(true)
+                SettingsField("Progress bar style") {
+                    Picker("Progress bar style", selection: $enableGradient) {
+                        Text("Hierarchical").tag(false)
+                        Text("Gradient").tag(true)
+                    }
                 }
-                Defaults.Toggle(key: .systemEventIndicatorShadow) {
-                    Text("Enable glowing effect")
-                }
-                Defaults.Toggle(key: .systemEventIndicatorUseAccent) {
-                    Text("Tint progress bar with accent color")
-                }
-            } header: {
-                Text("General")
+                Defaults.Toggle("Enable glowing effect", key: .systemEventIndicatorShadow)
+                Defaults.Toggle("Tint progress bar with accent color", key: .systemEventIndicatorUseAccent)
+                Defaults.Toggle("Show percentage", key: .showClosedNotchHUDPercentage)
             }
-            .disabled(!hudReplacement)
-            
-            Section {
-                Defaults.Toggle(key: .showClosedNotchHUDPercentage) {
-                    Text("Show percentage")
-                }
-            } header: {
-                Text("Closed Notch")
+            .disabled(!hudReplacement || !accessibilityAuthorized)
+            Section("Battery") {
+                Defaults.Toggle("Show battery indicator", key: .showBatteryIndicator)
+                Defaults.Toggle("Show power status notifications", key: .showPowerStatusNotifications)
+                Defaults.Toggle("Show battery percentage", key: .showBatteryPercentage)
+                    .disabled(!showBatteryIndicator && !showPowerStatusNotifications)
+                Defaults.Toggle("Show power status icons", key: .showPowerStatusIcons)
+                    .disabled(!showBatteryIndicator)
+                SettingsHint("Power status notifications work independently of the battery indicator. Status icons are always shown in notifications.")
             }
-            .disabled(!Defaults[.hudReplacement])
         }
-        .accentColor(.effectiveAccent)
-        .navigationTitle("HUDs")
-        .task {
-            accessibilityAuthorized = await XPCHelperClient.shared.isAccessibilityAuthorized()
-        }
-        .onAppear {
-            XPCHelperClient.shared.startMonitoringAccessibilityAuthorization()
-        }
-        .onDisappear {
-            XPCHelperClient.shared.stopMonitoringAccessibilityAuthorization()
-        }
+        .navigationTitle("System Indicators")
+        #if !SETTINGS_PREVIEW
+        .task { accessibilityAuthorized = await XPCHelperClient.shared.isAccessibilityAuthorized() }
+        .onAppear { XPCHelperClient.shared.startMonitoringAccessibilityAuthorization() }
+        .onDisappear { XPCHelperClient.shared.stopMonitoringAccessibilityAuthorization() }
+        #endif
         .onReceive(NotificationCenter.default.publisher(for: .accessibilityAuthorizationChanged)) { notification in
-            if let granted = notification.userInfo?["granted"] as? Bool {
-                accessibilityAuthorized = granted
-            }
+            if let granted = notification.userInfo?["granted"] as? Bool { accessibilityAuthorized = granted }
         }
     }
 }
 
 struct Media: View {
-    @Default(.waitInterval) var waitInterval
-    @Default(.mediaController) var mediaController
-    @ObservedObject var coordinator = BoringViewCoordinator.shared
-    @Default(.hideNotchOption) var hideNotchOption
+    @Default(.waitInterval) private var waitInterval
+    @Default(.mediaController) private var mediaController
     @Default(.enableSneakPeek) private var enableSneakPeek
-    @Default(.sneakPeekStyles) var sneakPeekStyles
-
+    @Default(.sneakPeekStyles) private var sneakPeekStyles
+    @Default(.sliderColor) private var sliderColor
+    @ObservedObject private var coordinator = BoringViewCoordinator.shared
 
     var body: some View {
         Form {
-            Section {
-                Picker("Music Source", selection: $mediaController) {
-                    ForEach(availableMediaControllers) { controller in
-                        Text(LocalizedStringKey(controller.rawValue)).tag(controller)
+            Section("Media Source") {
+                SettingsField("Music Source") {
+                    Picker("Music Source", selection: $mediaController) {
+                        ForEach(availableMediaControllers) { Text(LocalizedStringKey($0.rawValue)).tag($0) }
                     }
                 }
                 .onChange(of: mediaController) { _, _ in
-                    NotificationCenter.default.post(
-                        name: Notification.Name.mediaControllerChanged,
-                        object: nil
-                    )
+                    NotificationCenter.default.post(name: .mediaControllerChanged, object: nil)
                 }
-            } header: {
-                Text("Media Source")
-            } footer: {
-                if MusicManager.shared.isNowPlayingDeprecated {
-                    HStack {
-                        Text("YouTube Music requires this third-party app to be installed: ")
-                            .foregroundStyle(.secondary)
-                            .font(.caption)
-                        Link(
-                            "https://github.com/pear-devs/pear-desktop",
-                            destination: URL(string: "https://github.com/pear-devs/pear-desktop")!
-                        )
-                        .font(.caption)
-                        .foregroundColor(.blue)  // Ensures it's visibly a link
-                    }
-                } else {
-                    Text(
-                        "'Now Playing' was the only option on previous versions and works with all media apps."
-                    )
-                    .foregroundStyle(.secondary)
-                    .font(.caption)
+                if mediaController == .youtubeMusic {
+                    SettingsHint("YouTube Music requires Pear Desktop.")
+                    Link("Get Pear Desktop", destination: URL(string: "https://github.com/pear-devs/pear-desktop")!)
                 }
             }
-            
-            Section {
-                Toggle(
-                    "Show music live activity",
-                    isOn: $coordinator.musicLiveActivityEnabled.animation()
-                )
-                Toggle("Show sneak peek on playback changes", isOn: $enableSneakPeek)
-                Picker("Sneak Peek Style", selection: $sneakPeekStyles) {
-                    ForEach(SneakPeekStyle.allCases) { style in
-                        Text(LocalizedStringKey(style.rawValue)).tag(style)
-                    }
-                }
-                HStack {
+            Section("Media playback live activity") {
+                Toggle("Show music live activity", isOn: $coordinator.musicLiveActivityEnabled)
+                SettingsHint("Shows album art and playback activity in the closed notch.")
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Media inactivity timeout").fixedSize(horizontal: false, vertical: true)
                     Stepper(value: $waitInterval, in: 0...10, step: 1) {
-                        HStack {
-                            Text("Media inactivity timeout")
-                            Spacer()
-                            Text("\(Defaults[.waitInterval], specifier: "%.0f") seconds")
-                                .foregroundStyle(.secondary)
-                        }
+                        Text("\(waitInterval, specifier: "%.0f") seconds")
                     }
                 }
-                Picker("Full screen behavior", selection: $hideNotchOption) {
-                    Text("Hide for all apps").tag(HideNotchOption.always)
-                    Text("Never hide").tag(HideNotchOption.never)
-                }
-            } header: {
-                Text("Media playback live activity")
+                .disabled(!coordinator.musicLiveActivityEnabled)
             }
-            
-            Section {
+            Section("Playback Notifications") {
+                Toggle("Show sneak peek on playback changes", isOn: $enableSneakPeek)
+                SettingsField("Sneak Peek Style") {
+                    Picker("Sneak Peek Style", selection: $sneakPeekStyles) {
+                        ForEach(SneakPeekStyle.allCases) { Text(LocalizedStringKey($0.rawValue)).tag($0) }
+                    }
+                }
+                .disabled(!enableSneakPeek)
+                if !enableSneakPeek { SettingsHint("Preferences are saved and apply when this feature is enabled.") }
+            }
+            Section("Media controls") {
                 MusicSlotConfigurationView()
-
-            } header: {
-                Text("Media controls")
-            }  footer: {
-                Text("Customize which controls appear in the music player. Volume expands when active.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+            }
+            Section("Player Appearance") {
+                Defaults.Toggle("Colored spectrogram", key: .coloredSpectrogram)
+                Defaults.Toggle("Player tinting", key: .playerColorTinting)
+                Defaults.Toggle("Enable blur effect behind album art", key: .lightingEffect)
+                SettingsField("Slider color") {
+                    Picker("Slider color", selection: $sliderColor) {
+                        ForEach(SliderColorEnum.allCases, id: \.self) { Text(LocalizedStringKey($0.rawValue)).tag($0) }
+                    }
+                }
             }
         }
-        .accentColor(.effectiveAccent)
         .navigationTitle("Media")
     }
-
-    // Only show controller options that are available on this macOS version
     private var availableMediaControllers: [MediaControllerType] {
-        if MusicManager.shared.isNowPlayingDeprecated {
-            return MediaControllerType.allCases.filter { $0 != .nowPlaying }
-        } else {
-            return MediaControllerType.allCases
-        }
+        MusicManager.shared.isNowPlayingDeprecated ? MediaControllerType.allCases.filter { $0 != .nowPlaying } : MediaControllerType.allCases
     }
 }
 
 struct CalendarSettings: View {
     @ObservedObject private var calendarManager = CalendarManager.shared
-    @Default(.showCalendar) var showCalendar: Bool
-    @Default(.hideCompletedReminders) var hideCompletedReminders
-    @Default(.hideAllDayEvents) var hideAllDayEvents
-    @Default(.autoScrollToNextEvent) var autoScrollToNextEvent
+    @Default(.showCalendar) private var showCalendar
+    @State private var requestingAccess = false
 
     var body: some View {
         Form {
-            Defaults.Toggle(key: .showCalendar) {
-                Text("Show calendar")
+            Section("Display") {
+                Defaults.Toggle("Show calendar", key: .showCalendar)
+                if !showCalendar { SettingsHint("Preferences are saved and apply when this feature is enabled.") }
+                Group {
+                    Defaults.Toggle("Hide completed reminders", key: .hideCompletedReminders)
+                    Defaults.Toggle("Hide all-day events", key: .hideAllDayEvents)
+                    Defaults.Toggle("Auto-scroll to next event", key: .autoScrollToNextEvent)
+                    Defaults.Toggle("Always show full event titles", key: .showFullEventTitles)
+                }.disabled(!showCalendar)
             }
-            Defaults.Toggle(key: .hideCompletedReminders) {
-                Text("Hide completed reminders")
-            }
-            Defaults.Toggle(key: .hideAllDayEvents) {
-                Text("Hide all-day events")
-            }
-            Defaults.Toggle(key: .autoScrollToNextEvent) {
-                Text("Auto-scroll to next event")
-            }
-            Defaults.Toggle(key: .showFullEventTitles) {
-                Text("Always show full event titles")
-            }
-            Section(header: Text("Calendars")) {
-                if calendarManager.calendarAuthorizationStatus != .fullAccess {
-                    Text("Calendar access is denied. Please enable it in System Settings.")
-                        .foregroundColor(.red)
-                        .multilineTextAlignment(.center)
-                        .padding()
-                    Button("Open Calendar Settings") {
-                        if let settingsURL = URL(
-                            string:
-                                "x-apple.systempreferences:com.apple.preference.security?Privacy_Calendars"
-                        ) {
-                            NSWorkspace.shared.open(settingsURL)
-                        }
-                    }
-                } else {
-                    List {
-                        ForEach(calendarManager.eventCalendars, id: \.id) { calendar in
-                            Toggle(
-                                isOn: Binding(
-                                    get: { calendarManager.getCalendarSelected(calendar) },
-                                    set: { isSelected in
-                                        Task {
-                                            await calendarManager.setCalendarSelected(
-                                                calendar, isSelected: isSelected)
-                                        }
-                                    }
-                                )
-                            ) {
-                                Text(calendar.title)
-                            }
-                            .accentColor(lighterColor(from: calendar.color))
-                            .disabled(!showCalendar)
-                        }
-                    }
+            Section("Calendars") {
+                calendarPermission(for: .event, status: calendarManager.calendarAuthorizationStatus)
+                if calendarManager.calendarAuthorizationStatus == .fullAccess {
+                    if calendarManager.eventCalendars.isEmpty { SettingsHint("No calendars found.") }
+                    ForEach(calendarManager.eventCalendars, id: \.id) { calendar in calendarRow(calendar) }
                 }
             }
-            Section(header: Text("Reminders")) {
-                if calendarManager.reminderAuthorizationStatus != .fullAccess {
-                    Text("Reminder access is denied. Please enable it in System Settings.")
-                        .foregroundColor(.red)
-                        .multilineTextAlignment(.center)
-                        .padding()
-                    Button("Open Reminder Settings") {
-                        if let settingsURL = URL(
-                            string:
-                                "x-apple.systempreferences:com.apple.preference.security?Privacy_Reminders"
-                        ) {
-                            NSWorkspace.shared.open(settingsURL)
-                        }
-                    }
-                } else {
-                    List {
-                        ForEach(calendarManager.reminderLists, id: \.id) { calendar in
-                            Toggle(
-                                isOn: Binding(
-                                    get: { calendarManager.getCalendarSelected(calendar) },
-                                    set: { isSelected in
-                                        Task {
-                                            await calendarManager.setCalendarSelected(
-                                                calendar, isSelected: isSelected)
-                                        }
-                                    }
-                                )
-                            ) {
-                                Text(calendar.title)
-                            }
-                            .accentColor(lighterColor(from: calendar.color))
-                            .disabled(!showCalendar)
-                        }
-                    }
+            Section("Reminders") {
+                calendarPermission(for: .reminder, status: calendarManager.reminderAuthorizationStatus)
+                if calendarManager.reminderAuthorizationStatus == .fullAccess {
+                    if calendarManager.reminderLists.isEmpty { SettingsHint("No reminder lists found.") }
+                    ForEach(calendarManager.reminderLists, id: \.id) { calendar in calendarRow(calendar) }
                 }
             }
         }
-        .accentColor(.effectiveAccent)
-        .navigationTitle("Calendar")
-        .onAppear {
-            Task {
-                await calendarManager.checkCalendarAuthorization()
-                await calendarManager.checkReminderAuthorization()
-            }
+        .navigationTitle("Calendars & Reminders")
+        .task { await refreshPermissions() }
+        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
+            Task { await refreshPermissions() }
         }
+    }
+
+    private func calendarRow(_ calendar: CalendarModel) -> some View {
+        Toggle(isOn: Binding(get: { calendarManager.getCalendarSelected(calendar) }, set: { value in
+            Task { await calendarManager.setCalendarSelected(calendar, isSelected: value) }
+        })) {
+            Text(calendar.title).fixedSize(horizontal: false, vertical: true)
+        }
+        .tint(lighterColor(from: calendar.color))
+        .disabled(!showCalendar)
+    }
+
+    @ViewBuilder private func calendarPermission(for type: EKEntityType, status: EKAuthorizationStatus) -> some View {
+        let access = SettingsAccessState(calendarStatus: status)
+        if access != .allowed {
+            SettingsPermissionNotice(state: access) {
+                if access == .notRequested || access == .limited {
+                    requestingAccess = true
+                    Task {
+                        if type == .event { await calendarManager.checkCalendarAuthorization(promptIfNeeded: true) }
+                        else { await calendarManager.checkReminderAuthorization(promptIfNeeded: true) }
+                        requestingAccess = false
+                    }
+                } else if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_\(type == .event ? "Calendars" : "Reminders")") {
+                    NSWorkspace.shared.open(url)
+                }
+            }
+            .disabled(requestingAccess)
+        }
+    }
+    private func refreshPermissions() async {
+        await calendarManager.checkCalendarAuthorization(promptIfNeeded: false)
+        await calendarManager.checkReminderAuthorization(promptIfNeeded: false)
     }
 }
 
 func lighterColor(from nsColor: NSColor, amount: CGFloat = 0.14) -> Color {
     let srgb = nsColor.usingColorSpace(.sRGB) ?? nsColor
-    var (r, g, b, a): (CGFloat, CGFloat, CGFloat, CGFloat) = (0,0,0,0)
+    var (r, g, b, a): (CGFloat, CGFloat, CGFloat, CGFloat) = (0, 0, 0, 0)
     srgb.getRed(&r, green: &g, blue: &b, alpha: &a)
+    return Color(red: min(1, r + (1-r)*amount), green: min(1, g + (1-g)*amount), blue: min(1, b + (1-b)*amount), opacity: a)
+}
 
-    func lighten(_ c: CGFloat) -> CGFloat {
-        let increased = c + (1.0 - c) * amount
-        return min(max(increased, 0), 1)
+extension SettingsAccessState {
+    init(calendarStatus: EKAuthorizationStatus) {
+        switch calendarStatus {
+        case .notDetermined: self = .notRequested
+        case .fullAccess: self = .allowed
+        case .writeOnly: self = .limited
+        case .restricted: self = .restricted
+        case .denied: self = .denied
+        @unknown default: self = .unavailable
+        }
     }
-
-    let nr = lighten(r)
-    let ng = lighten(g)
-    let nb = lighten(b)
-
-    return Color(red: Double(nr), green: Double(ng), blue: Double(nb), opacity: Double(a))
 }
 
 struct About: View {
@@ -671,48 +447,7 @@ struct About: View {
 }
 
 struct Appearance: View {
-    @ObservedObject var coordinator = BoringViewCoordinator.shared
-    @Default(.sliderColor) var sliderColor
-
-    var body: some View {
-        Form {
-            Section {
-                Toggle("Always show tabs", isOn: $coordinator.alwaysShowTabs)
-                Defaults.Toggle(key: .settingsIconInNotch) {
-                    Text("Show settings icon in notch")
-                }
-
-            } header: {
-                Text("General")
-            }
-
-            Section {
-                Defaults.Toggle(key: .coloredSpectrogram) {
-                    Text("Colored spectrogram")
-                }
-                Defaults
-                    .Toggle("Player tinting", key: .playerColorTinting)
-                Defaults.Toggle(key: .lightingEffect) {
-                    Text("Enable blur effect behind album art")
-                }
-                Picker("Slider color", selection: $sliderColor) {
-                    ForEach(SliderColorEnum.allCases, id: \.self) { option in
-                        Text(LocalizedStringKey(option.rawValue))
-                    }
-                }
-            } header: {
-                Text("Media")
-            }
-
-        }
-        .accentColor(.effectiveAccent)
-        .navigationTitle("Appearance")
-    }
-
-
-}
-
-struct Advanced: View {
+    @ObservedObject private var coordinator = BoringViewCoordinator.shared
     @Default(.useCustomAccentColor) var useCustomAccentColor
     @Default(.customAccentColorData) var customAccentColorData
     @Default(.extendHoverArea) var extendHoverArea
@@ -790,7 +525,7 @@ struct Advanced: View {
                                 .fontWeight(.semibold)
                                 .foregroundStyle(.secondary)
                             
-                            HStack(spacing: 12) {
+                            LazyVGrid(columns: [GridItem(.adaptive(minimum: 36), spacing: 8)], alignment: .leading, spacing: 8) {
                                 ForEach(PresetAccentColor.allCases) { preset in
                                     AccentCircleButton(
                                         isSelected: selectedPresetColor == preset,
@@ -800,10 +535,8 @@ struct Advanced: View {
                                         selectedPresetColor = preset
                                         customAccentColor = preset.color
                                         saveCustomColor(preset.color)
-                                        forceUiUpdate()
                                     }
                                 }
-                                Spacer()
                             }
                             
                             Divider()
@@ -827,7 +560,6 @@ struct Advanced: View {
                                         customAccentColor = newColor
                                         selectedPresetColor = nil
                                         saveCustomColor(newColor)
-                                        forceUiUpdate()
                                     }
                                 ), supportsOpacity: false) {
                                     ZStack {
@@ -852,7 +584,7 @@ struct Advanced: View {
                 Text("Accent color")
             } footer: {
                 Text("Choose between your system accent color or customize it with your own selection.")
-                    .multilineTextAlignment(.trailing)
+                    .multilineTextAlignment(.leading)
                     .foregroundStyle(.secondary)
                     .font(.caption)
             }
@@ -860,6 +592,10 @@ struct Advanced: View {
                 initializeAccentColorState()
             }
             
+            Section("General") {
+                Toggle("Always show tabs", isOn: $coordinator.alwaysShowTabs)
+                Defaults.Toggle("Show settings icon in notch", key: .settingsIconInNotch)
+            }
             Section {
                 Defaults.Toggle(key: .enableShadow) {
                     Text("Enable window shadow")
@@ -871,34 +607,12 @@ struct Advanced: View {
                 Text("Window Appearance")
             }
             
-            Section {
-                Defaults.Toggle(key: .extendHoverArea) {
-                    Text("Extend hover area")
-                }
-                Defaults.Toggle(key: .hideTitleBar) {
-                    Text("Hide title bar")
-                }
-                Defaults.Toggle(key: .showOnLockScreen) {
-                    Text("Show notch on lock screen")
-                }
-                Defaults.Toggle(key: .hideFromScreenRecording) {
-                    Text("Hide from screen recording")
-                }
-            } header: {
-                Text("Window Behavior")
-            }
+
         }
         .accentColor(.effectiveAccent)
-        .navigationTitle("Advanced")
+        .navigationTitle("Appearance")
         .onAppear {
             loadCustomColor()
-        }
-    }
-    
-    private func forceUiUpdate() {
-        // Force refresh the UI
-        DispatchQueue.main.async {
-            NotificationCenter.default.post(name: Notification.Name("AccentColorChanged"), object: nil)
         }
     }
     
@@ -906,7 +620,6 @@ struct Advanced: View {
         let nsColor = NSColor(color)
         if let colorData = try? NSKeyedArchiver.archivedData(withRootObject: nsColor, requiringSecureCoding: false) {
             Defaults[.customAccentColorData] = colorData
-            forceUiUpdate()
         }
     }
     

@@ -37,21 +37,50 @@ final class QuotaNotchStore: ObservableObject {
             }
     }
 
-    var activePin: QuotaPin? {
-        guard pins.automatic else { return pins.selected }
+    var automaticPin: QuotaPin? {
+        guard enabled && pins.automatic else { return nil }
         return QuotaAutomaticSelection.select(candidates: pins.candidates.filter {
             $0.provider.map { providerEnabled($0) } ?? false
-        }, results: results, now: now) ?? pins.selected
+        }, results: results, now: now)
+    }
+    var activePin: QuotaPin? {
+        automaticPin ?? pins.selected.flatMap { pin in
+            pin.provider.map { providerEnabled($0) } == true ? pin : nil
+        }
     }
     var presentationPins: QuotaPins { QuotaPins(selected: activePin, showsNumbers: pins.showsNumbers) }
     func isStale(_ provider: QuotaProvider) -> Bool { results[provider]?.isStale(provider: provider, now: now) ?? true }
 
+    @Published private(set) var requestingNotifications = false
+    @Published private(set) var notificationsDenied = false
+
+    func refreshNotificationStatus() async {
+        #if SETTINGS_PREVIEW
+        return
+        #endif
+        let settings = await UNUserNotificationCenter.current().notificationSettings()
+        notificationsDenied = settings.authorizationStatus == .denied
+        if notificationsDenied {
+            notificationStatus = QuotaText.localized("请在系统设置中允许通知")
+        } else {
+            notificationStatus = QuotaText.localized(UserDefaults.standard.bool(forKey: "quotaNotifications") ? "通知已启用" : "Notifications are off. Your threshold is saved.")
+        }
+    }
+
     func setNotifications(_ enabled: Bool) async {
-        if !enabled { UserDefaults.standard.set(false, forKey: "quotaNotifications"); return }
+        guard !requestingNotifications else { return }
+        if !enabled {
+            UserDefaults.standard.set(false, forKey: "quotaNotifications")
+            await refreshNotificationStatus()
+            return
+        }
+        requestingNotifications = true
+        defer { requestingNotifications = false }
         do {
             let granted = try await UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound])
             UserDefaults.standard.set(granted, forKey: "quotaNotifications")
             notificationStatus = QuotaText.localized(granted ? "通知已启用" : "请在系统设置中允许通知")
+            await refreshNotificationStatus()
         } catch { notificationStatus = QuotaText.localized("无法启用通知，请检查系统设置") }
     }
 
@@ -109,7 +138,6 @@ final class QuotaNotchStore: ObservableObject {
         else {
             disabledProviders.insert(provider.rawValue)
             results[provider] = nil
-            if pins.selected?.provider == provider { updatePins { $0.selected = nil } }
         }
         if let selection = QuotaProviderVisibility.selection(selectedProvider, disabled: disabledProviders) {
             selectedProvider = selection
@@ -117,6 +145,21 @@ final class QuotaNotchStore: ObservableObject {
         UserDefaults.standard.set(Array(disabledProviders), forKey: "quotaNotchDisabledProviders")
         if enabled { Task { await refresh() } }
     }
+
+
+    #if SETTINGS_PREVIEW
+    func configureSettingsPreview(paused: Bool) {
+        enabled = !paused
+        disabledProviders = ["gemini"]
+        let pin = QuotaPin(providerID: "claude", windowID: "five_hour")
+        pins = QuotaPins(selected: pin)
+        pins.automatic = true
+        pins.candidates = [pin, QuotaPin(providerID: "gemini", windowID: "gemini-2.5-pro")]
+        let window = QuotaWindow(id: "five_hour", title: "5 小时", remainingPercent: 42, resetsAt: nil)
+        results = paused ? [:] : [.claude: QuotaResult(snapshot: QuotaSnapshot(windows: [window], fetchedAt: now), failure: nil, nextAttempt: now)]
+        notificationStatus = QuotaText.localized("Notifications are off. Your threshold is saved.")
+    }
+    #endif
 
     private let client = QuotaClient(claudeFallback: ClaudeCLIQuotaFallback())
     private var polling: Task<Void, Never>?

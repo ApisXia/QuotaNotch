@@ -30,6 +30,9 @@ class CalendarManager: ObservableObject {
 
     private init() {
         self.currentWeekStartDate = CalendarManager.startOfDay(Date())
+        #if SETTINGS_PREVIEW
+        return
+        #endif
         setupEventStoreChangedObserver()
         Task {
             await reloadCalendarAndReminderLists()
@@ -63,15 +66,20 @@ class CalendarManager: ObservableObject {
         updateSelectedCalendars()
     }
 
-    func checkCalendarAuthorization() async {
+    func checkCalendarAuthorization(promptIfNeeded: Bool = true) async {
+        #if SETTINGS_PREVIEW
+        return
+        #endif
         let status = EKEventStore.authorizationStatus(for: .event)
-        DispatchQueue.main.async {
-            print("📅 Current calendar authorization status: \(status)")
-            self.calendarAuthorizationStatus = status
+        calendarAuthorizationStatus = status
+        if status != .fullAccess {
+            eventCalendars = []
+            events = []
         }
 
         switch status {
-        case .notDetermined:
+        case .notDetermined, .writeOnly:
+            guard promptIfNeeded else { return }
             guard let granted = try? await calendarService.requestAccess(to: .event) else {
                 self.calendarAuthorizationStatus = .notDetermined
                 return
@@ -93,22 +101,22 @@ class CalendarManager: ObservableObject {
                 from: currentWeekStartDate,
                 to: Calendar.current.date(byAdding: .day, value: 1, to: currentWeekStartDate)!,
                 calendars: selectedCalendars.map { $0.id })
-        case .writeOnly:
-            NSLog("Write only")
         @unknown default:
             print("Unknown authorization status")
         }
     }
     
-    func checkReminderAuthorization() async {
+    func checkReminderAuthorization(promptIfNeeded: Bool = true) async {
+        #if SETTINGS_PREVIEW
+        return
+        #endif
         let status = EKEventStore.authorizationStatus(for: .reminder)
-        DispatchQueue.main.async {
-            print("📅 Current reminder authorization status: \(status)")
-            self.reminderAuthorizationStatus = status
-        }
+        reminderAuthorizationStatus = status
+        if status != .fullAccess { reminderLists = [] }
 
         switch status {
-        case .notDetermined:
+        case .notDetermined, .writeOnly:
+            guard promptIfNeeded else { return }
             guard let granted = try? await calendarService.requestAccess(to: .reminder) else {
                 self.reminderAuthorizationStatus = .notDetermined
                 return
@@ -122,8 +130,6 @@ class CalendarManager: ObservableObject {
         case .fullAccess:
             NSLog("Full access")
             await reloadCalendarAndReminderLists()
-        case .writeOnly:
-            NSLog("Write only")
         @unknown default:
             print("Unknown authorization status")
         }
