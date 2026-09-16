@@ -15,7 +15,6 @@ import SwiftUIIntrospect
 
 @MainActor
 struct ContentView: View {
-    @AppStorage("quotaComfortable") private var comfortable = false
     @EnvironmentObject var vm: BoringViewModel
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
@@ -34,7 +33,7 @@ struct ContentView: View {
     @Namespace var albumArtNamespace
 
 
-    @Default(.showNotHumanFace) var showNotHumanFace
+    @State private var measuredClosedWidth: CGFloat = 0
 
     // Shared interactive spring for movement/resizing to avoid conflicting animations
     private var animationSpring: Animation? {
@@ -60,41 +59,29 @@ struct ContentView: View {
     }
 
     private var computedChinWidth: CGFloat {
-        var chinWidth: CGFloat = vm.closedNotchSize.width
-
-        if coordinator.expandingView.type == .battery && coordinator.expandingView.show
-            && vm.notchState == .closed && Defaults[.showPowerStatusNotifications]
-        {
-            chinWidth = 640
-        } else if showQuotaWings {
-            chinWidth += QuotaCompactMetrics.chinAddition(height: vm.effectiveClosedNotchHeight, comfortable: comfortable)
-        } else if (!coordinator.expandingView.show || coordinator.expandingView.type == .music)
-            && vm.notchState == .closed && (musicManager.isPlaying || !musicManager.isPlayerIdle)
-            && coordinator.musicLiveActivityEnabled && !vm.hideOnClosed
-        {
-            chinWidth += (2 * max(0, vm.effectiveClosedNotchHeight - 12) + 20)
-        } else if !coordinator.expandingView.show && vm.notchState == .closed
-            && (!musicManager.isPlaying && musicManager.isPlayerIdle) && Defaults[.showNotHumanFace]
-            && !vm.hideOnClosed
-        {
-            chinWidth += (2 * max(0, vm.effectiveClosedNotchHeight - 12) + 20)
-        }
-
-        return chinWidth
+        measuredClosedWidth > 0 ? measuredClosedWidth : vm.closedNotchSize.width
     }
 
-    private var quotaPresentation: QuotaPresentation {
+    private var eventPresentation: NotchEventPresentation {
+        NotchEventPresentation(
+            expanded: coordinator.expandingView.show ? coordinator.expandingView.type : nil,
+            notification: coordinator.sneakPeek.show ? coordinator.sneakPeek.type : nil,
+            greeting: coordinator.helloAnimationRunning
+        )
+    }
+
+    private var compactPresentation: QuotaPresentation {
         guard vm.notchState == .closed else { return .none }
         return quotaStore.presentationPins.presentation(
             enabled: quotaStore.enabled,
             hidden: vm.hideOnClosed || vm.effectiveClosedNotchHeight <= 0,
-            transient: coordinator.expandingView.show || coordinator.sneakPeek.show || coordinator.helloAnimationRunning,
+            replacingPrimary: eventPresentation.replacesPrimary,
             musicPlaying: (musicManager.isPlaying || !musicManager.isPlayerIdle) && coordinator.musicLiveActivityEnabled
         )
     }
 
     private var showQuotaWings: Bool {
-        quotaPresentation == .quota || quotaPresentation == .combined
+        compactPresentation == .quota || compactPresentation == .combined
     }
 
     var body: some View {
@@ -113,8 +100,10 @@ struct ContentView: View {
                     .onHover { hovering in
                         handleHover(hovering)
                     }
-                    .onTapGesture {
-                        openFromPointer()
+                    .onGeometryChange(for: CGFloat.self) { geometry in
+                        geometry.size.width
+                    } action: { width in
+                        if vm.notchState == .closed { measuredClosedWidth = width }
                     }
                     .onChange(of: vm.notchState) { _, newState in
                         if newState == .closed && isHovering {
@@ -208,116 +197,27 @@ struct ContentView: View {
 
     @ViewBuilder
     func NotchLayout() -> some View {
-        VStack(alignment: .leading) {
-            VStack(alignment: .leading) {
+        VStack(alignment: .leading, spacing: vm.notchState == .open ? 8 : 0) {
+            Group {
                 if coordinator.helloAnimationRunning {
                     Spacer()
-                    HelloAnimation(onFinish: {
-                        vm.closeHello()
-                    }).frame(
-                        width: getClosedNotchSize().width,
-                        height: 80
-                    )
-                    .padding(.top, 40)
+                    HelloAnimation(onFinish: { vm.closeHello() })
+                        .frame(width: getClosedNotchSize().width, height: 80)
+                        .padding(.top, 40)
                     Spacer()
+                } else if vm.notchState == .closed {
+                    PrimaryNotchLayout {
+                        closedPrimaryContent
+                            .contentShape(Rectangle())
+                            .onTapGesture { openFromPointer() }
+                        closedAccessoryContent
+                    }
                 } else {
-                    if coordinator.expandingView.type == .battery && coordinator.expandingView.show
-                        && vm.notchState == .closed && Defaults[.showPowerStatusNotifications]
-                    {
-                        HStack(spacing: 0) {
-                            HStack {
-                                Text(batteryModel.statusText)
-                                    .font(.subheadline)
-                                    .foregroundStyle(.white)
-                            }
+                    BoringHeader().frame(height: max(24, vm.effectiveClosedNotchHeight))
+                }
+            }
+            .zIndex(2)
 
-                            Rectangle()
-                                .fill(.black)
-                                .frame(width: vm.closedNotchSize.width + 10)
-
-                            HStack {
-                                BoringBatteryView(
-                                    batteryWidth: 30,
-                                    isCharging: batteryModel.isCharging,
-                                    isInLowPowerMode: batteryModel.isInLowPowerMode,
-                                    isPluggedIn: batteryModel.isPluggedIn,
-                                    levelBattery: batteryModel.levelBattery,
-                                    isForNotification: true
-                                )
-                            }
-                            .frame(width: 76, alignment: .trailing)
-                        }
-                        .frame(height: vm.effectiveClosedNotchHeight, alignment: .center)
-                      } else if coordinator.sneakPeek.show && Defaults[.inlineHUD] && (coordinator.sneakPeek.type != .music) && (coordinator.sneakPeek.type != .battery) && vm.notchState == .closed {
-                          InlineHUD(type: $coordinator.sneakPeek.type, value: $coordinator.sneakPeek.value, icon: $coordinator.sneakPeek.icon, hoverAnimation: $isHovering)
-                              .transition(.opacity)
-                      } else if showQuotaWings {
-                          QuotaPinnedWings(centerWidth: vm.closedNotchSize.width - cornerRadiusInsets.closed.top,
-                                           height: vm.effectiveClosedNotchHeight,
-                                           showsMusic: quotaPresentation == .combined,
-                                           albumArtNamespace: albumArtNamespace) { provider in
-                              quotaStore.selectedProvider = provider
-                              coordinator.currentView = .aiUsage
-                              doOpen()
-                          } onMusic: {
-                              coordinator.currentView = .home
-                              doOpen()
-                          }
-                          .transition(.opacity)
-                      } else if (!coordinator.expandingView.show || coordinator.expandingView.type == .music) && vm.notchState == .closed && (musicManager.isPlaying || !musicManager.isPlayerIdle) && coordinator.musicLiveActivityEnabled && !vm.hideOnClosed {
-                          MusicLiveActivity()
-                              .frame(alignment: .center)
-                      } else if !coordinator.expandingView.show && vm.notchState == .closed && (!musicManager.isPlaying && musicManager.isPlayerIdle) && Defaults[.showNotHumanFace] && !vm.hideOnClosed  {
-                          BoringFaceAnimation()
-                       } else if vm.notchState == .open {
-                           BoringHeader()
-                               .frame(height: max(24, vm.effectiveClosedNotchHeight))
-                       } else {
-                           Rectangle().fill(.clear).frame(width: vm.closedNotchSize.width - 20, height: vm.effectiveClosedNotchHeight)
-                       }
-
-                      if coordinator.sneakPeek.show {
-                          if (coordinator.sneakPeek.type != .music) && (coordinator.sneakPeek.type != .battery) && !Defaults[.inlineHUD] && vm.notchState == .closed {
-                              SystemEventIndicatorModifier(
-                                  eventType: $coordinator.sneakPeek.type,
-                                  value: $coordinator.sneakPeek.value,
-                                  icon: $coordinator.sneakPeek.icon,
-                                  sendEventBack: { newVal in
-                                      switch coordinator.sneakPeek.type {
-                                      case .volume:
-                                          VolumeManager.shared.setAbsolute(Float32(newVal))
-                                      case .brightness:
-                                          BrightnessManager.shared.setAbsolute(value: Float32(newVal))
-                                      default:
-                                          break
-                                      }
-                                  }
-                              )
-                              .padding(.bottom, 10)
-                              .padding(.leading, 4)
-                              .padding(.trailing, 8)
-                          }
-                          // Old sneak peek music
-                          else if coordinator.sneakPeek.type == .music {
-                              if vm.notchState == .closed && !vm.hideOnClosed && Defaults[.sneakPeekStyles] == .standard {
-                                  HStack(alignment: .center) {
-                                      Image(systemName: "music.note")
-                                      GeometryReader { geo in
-                                          MarqueeText(.constant(musicManager.songTitle + " - " + musicManager.artistName),  textColor: Defaults[.playerColorTinting] ? Color(nsColor: musicManager.avgColor).ensureMinimumBrightness(factor: 0.6) : .gray, minDuration: 1, frameWidth: geo.size.width)
-                                      }
-                                  }
-                                  .foregroundStyle(.gray)
-                                  .padding(.bottom, 10)
-                              }
-                          }
-                      }
-                  }
-              }
-              .conditionalModifier((coordinator.sneakPeek.show && (coordinator.sneakPeek.type == .music) && vm.notchState == .closed && !vm.hideOnClosed && Defaults[.sneakPeekStyles] == .standard) || (coordinator.sneakPeek.show && (coordinator.sneakPeek.type != .music) && (vm.notchState == .closed))) { view in
-                  view
-                      .fixedSize()
-              }
-              .zIndex(2)
             if vm.notchState == .open {
                 VStack {
                     switch coordinator.currentView {
@@ -339,24 +239,90 @@ struct ContentView: View {
     }
 
     @ViewBuilder
-    func BoringFaceAnimation() -> some View {
-        HStack {
-            HStack {
-                Rectangle()
-                    .fill(.clear)
-                    .frame(
-                        width: max(0, vm.effectiveClosedNotchHeight - 12),
-                        height: max(0, vm.effectiveClosedNotchHeight - 12)
-                    )
+    private var closedPrimaryContent: some View {
+        if coordinator.expandingView.type == .battery && coordinator.expandingView.show
+            && Defaults[.showPowerStatusNotifications] {
+            HStack(spacing: 0) {
+                HStack {
+                    Text(batteryModel.statusText)
+                        .font(.subheadline)
+                        .foregroundStyle(.white)
+                }
+
                 Rectangle()
                     .fill(.black)
-                    .frame(width: vm.closedNotchSize.width - 20)
-                MinimalFaceFeatures()
+                    .frame(width: vm.closedNotchSize.width + 10)
+
+                HStack {
+                    BoringBatteryView(
+                        batteryWidth: 30,
+                        isCharging: batteryModel.isCharging,
+                        isInLowPowerMode: batteryModel.isInLowPowerMode,
+                        isPluggedIn: batteryModel.isPluggedIn,
+                        levelBattery: batteryModel.levelBattery,
+                        isForNotification: true
+                    )
+                }
+                .frame(width: 76, alignment: .trailing)
             }
-        }.frame(
-            height: vm.effectiveClosedNotchHeight,
-            alignment: .center
-        )
+            .frame(height: vm.effectiveClosedNotchHeight, alignment: .center)
+        } else if showQuotaWings {
+            QuotaPinnedWings(centerWidth: vm.closedNotchSize.width - cornerRadiusInsets.closed.top,
+                             height: vm.effectiveClosedNotchHeight,
+                             showsMusic: compactPresentation == .combined,
+                             albumArtNamespace: albumArtNamespace) { provider in
+                quotaStore.selectedProvider = provider
+                coordinator.currentView = .aiUsage
+                doOpen()
+            } onMusic: {
+                coordinator.currentView = .home
+                doOpen()
+            }
+            .transition(.opacity)
+        } else if compactPresentation == .music {
+            MusicLiveActivity().frame(alignment: .center)
+        } else {
+            Color.clear.frame(width: vm.closedNotchSize.width - 20, height: vm.effectiveClosedNotchHeight)
+        }
+    }
+
+    @ViewBuilder
+    private var closedAccessoryContent: some View {
+        if let accessory = eventPresentation.accessory {
+            if accessory.isSystemControl {
+                SystemEventIndicatorModifier(
+                    eventType: $coordinator.sneakPeek.type,
+                    value: $coordinator.sneakPeek.value,
+                    icon: $coordinator.sneakPeek.icon,
+                    sendEventBack: { newVal in
+                        switch coordinator.sneakPeek.type {
+                        case .volume: VolumeManager.shared.setAbsolute(Float32(newVal))
+                        case .brightness: BrightnessManager.shared.setAbsolute(value: Float32(newVal))
+                        default: break
+                        }
+                    }
+                )
+                .padding(.top, 8)
+                .padding(.bottom, 10)
+                .padding(.leading, 4)
+                .padding(.trailing, 8)
+                .transition(.opacity)
+            } else if accessory == .music && !vm.hideOnClosed && Defaults[.sneakPeekStyles] == .standard {
+                HStack {
+                    Image(systemName: "music.note")
+                    GeometryReader { geo in
+                        MarqueeText(.constant(musicManager.songTitle + " - " + musicManager.artistName),
+                                    textColor: Defaults[.playerColorTinting] ? Color(nsColor: musicManager.avgColor).ensureMinimumBrightness(factor: 0.6) : .gray,
+                                    minDuration: 1, frameWidth: geo.size.width)
+                    }
+                }
+                .foregroundStyle(.gray)
+                .frame(height: 16)
+                .padding(.top, 8)
+                .padding(.bottom, 10)
+                .transition(.opacity)
+            }
+        }
     }
 
     @ViewBuilder
@@ -462,14 +428,7 @@ struct ContentView: View {
 
     private func openFromPointer() {
         guard vm.notchState == .closed else { return }
-        var presentation = quotaPresentation
-        // Album artwork remains visible briefly after playback pauses.
-        if presentation == .none && !vm.hideOnClosed && vm.effectiveClosedNotchHeight > 0
-            && !coordinator.expandingView.show && !coordinator.sneakPeek.show
-            && !coordinator.helloAnimationRunning && coordinator.musicLiveActivityEnabled
-            && (musicManager.isPlaying || !musicManager.isPlayerIdle) {
-            presentation = .music
-        }
+        let presentation = compactPresentation
         let screen = vm.screenUUID.flatMap { NSScreen.screen(withUUID: $0) } ?? NSScreen.main
         let midpoint = screen?.frame.midX ?? NSEvent.mouseLocation.x
         let target = presentation.openingPage(pointerX: Double(NSEvent.mouseLocation.x),

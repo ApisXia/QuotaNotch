@@ -45,8 +45,8 @@ struct QuotaPins: Codable, Equatable, Sendable {
         try values.encode(candidates, forKey: .candidates)
     }
 
-    func presentation(enabled: Bool, hidden: Bool, transient: Bool, musicPlaying: Bool) -> QuotaPresentation {
-        guard !hidden && !transient else { return .none }
+    func presentation(enabled: Bool, hidden: Bool, replacingPrimary: Bool, musicPlaying: Bool) -> QuotaPresentation {
+        guard !hidden && !replacingPrimary else { return .none }
         switch (enabled && hasPins, musicPlaying) {
         case (true, true): return .combined
         case (true, false): return .quota

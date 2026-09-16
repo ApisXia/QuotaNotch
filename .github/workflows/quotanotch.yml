@@ -57,6 +57,8 @@ jobs:
           build/render-compact
           swiftc -parse-as-library QuotaNotch/Design/*.swift QuotaNotch/Core/QuotaWarning.swift QuotaNotch/Core/QuotaLocalization.swift QuotaNotch/Core/QuotaModels.swift scripts/render-warning.swift -o build/render-warning
           build/render-warning
+          swiftc -parse-as-library QuotaNotch/Design/*.swift QuotaNotch/Core/QuotaWarning.swift QuotaNotch/Core/QuotaLocalization.swift QuotaNotch/Core/QuotaModels.swift scripts/render-accessories.swift -o build/render-accessories
+          build/render-accessories
       - name: Render original and refined proportions
         if: ${{ inputs.preview_only == true }}
         run: bash scripts/render-refinement.sh

@@ -145,12 +145,13 @@ struct DraggableProgressBar: View {
                         }
                 )
             }
-            .frame(height: Defaults[.inlineHUD] ? isDragging ? 8 : 5 : isDragging ? 9 : 6)
+            .frame(height: isDragging ? 9 : 6)
         }
     }
     
     private func updateValue(gesture: DragGesture.Value, in geometry: GeometryProxy) {
         let dragPosition = gesture.location.x
+        guard geometry.size.width > 0 else { return }
         let newValue = dragPosition / geometry.size.width
         
         value = max(0, min(newValue, 1))

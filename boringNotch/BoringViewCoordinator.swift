@@ -10,16 +10,6 @@ import Combine
 import Defaults
 import SwiftUI
 
-enum SneakContentType {
-    case brightness
-    case volume
-    case backlight
-    case music
-    case mic
-    case battery
-    case download
-}
-
 struct sneakPeek {
     var show: Bool = false
     var type: SneakContentType = .music
@@ -214,13 +204,9 @@ class BoringViewCoordinator: ObservableObject {
                 return
             }
         }
-        Task { @MainActor in
-            withAnimation(.smooth) {
-                self.sneakPeek.show = status
-                self.sneakPeek.type = type
-                self.sneakPeek.value = value
-                self.sneakPeek.icon = icon
-            }
+        // Publish one complete event so content, value and lifetime change together.
+        withAnimation(.smooth) {
+            sneakPeek = .init(show: status, type: type, value: value, icon: icon)
         }
 
         if type == .mic {
@@ -235,14 +221,15 @@ class BoringViewCoordinator: ObservableObject {
     private func scheduleSneakPeekHide(after duration: TimeInterval) {
         sneakPeekTask?.cancel()
 
-        sneakPeekTask = Task { [weak self] in
-            try? await Task.sleep(for: .seconds(duration))
-            guard let self = self, !Task.isCancelled else { return }
-            await MainActor.run {
-                withAnimation {
-                    self.toggleSneakPeek(status: false, type: .music)
-                    self.sneakPeekDuration = 1.5
-                }
+        sneakPeekTask = Task { @MainActor [weak self] in
+            do { try await Task.sleep(for: .seconds(max(0, duration))) }
+            catch { return }
+            guard let self, !Task.isCancelled else { return }
+            // No actor hop between the cancellation check and hide: an older
+            // timer cannot hide a newer event while waiting to reach MainActor.
+            withAnimation(.smooth) {
+                self.sneakPeek.show = false
+                self.sneakPeekDuration = 1.5
             }
         }
     }
