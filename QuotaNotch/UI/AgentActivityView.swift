@@ -57,7 +57,7 @@ struct AgentNotchView: View {
                 Text(store.enabled ? AgentText.t("在 Codex 或 VS Code 中开始任务后，会显示在这里。", "Start a task in Codex or VS Code to see it here.") : AgentText.t("任务监控已暂停。", "Task monitoring is paused."))
                     .font(.callout).foregroundStyle(.secondary).frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
-                VStack(spacing: 4) {
+                VStack(spacing: 3) {
                     ForEach(Array(store.visible.prefix(3))) { session in
                         AgentNotchTaskRow(session: session, now: store.now) { store.open(session) }
                     }

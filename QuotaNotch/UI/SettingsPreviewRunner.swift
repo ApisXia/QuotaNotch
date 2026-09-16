@@ -135,14 +135,16 @@ struct SettingsPreviewRunner {
                 host.layoutSubtreeIfNeeded()
                 guard let bitmap = host.bitmapImageRepForCachingDisplay(in: host.bounds) else { fatalError("Missing notch bitmap") }
                 host.cacheDisplay(in: host.bounds, to: bitmap)
-                // All three interior columns must touch the screen top. Purple means a gap.
-                for fraction in [0.25, 0.5, 0.75] {
+                let png = bitmap.representation(using: .png, properties: [:])!
+                try png.write(to: output.appendingPathComponent("Notch-switch-\(Int(headerHeight))-\(index).png"))
+                precondition(vm.notchState == .open, "Notch fixture unexpectedly closed")
+                // Sample the reserved camera area, away from tab highlights and battery controls.
+                // The active third tab occupies x=160; its gray capsule is not a screen gap.
+                for fraction in [0.44, 0.5, 0.56] {
                     let color = bitmap.colorAt(x: Int(Double(bitmap.pixelsWide) * fraction), y: 2)!.usingColorSpace(.deviceRGB)!
                     precondition(max(color.redComponent, max(color.greenComponent, color.blueComponent)) < 0.06,
                                  "Notch detached after switching tab \(index), header \(headerHeight)")
                 }
-                let png = bitmap.representation(using: .png, properties: [:])!
-                try png.write(to: output.appendingPathComponent("Notch-switch-\(Int(headerHeight))-\(index).png"))
             }
         }
         window.orderOut(nil); window.contentView = nil; window.close()
