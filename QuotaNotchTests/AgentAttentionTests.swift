@@ -118,22 +118,27 @@ final class AgentCurrentSessionsTests: XCTestCase {
         XCTAssertEqual(latest.count, 3)
         XCTAssertEqual(latest.first { $0.identity == current.identity }, current)
     }
-    func testReadHistoryLeavesButActiveSessionsStay() {
-        for state in AgentRunState.allCases {
-            let session = AgentSession(id: "one", state: state)
-            XCTAssertEqual(AgentCurrentSessions.includes(session, acknowledged: [:]), state.isActive || state.isUnreadEvent)
-            XCTAssertEqual(AgentCurrentSessions.includes(session, acknowledged: [session.identity: session.eventID]), state.isActive)
+    func testHistoryWindowsKeepRecentRecordsAndAlwaysKeepActiveTasks() {
+        let now = Date(timeIntervalSince1970: 100000)
+        XCTAssertEqual(AgentHistoryWindow.defaultValue, .fiveHours)
+        for window in AgentHistoryWindow.allCases {
+            for state in AgentRunState.allCases {
+                var session = AgentSession(id: "one", state: state, updatedAt: now.addingTimeInterval(-window.duration))
+                XCTAssertTrue(AgentCurrentSessions.includes(session, now: now, window: window))
+                session.updatedAt = session.updatedAt.addingTimeInterval(-1)
+                XCTAssertEqual(AgentCurrentSessions.includes(session, now: now, window: window), state.isActive)
+            }
         }
     }
-    func testReadingRetentionIsBoundToCurrentEvent() {
-        var session = AgentSession(id: "one", state: .completed, turnID: "old")
+    func testReadingRetentionOnlyExtendsTheCurrentRecordAtExpiry() {
+        let now = Date(timeIntervalSince1970: 100000)
+        var session = AgentSession(id: "one", state: .completed, turnID: "old", updatedAt: now.addingTimeInterval(-6 * 3600))
         let read = [session.identity: session.eventID]
-        XCTAssertTrue(AgentCurrentSessions.includes(session, acknowledged: read, retained: read))
-        XCTAssertFalse(AgentCurrentSessions.includes(session, acknowledged: read))
+        XCTAssertTrue(AgentCurrentSessions.includes(session, now: now, window: .fiveHours, retained: read))
+        XCTAssertFalse(AgentCurrentSessions.includes(session, now: now, window: .fiveHours))
+        XCTAssertTrue(AgentCurrentSessions.includes(session, now: now, window: .oneDay))
         session.turnID = "new"
-        XCTAssertTrue(AgentCurrentSessions.includes(session, acknowledged: read), "A new result must be unread")
-        let newRead = [session.identity: session.eventID]
-        XCTAssertFalse(AgentCurrentSessions.includes(session, acknowledged: newRead, retained: read), "An old reading receipt cannot retain a later read event")
+        XCTAssertFalse(AgentCurrentSessions.includes(session, now: now, window: .fiveHours, retained: read))
     }
 }
 

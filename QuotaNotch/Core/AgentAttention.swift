@@ -38,7 +38,13 @@ extension AgentRunState {
     var isUnreadEvent: Bool { [.waiting, .completed, .failed, .interrupted].contains(self) }
 }
 
-/// A live inbox, not a transcript archive. One current record owns each provider/session identity.
+enum AgentHistoryWindow: Int, CaseIterable {
+    case oneHour = 1, fiveHours = 5, oneDay = 24
+    static let defaultValue = Self.fiveHours
+    var duration: TimeInterval { TimeInterval(rawValue) * 3600 }
+}
+
+/// Bounded conversation history; one current record owns each provider/session identity.
 enum AgentCurrentSessions {
     static func latest(_ sessions: [AgentSession]) -> [AgentSession] {
         var unique: [String: AgentSession] = [:]
@@ -52,9 +58,10 @@ enum AgentCurrentSessions {
             return $0.identity < $1.identity
         }
     }
-    static func includes(_ session: AgentSession, acknowledged: [String: String], retained: [String: String] = [:]) -> Bool {
+    static func includes(_ session: AgentSession, now: Date, window: AgentHistoryWindow,
+                         retained: [String: String] = [:]) -> Bool {
         session.state.isActive
-            || (session.state.isUnreadEvent && acknowledged[session.identity] != session.eventID)
+            || session.updatedAt >= now.addingTimeInterval(-window.duration)
             || retained[session.identity] == session.eventID
     }
 }

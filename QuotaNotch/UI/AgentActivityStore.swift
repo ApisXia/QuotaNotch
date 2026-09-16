@@ -19,6 +19,9 @@ import UserNotifications
             if enabled { start() } else { polling?.cancel(); polling = nil; sessions = []; ready = false }
         }
     }
+    @Published var historyWindow: AgentHistoryWindow {
+        didSet { UserDefaults.standard.set(historyWindow.rawValue, forKey: "agentMonitorHistoryHours") }
+    }
     @Published var notifications: Bool {
         didSet { UserDefaults.standard.set(notifications, forKey: "agentMonitorNotifications") }
     }
@@ -64,6 +67,7 @@ import UserNotifications
         let defaults = UserDefaults.standard
         enabled = defaults.object(forKey: "agentMonitorEnabled") as? Bool ?? true
         notifications = defaults.bool(forKey: "agentMonitorNotifications")
+        historyWindow = AgentHistoryWindow(rawValue: defaults.integer(forKey: "agentMonitorHistoryHours")) ?? .defaultValue
         acknowledged = defaults.dictionary(forKey: "agentMonitorAcknowledged") as? [String: String] ?? [:]
         dismissed = defaults.dictionary(forKey: "agentMonitorDismissed") as? [String: String] ?? [:]
         lastEvents = defaults.dictionary(forKey: "agentMonitorObserved") as? [String: String] ?? [:]
@@ -81,7 +85,7 @@ import UserNotifications
     var visible: [AgentSession] {
         sessions.filter {
             ($0.state.isActive || dismissed[$0.identity] != $0.eventID)
-                && AgentCurrentSessions.includes($0, acknowledged: acknowledged, retained: retainedReadEvents)
+                && AgentCurrentSessions.includes($0, now: now, window: historyWindow, retained: retainedReadEvents)
         }
     }
     func finishReading() { retainedReadEvents = [:] }

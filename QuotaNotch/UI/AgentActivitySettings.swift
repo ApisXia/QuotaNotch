@@ -19,6 +19,16 @@ struct AgentActivitySettings: View {
                 Button(AgentText.t("打开任务监控", "Open task monitor")) { AgentActivityWindow.shared.show() }
             } header: { Text(AgentText.t("任务监控", "Task monitoring")) }
             Section {
+                Picker(AgentText.t("保留时间", "Keep history for"), selection: $store.historyWindow) {
+                    ForEach(AgentHistoryWindow.allCases, id: \.self) { window in
+                        Text(window == .oneDay ? AgentText.t("1 天", "1 day") : AgentText.t("\(window.rawValue) 小时", "\(window.rawValue) hour" + (window.rawValue == 1 ? "" : "s")))
+                            .tag(window)
+                    }
+                }
+                Text(AgentText.t("已读任务仍保留在列表中，默认保留最近 5 小时。进行中和等待处理的任务不受时间限制；每个会话只显示最新状态。", "Read tasks stay in the list, with the last 5 hours kept by default. Working and waiting tasks have no time limit; each conversation shows its latest state."))
+                    .font(.callout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+            } header: { Text(AgentText.t("任务历史", "Task history")) }
+            Section {
                 Toggle(AgentText.t("完成和等待时发送系统通知", "Notify when finished or waiting"), isOn: Binding(get: { store.notifications }, set: { enabled in
                     if enabled { Task { await store.requestNotifications() } } else { store.notifications = false }
                 }))

@@ -394,12 +394,22 @@ struct SettingsPreviewRunner {
         longTask.activityDetail = "exec_command\n" + String(repeating: "swift test --parallel\n", count: 5)
         store.configurePreview([longTask] + fixtures.filter { $0.identity != longTask.identity })
         try snapshot("Task-panel-long-text")
-        // Reading keeps the current row stable, then removes it when browsing ends.
+        // Reading does not remove history; the chosen time window controls retention.
         if let finished = store.visible.first(where: { !$0.state.isActive }) {
             store.markRead(finished, keepVisible: true)
             verifyPresentation(store.visible.contains { $0.identity == finished.identity }, "Reading removed the row mid-browse")
             store.finishReading()
-            verifyPresentation(!store.visible.contains { $0.identity == finished.identity }, "All retained a read historical session")
+            verifyPresentation(store.visible.contains { $0.identity == finished.identity }, "Reading removed recent task history")
+        }
+        if var historical = fixtures.first(where: { !$0.state.isActive }) {
+            let previousWindow = store.historyWindow
+            historical.updatedAt = store.now.addingTimeInterval(-3 * 3600)
+            store.configurePreview([historical]); store.markRead(historical)
+            store.historyWindow = .oneHour
+            verifyPresentation(store.visible.isEmpty, "One-hour history included an older finished task")
+            store.historyWindow = .fiveHours
+            verifyPresentation(store.visible.count == 1, "Five-hour history omitted a read three-hour-old task")
+            store.historyWindow = previousWindow
         }
         store.configurePreview(fixtures); store.retainNotchOrder()
         let originalOrder = store.notchSessions.map(\.identity)
