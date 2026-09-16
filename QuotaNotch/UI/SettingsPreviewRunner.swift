@@ -202,6 +202,35 @@ struct SettingsPreviewRunner {
                 }
             }
         }
+        // Drive the actual tab strip's event receiver, including its window and hit region.
+        coordinator.currentView = .home; settle(); host.layoutSubtreeIfNeeded()
+        guard let swipe = descendants(host).compactMap({ $0 as? NotchTabSwipeRegion.Region }).first else {
+            fatalError("The open panel has no tab swipe region")
+        }
+        let inside = swipe.convert(NSPoint(x: swipe.bounds.midX, y: swipe.bounds.midY), to: nil)
+        let outside = swipe.convert(NSPoint(x: -20, y: -20), to: nil)
+        swipe.handleScroll(x: -30, y: 0, at: 1, phase: .began, eventWindow: window, location: outside)
+        verifyPresentation(coordinator.currentView == .home, "A swipe outside the tab strip changed pages")
+        swipe.handleScroll(x: 0, y: 30, at: 2, phase: .began, eventWindow: window, location: inside)
+        verifyPresentation(coordinator.currentView == .home, "Vertical scrolling changed tabs")
+        for index in 0..<5 {
+            swipe.handleScroll(x: -3, y: 0, at: 3 + Double(index) * 0.01,
+                               phase: index == 0 ? .began : .changed, eventWindow: window, location: inside)
+        }
+        verifyPresentation(coordinator.currentView == .aiUsage, "A slow swipe did not select Quota")
+        swipe.handleScroll(x: -40, y: 0, at: 4, phase: .changed, momentum: true, eventWindow: window, location: inside)
+        verifyPresentation(coordinator.currentView == .aiUsage, "Momentum skipped a tab")
+        let unreadBeforeSwipe = AgentActivityStore.shared.unread.count
+        swipe.handleScroll(x: -20, y: 0, at: 5, phase: .began, eventWindow: window, location: inside)
+        verifyPresentation(coordinator.currentView == .activity && AgentActivityStore.shared.notchReadEnabled,
+                           "Swiping to Tasks did not use explicit opening behavior")
+        verifyPresentation(AgentActivityStore.shared.unread.count == unreadBeforeSwipe, "Swiping instantly read unseen tasks")
+        swipe.handleScroll(x: -20, y: 0, at: 6, phase: .began, eventWindow: window, location: inside)
+        verifyPresentation(coordinator.currentView == .activity, "Swiping at the last tab wrapped around")
+        swipe.handleScroll(x: 20, y: 0, at: 7, phase: .began, eventWindow: window, location: inside)
+        verifyPresentation(coordinator.currentView == .aiUsage && !AgentActivityStore.shared.notchReadEnabled,
+                           "Swiping back did not leave Tasks correctly")
+        coordinator.currentView = .activity; settle(); host.layoutSubtreeIfNeeded()
         let activity = AgentActivityStore.shared
         let fixtures = activity.sessions
         let receipts = descendants(host).compactMap { $0 as? AgentReadReceipt.ReceiptView }

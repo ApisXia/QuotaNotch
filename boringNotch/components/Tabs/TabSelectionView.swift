@@ -24,14 +24,18 @@ let tabs = [
 struct TabSelectionView: View {
     @ObservedObject var coordinator = BoringViewCoordinator.shared
     @Namespace var animation
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    private func select(_ view: NotchViews) {
+        withAnimation(reduceMotion ? nil : .smooth(duration: 0.25)) {
+            coordinator.currentView = view
+            AgentActivityStore.shared.notchReadEnabled = view == .activity
+        }
+    }
     var body: some View {
         HStack(spacing: 0) {
             ForEach(tabs) { tab in
                     TabButton(label: QuotaText.localized(tab.label), icon: tab.icon, selected: coordinator.currentView == tab.view) {
-                        withAnimation(.smooth) {
-                            coordinator.currentView = tab.view
-                            AgentActivityStore.shared.notchReadEnabled = tab.view == .activity
-                        }
+                        select(tab.view)
                     }
                     .frame(height: 26)
                     .help(QuotaText.localized(tab.label))
@@ -52,6 +56,13 @@ struct TabSelectionView: View {
             }
         }
         .clipShape(Capsule())
+        .background {
+            NotchTabSwipeRegion { step in
+                guard let current = tabs.firstIndex(where: { $0.view == coordinator.currentView }) else { return }
+                let next = TabSwipeNavigation.destination(current: current, step: step, count: tabs.count)
+                if next != current { select(tabs[next].view) }
+            }
+        }
     }
 }
 

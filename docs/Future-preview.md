@@ -1,6 +1,8 @@
-# Future 288 preview
+# Future 289 preview
 
 This preview stays on `future`; stable 1.02 is unchanged.
+
+- Hover over the open panel’s three tabs and swipe horizontally to move between Music, Quota, and Tasks. Each gesture moves one page, stops at either end, ignores momentum and vertical scrolling, and uses the same explicit task read behavior as a click. Closed widgets keep their existing behavior.
 
 - Music and token retain their existing widgets. With token plus tasks or music plus tasks, each module gets an independent widget; tasks alone use a task glyph on the left and the two most recently active task names on the right. The left glyph prioritizes errors, then running, then the latest other state. The right wing reuses the widget-plus-minimal width budget; tiny status dots sit in the camera-side gap to preserve text space. Source logos are reserved for quota.
 - With all three modules, music stays left while quota and tasks share the right wing. A divider centered in a 10-point gap softly morphs into a short chevron on hover; click it or swipe to exchange widget/minimal without changing total width. Clicking a task opens its panel directly.
