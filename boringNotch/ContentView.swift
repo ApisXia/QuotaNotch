@@ -213,6 +213,7 @@ struct ContentView: View {
                         vm.effectiveClosedNotchHeight == 0 ? 10 : 0
                     )
                     .offset(x: vm.notchState == .closed ? taskWingOffset : 0)
+                    .animation(reduceMotion ? nil : .smooth(duration: 0.32), value: taskWingOffset)
                 
     }
 
