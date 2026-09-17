@@ -499,12 +499,13 @@ struct SettingsPreviewRunner {
             activity.configurePreview(mask & 4 != 0 ? fixtures : [])
             activity.compactExpanded = false
             for height: CGFloat in [24, 32, 38] {
-                vm.closedNotchSize.height = height; vm.close()
+                vm.close(); vm.closedNotchSize.height = height; vm.hideOnClosed = false
                 for side in CatSide.allCases {
                     var baseline: (Int, Int)?
                     for active in [false, true] {
-                        let pose = CatPose(side: side, action: .curious, elapsed: 4, active: active)
+                        let pose = CatPose(side: side, action: .curious, elapsed: 2, active: active)
                         let host = NSHostingView(rootView: ContentView(catPreviewPose: pose).environmentObject(vm)
+                            .environment(\.accessibilityReduceMotion, false)
                             .transaction { $0.animation = nil; $0.disablesAnimations = true }
                             .background(Color(red: 0.25, green: 0.15, blue: 0.35)))
                         window.contentView = host; window.setContentSize(windowSize); window.orderFront(nil)
@@ -518,13 +519,16 @@ struct SettingsPreviewRunner {
                             return max(c.redComponent, max(c.greenComponent, c.blueComponent)) < 0.06
                         }
                         let edges = (pixels.first!, pixels.last!)
+                        // Save evidence before checking: failures must still provide a screenshot.
+                        try bitmap.representation(using: .png, properties: [:])!.write(to: output.appendingPathComponent("Cat-check-\(mask)-\(Int(height))-\(side.rawValue)-\(active).png"))
+                        verifyPresentation(vm.effectiveClosedNotchHeight == height, "Cat fixture height was reset")
                         if let baseline {
                             let change = side == .left ? baseline.0 - edges.0 : edges.1 - baseline.1
                             let stationary = side == .left ? abs(edges.1 - baseline.1) : abs(edges.0 - baseline.0)
                             verifyPresentation(stationary <= 2, "Cat moved the opposite wing: mask \(mask), \(side), height \(height)")
                             verifyPresentation(change >= -2 && CGFloat(change) <= 32 * scale + 2, "Cat exceeded wing budget")
                             let full = side == .right && (mask == 7 || mask == 4)
-                            verifyPresentation(full ? abs(change) <= 2 : change > 0, "Wrong cat availability: mask \(mask), \(side)")
+                            verifyPresentation(full ? abs(change) <= 2 : change > 0, "Wrong cat availability: mask \(mask), \(side), height \(height), delta \(change)")
                             records.append(["modules": mask, "height": height, "side": side.rawValue, "addedPixels": change])
                         } else { baseline = edges }
                         if active && height == 32 {
