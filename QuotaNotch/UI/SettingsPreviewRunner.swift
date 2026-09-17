@@ -505,7 +505,6 @@ struct SettingsPreviewRunner {
                     for active in [false, true] {
                         let pose = CatPose(side: side, action: .curious, elapsed: 2, active: active)
                         let host = NSHostingView(rootView: ContentView(catPreviewPose: pose).environmentObject(vm)
-                            .environment(\.accessibilityReduceMotion, false)
                             .transaction { $0.animation = nil; $0.disablesAnimations = true }
                             .background(Color(red: 0.25, green: 0.15, blue: 0.35)))
                         window.contentView = host; window.setContentSize(windowSize); window.orderFront(nil)
