@@ -483,13 +483,13 @@ struct SettingsPreviewRunner {
         var calls: [CatSide] = []
         var cancellations = 0
         let host = NSHostingView(rootView: CatEdgeRubRegion(enabled: true, hover: { _ in },
-            summon: { calls.append($0) }, cancel: { cancellations += 1 }).frame(width: 200, height: 32))
-        let window = NSWindow(contentRect: NSRect(x: 300, y: 300, width: 200, height: 32),
+            summon: { calls.append($0) }, cancel: { cancellations += 1 }).frame(width: 240, height: 44))
+        let window = NSWindow(contentRect: NSRect(x: 300, y: 300, width: 240, height: 44),
             styleMask: [.borderless], backing: .buffered, defer: false)
         window.isReleasedWhenClosed = false; window.contentView = host; window.orderFront(nil)
         settle(); host.layoutSubtreeIfNeeded()
         let region = descendants(host).compactMap { $0 as? CatEdgeRubRegion.Region }.first!
-        let rect = region.convert(region.bounds, to: nil)
+        let rect = region.convert(region.bounds.insetBy(dx: 20, dy: 6), to: nil)
         func send(_ type: NSEvent.EventType, x: CGFloat, time: Double) {
             let event = NSEvent.mouseEvent(with: type, location: NSPoint(x: rect.minX + x, y: rect.midY),
                 modifierFlags: [], timestamp: time, windowNumber: window.windowNumber,

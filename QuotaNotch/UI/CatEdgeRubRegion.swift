@@ -29,7 +29,7 @@ struct CatEdgeRubRegion: NSViewRepresentable {
         override func hitTest(_ point: NSPoint) -> NSView? { nil }
         private var screenFrame: CGRect {
             guard let window else { return .zero }
-            return window.convertToScreen(convert(bounds, to: nil))
+            return window.convertToScreen(convert(bounds.insetBy(dx: 20, dy: 6), to: nil))
         }
         func clear() {
             recognizer.reset(); heldZone = nil
@@ -57,7 +57,7 @@ struct CatEdgeRubRegion: NSViewRepresentable {
             super.updateTrackingAreas()
             if let tracking { removeTrackingArea(tracking); self.tracking = nil }
             guard enabled else { return }
-            let area = NSTrackingArea(rect: bounds.insetBy(dx: -20, dy: -6),
+            let area = NSTrackingArea(rect: bounds,
                 options: [.activeAlways, .mouseMoved, .mouseEnteredAndExited], owner: self, userInfo: nil)
             addTrackingArea(area); tracking = area
         }
