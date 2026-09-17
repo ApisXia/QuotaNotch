@@ -80,9 +80,10 @@ struct CatWingSpacesKey: PreferenceKey {
         let events = Set(store.enabled ? store.unread.map(\.eventID) : [])
         return queue.take(now: Date(), valid: { events.contains($0.eventID) })
     }
-    func shouldInterrupt(_ current: CatCue?) -> Bool {
+    func shouldInterrupt(_ current: CatCue?, attentionOnly: Bool = false) -> Bool {
         queue.pending.contains { cue in
             Date().timeIntervalSince(cue.occurredAt) <= 15 && valid(cue)
+                && (!attentionOnly || cue.action == .attention)
                 && (current == nil || (current?.action == .completed && cue.action == .attention))
         }
     }
@@ -98,18 +99,42 @@ struct CatWingSpacesKey: PreferenceKey {
     private var hovering: Bool { !hoverRegions.isEmpty }
     private var quietUntil = Date.distantPast
     private var currentCue: CatCue?
+    private var edgeHover: CatSide?
+    private var manualSide: CatSide?
+    private var pendingSummon: (side: CatSide, date: Date)?
+    private var sleeper: Task<Void, Never>?
+    private var availableSpaces: [CatSide: CatWingSpace] = [:]
+    private var pointerBlocks: Bool {
+        hoverRegions.contains("camera") || (hovering && !(manualSide != nil && edgeHover == manualSide))
+    }
+    func edgePointer(_ side: CatSide?) {
+        edgeHover = side
+        if pointerBlocks && pose.active { pose.concealed = true }
+    }
+    func cancelSummon() {
+        pendingSummon = nil; manualSide = nil
+        if pose.active { pose.concealed = true }
+        sleeper?.cancel()
+    }
+    func summon(_ side: CatSide) {
+        guard availableSpaces[side]?.canPeek == true, runtime.selected(id),
+              !hoverRegions.contains("camera"), currentCue?.action != .attention else { return }
+        pendingSummon = (side, Date()); manualSide = side
+        sleeper?.cancel()
+    }
     private var lastSide: CatSide = .right
     private var runtime: NotchCatRuntime { .shared }
 
     func pointer(_ inside: Bool, source: String = "shell") {
         if inside { hoverRegions.insert(source) } else { hoverRegions.remove(source) }
-        if hovering {
+        if pointerBlocks {
             // Preserve geometry beneath the pointer; decoration never intercepts a click.
             if pose.active { pose.concealed = true }
         } else { quietUntil = Date().addingTimeInterval(2) }
     }
     func stop() {
         generation += 1; pose = CatPose(); currentCue = nil
+        pendingSummon = nil; manualSide = nil; availableSpaces = [:]; sleeper?.cancel()
         runtime.unregister(id)
     }
     func revalidateCue() {
@@ -120,15 +145,22 @@ struct CatWingSpacesKey: PreferenceKey {
         if currentCue != nil { pose.concealed = true }
     }
     private func delay(_ seconds: Double) async throws {
-        try await Task.sleep(for: .milliseconds(Int(max(0.01, seconds) * 1000)))
+        let task = Task<Void, Never> {
+            do { try await Task.sleep(for: .milliseconds(Int(max(0.01, seconds) * 1000))) }
+            catch { }
+        }
+        sleeper = task
+        await withTaskCancellationHandler { await task.value } onCancel: { task.cancel() }
+        try Task.checkCancellation()
     }
     func run(spaces: [CatSide: CatWingSpace], screen: String?) async {
         generation += 1
         let token = generation
-        pose = CatPose(); currentCue = nil; runtime.release(id)
+        pose = CatPose(); currentCue = nil; pendingSummon = nil; manualSide = nil
+        availableSpaces = spaces; runtime.release(id)
         runtime.register(id, screen: screen)
         defer {
-            if token == generation { pose = CatPose(); currentCue = nil; runtime.unregister(id) }
+            if token == generation { pose = CatPose(); currentCue = nil; pendingSummon = nil; manualSide = nil; availableSpaces = [:]; runtime.unregister(id) }
         }
         #if SETTINGS_PREVIEW
         return
@@ -143,29 +175,40 @@ struct CatWingSpacesKey: PreferenceKey {
             // Wait for initial layout and window handoff to settle.
             try await delay(1)
             while !Task.isCancelled && token == generation {
-                guard !hovering, Date() >= quietUntil, runtime.selected(id) else {
+                if let request = pendingSummon, Date().timeIntervalSince(request.date) > 1.5 {
+                    pendingSummon = nil; manualSide = nil
+                }
+                let requested = pendingSummon?.side
+                guard (!pointerBlocks && (requested != nil || Date() >= quietUntil)), runtime.selected(id) else {
                     try await delay(1); continue
                 }
                 guard runtime.acquire(id) else { try await delay(1); continue }
-                let cue = runtime.takeCue()
-                guard cue != nil || runtime.idleDue else {
+                let cue = requested == nil ? runtime.takeCue() : nil
+                guard requested != nil || cue != nil || runtime.idleDue else {
                     runtime.release(id); try await delay(1); continue
                 }
-                let side = sides.first { $0 != lastSide } ?? sides[0]
+                let side = requested ?? sides.first { $0 != lastSide } ?? sides[0]
+                pendingSummon = nil; manualSide = requested
                 guard let space = spaces[side] else { runtime.release(id); continue }
                 lastSide = side
                 // The approved full-body sheet faces left. Front-facing cheek poses can use
                 // either edge without mirroring their marking; don't invent a rightward gait.
-                let full = cue == nil && side == .left && space.canShowBody
-                let action = cue?.action ?? (full || Int.random(in: 0..<3) == 0 ? .rest : .curious)
-                let clip = full ? CatClips.body : CatClips.head(action)
+                let full = requested == nil && cue == nil && side == .left && space.canShowBody
+                let action: CatAction = requested != nil ? .curious : cue?.action ?? (full || Int.random(in: 0..<3) == 0 ? .rest : .curious)
+                let clip = requested != nil ? CatClips.completed : full ? CatClips.body : CatClips.head(action)
                 let scale = space.scale(body: full, backing: backing)
                 guard scale > 0 else { runtime.release(id); try await delay(1); continue }
                 currentCue = cue
+                // An already visible head answers in place instead of disappearing and re-entering.
+                let answerInPlace = requested != nil && pose.active && !pose.fullBody && pose.side == side && pose.reservedWidth >= 16 * scale
+                let steps = answerInPlace ? Array(clip.steps.drop(while: { $0.travel < 24 })) :
+                    requested != nil ? Array(clip.steps.dropFirst()) : clip.steps
+                if pose.fullBody && requested != nil { pose = CatPose() }
+                if requested != nil { pose.concealed = false }
                 var elapsed = 0.0
-                playback: for step in clip.steps {
+                playback: for step in steps {
                     guard !Task.isCancelled, token == generation else { return }
-                    if hovering || pose.concealed || !runtime.selected(id) || runtime.shouldInterrupt(cue) { break }
+                    if pointerBlocks || pose.concealed || pendingSummon != nil || !runtime.selected(id) || runtime.shouldInterrupt(cue, attentionOnly: requested != nil) { break }
                     if let cue, !runtime.valid(cue) { break }
                     let startWidth = pose.reservedWidth
                     let target = step.travel * scale
@@ -175,7 +218,7 @@ struct CatWingSpacesKey: PreferenceKey {
                     if transition > 0 {
                         for tick in 1...4 {
                             guard token == generation, !Task.isCancelled else { return }
-                            if hovering || pose.concealed || !runtime.selected(id) { break playback }
+                            if pointerBlocks || pose.concealed || pendingSummon != nil || !runtime.selected(id) { break playback }
                             let u = Double(tick) / 4
                             let eased = u * u * (3 - 2 * u)
                             let width = (startWidth + (target - startWidth) * eased) * backing
@@ -191,13 +234,15 @@ struct CatWingSpacesKey: PreferenceKey {
                     elapsed += step.duration
                 }
                 guard token == generation, !Task.isCancelled else { return }
+                if pendingSummon != nil { continue }
                 // No pose ticking while hovered or while a closed-eye hold is sleeping.
                 if pose.active { pose.concealed = true }
-                while hovering || Date() < quietUntil {
+                while (pointerBlocks || Date() < quietUntil) && pendingSummon == nil {
                     try await delay(0.5)
                     guard token == generation, !Task.isCancelled else { return }
                 }
-                pose = CatPose(); currentCue = nil
+                if pendingSummon != nil { continue }
+                pose = CatPose(); currentCue = nil; manualSide = nil
                 runtime.finished(); runtime.release(id)
                 try await delay(1)
             }

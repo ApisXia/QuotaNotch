@@ -94,6 +94,7 @@ struct SettingsPreviewRunner {
             try capture(AgentSessionDetails(session: session), width: 520,
                         name: "Task-details-\(session.provider.rawValue)", output: output, height: 430)
         }
+        try verifyCatRubRegion()
         try captureCat(output: output, fixtures: fixtures)
         try captureNotchSwitching(output: output)
         try captureTaskPanel(output: output, fixtures: fixtures)
@@ -476,6 +477,34 @@ struct SettingsPreviewRunner {
         verifyPresentation(abs(window.frame.height - windowSize.height) < 1, "Closing left an oversized input window")
         window.orderOut(nil); window.contentView = nil; window.close(); vm.destroy()
         store.configurePreview(fixtures); store.expandedTaskID = nil
+    }
+
+    @MainActor private static func verifyCatRubRegion() throws {
+        var calls: [CatSide] = []
+        var cancellations = 0
+        let host = NSHostingView(rootView: CatEdgeRubRegion(enabled: true, hover: { _ in },
+            summon: { calls.append($0) }, cancel: { cancellations += 1 }).frame(width: 200, height: 32))
+        let window = NSWindow(contentRect: NSRect(x: 300, y: 300, width: 200, height: 32),
+            styleMask: [.borderless], backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false; window.contentView = host; window.orderFront(nil)
+        settle(); host.layoutSubtreeIfNeeded()
+        let region = descendants(host).compactMap { $0 as? CatEdgeRubRegion.Region }.first!
+        let rect = region.convert(region.bounds, to: nil)
+        func send(_ type: NSEvent.EventType, x: CGFloat, time: Double) {
+            let event = NSEvent.mouseEvent(with: type, location: NSPoint(x: rect.minX + x, y: rect.midY),
+                modifierFlags: [], timestamp: time, windowNumber: window.windowNumber,
+                context: nil, eventNumber: 1, clickCount: type == .leftMouseDown ? 1 : 0, pressure: 0)!
+            region.observe(event)
+        }
+        for (i, x) in [CGFloat(-5), -15, -2, -15].enumerated() { send(.mouseMoved, x: x, time: Double(i) * 0.2) }
+        verifyPresentation(calls == [.left], "Native edge region did not recognize left rub")
+        send(.leftMouseDown, x: -5, time: 1)
+        verifyPresentation(cancellations == 1, "A click did not cancel edge interaction")
+        verifyPresentation(region.hitTest(.zero) == nil, "Cat region intercepted a widget click")
+        for (i, x) in [CGFloat(205), 215, 202, 215].enumerated() { send(.mouseMoved, x: x, time: 4 + Double(i) * 0.2) }
+        verifyPresentation(calls == [.left, .right], "Native edge region did not recognize right rub")
+        window.orderOut(nil); window.contentView = nil; window.close()
+        print("Verified passive edge rub event routing, both sides, and click cancellation")
     }
 
     @MainActor private static func captureCat(output: URL, fixtures: [AgentSession]) throws {
