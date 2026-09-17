@@ -44,7 +44,7 @@ struct ContentView: View {
     @State private var catSpaces: [CatSide: CatWingSpace] = [:]
     @ObservedObject private var catRuntime = NotchCatRuntime.shared
     private var catCanAppear: Bool {
-        catEnabled && !reduceMotion && !catRuntime.suspended && vm.notchState == .closed
+        catEnabled && (!reduceMotion || catPreviewPose != nil) && !catRuntime.suspended && vm.notchState == .closed
             && !vm.hideOnClosed && vm.effectiveClosedNotchHeight >= 24
             && !eventPresentation.replacesPrimary && eventPresentation.accessory == nil
             && !coordinator.expandingView.show && !coordinator.helloAnimationRunning
@@ -194,6 +194,13 @@ struct ContentView: View {
         .onChange(of: catTaskCues) { _, enabled in if !enabled { cat.clearCues() } }
         .onChange(of: agentStore.unread.map(\.eventID)) { _, _ in cat.revalidateCue() }
         .onDisappear { cat.stop() }
+        .onAppear {
+            #if SETTINGS_PREVIEW
+            if let preview = catPreviewPose {
+                print("Cat fixture: active=\(preview.active) eligible=\(catCanAppear) enabled=\(catEnabled) reduced=\(reduceMotion) suspended=\(catRuntime.suspended) closed=\(vm.notchState == .closed) hidden=\(vm.hideOnClosed) height=\(vm.effectiveClosedNotchHeight) replacement=\(eventPresentation.replacesPrimary) accessory=\(String(describing: eventPresentation.accessory)) expanding=\(coordinator.expandingView.show) hello=\(coordinator.helloAnimationRunning)")
+            }
+            #endif
+        }
         .task(id: catRunID) {
             guard catCanAppear else { cat.stop(); return }
             await cat.run(spaces: catSpaces, screen: vm.screenUUID)
