@@ -35,6 +35,29 @@ struct ContentView: View {
 
     @State private var measuredClosedWidth: CGFloat = 0
     @State private var taskWingOffset: CGFloat = 0
+    @State private var catWingOffset: CGFloat = 0
+    @StateObject private var cat = NotchCatDirector()
+    @AppStorage("notchCatEnabled") private var catEnabled = true
+    @AppStorage("notchCatTaskCues") private var catTaskCues = true
+    // Deterministic poses are injected only by the isolated screenshot runner.
+    var catPreviewPose: CatPose? = nil
+
+    private var catSpaces: (CatWingSpace, CatWingSpace) {
+        let widget = QuotaCompactMetrics.iconSize(height: vm.effectiveClosedNotchHeight)
+        let maxWidth = widget + NotchModuleMetrics(widgetWidth: widget).additionalWidth
+        let present = compactPresentation != .none || agentStore.showAccessory
+        let fullRight = agentStore.showAccessory && (compactPresentation == .combined || compactPresentation == .none)
+        return (CatWingSpace(occupied: present ? widget : 0, limit: maxWidth),
+                CatWingSpace(occupied: fullRight ? maxWidth : present ? widget : 0, limit: maxWidth))
+    }
+    private var catCanAppear: Bool {
+        catEnabled && vm.notchState == .closed && !vm.hideOnClosed && vm.effectiveClosedNotchHeight >= 24
+            && !eventPresentation.replacesPrimary && eventPresentation.accessory == nil
+            && !coordinator.expandingView.show && !coordinator.helloAnimationRunning
+    }
+    private var catRunID: String {
+        "\(catCanAppear)-\(catSpaces.0.occupied)-\(catSpaces.1.occupied)-\(catSpaces.0.limit)-\(reduceMotion)"
+    }
     @ObservedObject private var agentStore = AgentActivityStore.shared
 
     // Shared interactive spring for movement/resizing to avoid conflicting animations
@@ -99,6 +122,7 @@ struct ContentView: View {
                     }
                     .contentShape(Rectangle())
                     .onHover { hovering in
+                        cat.pointer(hovering)
                         if vm.notchState == .open { handleHover(hovering) }
                     }
                     .onGeometryChange(for: CGFloat.self) { geometry in
@@ -153,11 +177,19 @@ struct ContentView: View {
             if vm.notchState == .closed {
                 Color.clear.frame(width: vm.closedNotchSize.width, height: vm.effectiveClosedNotchHeight)
                     .contentShape(Rectangle())
-                    .onHover { handleHover($0) }
+                    .onHover { cat.pointer($0); handleHover($0) }
                     .onTapGesture { openFromPointer(explicit: true) }
             }
         }
         .onPreferenceChange(AgentWingOffsetKey.self) { taskWingOffset = $0 }
+        .onPreferenceChange(CatWingOffsetKey.self) { catWingOffset = $0 }
+        .onReceive(NotificationCenter.default.publisher(for: .notchCatCue)) { note in
+            if catEnabled && catTaskCues, let raw = note.object as? String, let action = CatAction(rawValue: raw) { cat.cue(action) }
+        }
+        .task(id: catRunID) {
+            guard catCanAppear else { cat.pose = CatPose(); return }
+            await cat.run(left: catSpaces.0, right: catSpaces.1, reduced: reduceMotion)
+        }
         .onReceive(NotificationCenter.default.publisher(for: .agentOpenNotch)) { _ in
             coordinator.currentView = .activity; agentStore.notchReadEnabled = true
             if vm.notchState == .closed { doOpen() }
@@ -216,7 +248,7 @@ struct ContentView: View {
                         .bottom,
                         vm.effectiveClosedNotchHeight == 0 ? 10 : 0
                     )
-                    .offset(x: vm.notchState == .closed ? taskWingOffset : 0)
+                    .offset(x: vm.notchState == .closed ? taskWingOffset + catWingOffset : 0)
                     .animation(reduceMotion ? nil : .smooth(duration: 0.32), value: taskWingOffset)
                 
     }
@@ -234,6 +266,7 @@ struct ContentView: View {
                 } else if vm.notchState == .closed {
                     PrimaryNotchLayout {
                         closedPrimaryContent
+                            .environment(\.notchCatPose, catCanAppear ? (catPreviewPose ?? cat.pose) : CatPose())
                         closedAccessoryContent
                     }
                 } else {
@@ -315,7 +348,11 @@ struct ContentView: View {
             AgentTaskOnlyWings(centerWidth: vm.closedNotchSize.width - cornerRadiusInsets.closed.top,
                                height: vm.effectiveClosedNotchHeight, open: openTasks)
         } else {
-            Color.clear.frame(width: vm.closedNotchSize.width - 20, height: vm.effectiveClosedNotchHeight)
+            HStack(spacing: 0) {
+                Color.clear.frame(width: 0).catWing(.left, occupied: 0, height: vm.effectiveClosedNotchHeight)
+                Color.clear.frame(width: vm.closedNotchSize.width - 20, height: vm.effectiveClosedNotchHeight)
+                Color.clear.frame(width: 0).catWing(.right, occupied: 0, height: vm.effectiveClosedNotchHeight)
+            }
         }
     }
 
@@ -371,13 +408,17 @@ struct ContentView: View {
                     .frame(width: size, height: height)
                     .auditNotchModule("music")
             }.buttonStyle(.plain)
+                .catWing(.left, occupied: size, height: height)
             Color.clear.frame(width: vm.closedNotchSize.width - cornerRadiusInsets.closed.top, height: height)
             AgentCompactDock(primaryWidth: 0, height: height, anchorWidth: size, widgetWidth: size, open: openTasks) { EmptyView() }
+                .catWing(.right, occupied: size, height: height)
         }.frame(height: height)
     }
 
     func MusicLiveActivity() -> some View {
-        HStack(spacing: QuotaCompactMetrics.spacing) {
+        let height = vm.effectiveClosedNotchHeight
+        let size = max(0, height - 12)
+        return HStack(spacing: QuotaCompactMetrics.spacing) {
             Image(nsImage: musicManager.albumArt)
                 .resizable()
                 .clipped()
@@ -391,6 +432,7 @@ struct ContentView: View {
                     height: max(0, vm.effectiveClosedNotchHeight - 12)
                 )
 
+                .catWing(.left, occupied: size, height: height)
             Rectangle()
                 .fill(.black)
                 .overlay(
@@ -463,6 +505,7 @@ struct ContentView: View {
                 ),
                 alignment: .center
             )
+            .catWing(.right, occupied: size, height: height)
         }
         .frame(
             height: vm.effectiveClosedNotchHeight,

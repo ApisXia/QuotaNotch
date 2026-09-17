@@ -329,6 +329,7 @@ struct AgentTaskOnlyWings: View {
                 .auditNotchModule("task")
             }.buttonStyle(.plain)
                 .accessibilityLabel(AgentText.t("任务", "Tasks") + " · " + AgentText.state(emphasis?.state ?? .unknown))
+                .catWing(.left, occupied: iconWidth, height: height)
             Color.clear.frame(width: centerWidth, height: height)
             Button(action: open) {
                 VStack(alignment: .leading, spacing: 1) {

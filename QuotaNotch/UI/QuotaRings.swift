@@ -265,6 +265,7 @@ struct QuotaPinnedWings: View {
                 .help(showsMusic ? QuotaText.localized("打开音乐") : QuotaText.format("打开 %@ 额度", provider.title))
                 .accessibilityLabel(showsMusic ? QuotaText.localized("打开音乐") : QuotaText.format("打开 %@ 额度", provider.title))
 
+                .catWing(.left, occupied: leftWidth, height: height)
                 Color.clear.frame(width: centerWidth, height: height)
 
                 AgentCompactDock(primaryWidth: rightPrimaryWidth, height: height, anchorWidth: leftWidth, widgetWidth: iconSize, open: {
@@ -289,6 +290,7 @@ struct QuotaPinnedWings: View {
                         .accessibilityValue(reading(for: pin))
                     }
                 }
+                .catWing(.right, occupied: showsMusic && activity.showAccessory ? iconSize + metrics.additionalWidth : iconSize, height: height)
             }
             .frame(height: height)
             .animation(reduceMotion ? nil : .smooth(duration: 0.32), value: showsMusic)

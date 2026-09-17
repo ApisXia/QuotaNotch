@@ -8,7 +8,7 @@ on:
         type: boolean
         default: false
   push:
-    branches: ['feature/quotanotch-ai-usage', main, future]
+    branches: ['feature/quotanotch-ai-usage', main, future, 'feature/notch-cat']
   pull_request:
     branches: [main, dev]
     paths:

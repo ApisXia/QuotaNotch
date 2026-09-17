@@ -158,6 +158,11 @@ import UserNotifications
                       session.state.isUnreadEvent,
                       now.timeIntervalSince(session.updatedAt) < 60 {
                 sendNotification(session)
+                if baseline {
+                    let cue: CatAction? = session.state == .completed ? .completed :
+                        (session.state == .waiting || session.state == .failed ? .attention : nil)
+                    if let cue { NotificationCenter.default.post(name: .notchCatCue, object: cue.rawValue) }
+                }
             }
             lastEvents[session.identity] = session.eventID
         }

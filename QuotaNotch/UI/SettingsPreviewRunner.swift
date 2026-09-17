@@ -94,6 +94,7 @@ struct SettingsPreviewRunner {
             try capture(AgentSessionDetails(session: session), width: 520,
                         name: "Task-details-\(session.provider.rawValue)", output: output, height: 430)
         }
+        try captureCat(output: output, fixtures: fixtures)
         try captureNotchSwitching(output: output)
         try captureTaskPanel(output: output, fixtures: fixtures)
         for dark in [true, false] {
@@ -475,6 +476,83 @@ struct SettingsPreviewRunner {
         verifyPresentation(abs(window.frame.height - windowSize.height) < 1, "Closing left an oversized input window")
         window.orderOut(nil); window.contentView = nil; window.close(); vm.destroy()
         store.configurePreview(fixtures); store.expandedTaskID = nil
+    }
+
+    @MainActor private static func captureCat(output: URL, fixtures: [AgentSession]) throws {
+        UserDefaults.standard.set(true, forKey: "notchCatEnabled")
+        let vm = BoringViewModel()
+        vm.hideOnClosed = false
+        let coordinator = BoringViewCoordinator.shared
+        coordinator.helloAnimationRunning = false
+        coordinator.musicLiveActivityEnabled = true
+        coordinator.expandingView.show = false
+        coordinator.sneakPeek.show = false
+        let activity = AgentActivityStore.shared
+        let quota = QuotaNotchStore.shared
+        let music = MusicManager.shared
+        let window = NSWindow(contentRect: NSRect(origin: .zero, size: windowSize), styleMask: [.borderless], backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false
+        var records: [[String: Any]] = []
+        for mask in 0..<8 {
+            quota.configureSettingsPreview(paused: mask & 1 == 0)
+            music.isPlaying = mask & 2 != 0; music.isPlayerIdle = !music.isPlaying
+            activity.configurePreview(mask & 4 != 0 ? fixtures : [])
+            activity.compactExpanded = false
+            for height: CGFloat in [24, 32, 38] {
+                vm.closedNotchSize.height = height; vm.close()
+                for side in CatSide.allCases {
+                    var baseline: (Int, Int)?
+                    for active in [false, true] {
+                        let pose = CatPose(side: side, action: .curious, elapsed: 4, active: active)
+                        let host = NSHostingView(rootView: ContentView(catPreviewPose: pose).environmentObject(vm)
+                            .transaction { $0.animation = nil; $0.disablesAnimations = true }
+                            .background(Color(red: 0.25, green: 0.15, blue: 0.35)))
+                        window.contentView = host; window.setContentSize(windowSize); window.orderFront(nil)
+                        settle(); host.layoutSubtreeIfNeeded(); settle()
+                        let bitmap = host.bitmapImageRepForCachingDisplay(in: host.bounds)!
+                        host.cacheDisplay(in: host.bounds, to: bitmap)
+                        let scale = CGFloat(bitmap.pixelsWide) / host.bounds.width
+                        let row = Int(3 * scale)
+                        let pixels = (0..<bitmap.pixelsWide).filter { x in
+                            let c = bitmap.colorAt(x: x, y: row)!.usingColorSpace(.deviceRGB)!
+                            return max(c.redComponent, max(c.greenComponent, c.blueComponent)) < 0.06
+                        }
+                        let edges = (pixels.first!, pixels.last!)
+                        if let baseline {
+                            let change = side == .left ? baseline.0 - edges.0 : edges.1 - baseline.1
+                            let stationary = side == .left ? abs(edges.1 - baseline.1) : abs(edges.0 - baseline.0)
+                            verifyPresentation(stationary <= 2, "Cat moved the opposite wing: mask \(mask), \(side), height \(height)")
+                            verifyPresentation(change >= -2 && CGFloat(change) <= 32 * scale + 2, "Cat exceeded wing budget")
+                            let full = side == .right && (mask == 7 || mask == 4)
+                            verifyPresentation(full ? abs(change) <= 2 : change > 0, "Wrong cat availability: mask \(mask), \(side)")
+                            records.append(["modules": mask, "height": height, "side": side.rawValue, "addedPixels": change])
+                        } else { baseline = edges }
+                        if active && height == 32 {
+                            try bitmap.representation(using: .png, properties: [:])!.write(to: output.appendingPathComponent("Cat-layout-\(mask)-\(side.rawValue).png"))
+                        }
+                    }
+                }
+            }
+        }
+        try JSONSerialization.data(withJSONObject: records, options: [.prettyPrinted]).write(to: output.appendingPathComponent("Cat-layout-audit.json"))
+        try capture(VStack(spacing: 22) {
+            ForEach(CatAction.allCases, id: \.rawValue) { action in
+                HStack(spacing: 14) {
+                    Text(action.rawValue).font(.caption).frame(width: 70, alignment: .leading)
+                    ForEach([0.3, 0.9, 1.6, 3.2, 4.0, 7.5, 8.5], id: \.self) { elapsed in
+                        VStack {
+                            NotchCatDrawing(pose: CatPose(action: action, elapsed: elapsed, active: true), empty: action == .rest)
+                                .frame(width: 64, height: 52).clipped().background(.black)
+                            Text(String(format: "%.1fs", elapsed)).font(.caption2)
+                        }
+                    }
+                }
+            }
+        }.padding(20).background(.black).foregroundStyle(.white), width: 690, name: "Cat-storyboard", output: output, height: 380)
+        window.orderOut(nil); window.contentView = nil; window.close(); vm.destroy()
+        quota.configureSettingsPreview(paused: false); activity.configurePreview(fixtures)
+        music.isPlaying = false; music.isPlayerIdle = true
+        print("Verified \(records.count) cat layouts with physical-notch anchoring")
     }
 
     @MainActor private static func capture<V: View>(_ view: V, width: CGFloat, name: String, output: URL, height: CGFloat = 600) throws {

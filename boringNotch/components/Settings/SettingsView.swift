@@ -441,6 +441,7 @@ struct Appearance: View {
     
     var body: some View {
         Form {
+            NotchCatSettings()
             Section {
                 VStack(alignment: .leading, spacing: 16) {
                     // Toggle between system and custom
