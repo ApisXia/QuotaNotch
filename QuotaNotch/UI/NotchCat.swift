@@ -2,8 +2,6 @@
 import SwiftUI
 import AppKit
 
-extension Notification.Name { static let notchCatCue = Notification.Name("QuotaNotch.catCue") }
-
 private struct CatPoseKey: EnvironmentKey { static let defaultValue = CatPose() }
 extension EnvironmentValues {
     var notchCatPose: CatPose {
@@ -15,164 +13,279 @@ struct CatWingOffsetKey: PreferenceKey {
     static var defaultValue: CGFloat = 0
     static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) { value += nextValue() }
 }
+struct CatWingSpacesKey: PreferenceKey {
+    static var defaultValue: [CatSide: CatWingSpace] = [:]
+    static func reduce(value: inout [CatSide: CatWingSpace], nextValue: () -> [CatSide: CatWingSpace]) {
+        value.merge(nextValue(), uniquingKeysWith: { _, latest in latest })
+    }
+}
 
-/// One director per notch window: one cat, one clock, no global keyboard/mouse monitoring.
+/// One event queue and one lease across all notch windows.
+@MainActor final class NotchCatRuntime: ObservableObject {
+    static let shared = NotchCatRuntime()
+    @Published private(set) var suspended = false
+    private var locked = false
+    private var sleeping = false
+    private var observers: [NSObjectProtocol] = []
+    private var windows: [UUID: String] = [:]
+    private var owner: UUID?
+    private var queue = CatCueQueue()
+    private var nextIdle = Date().addingTimeInterval(20)
+
+    private init() {
+        let ws = NSWorkspace.shared.notificationCenter
+        observers.append(ws.addObserver(forName: NSWorkspace.willSleepNotification, object: nil, queue: .main) { [weak self] _ in
+            Task { @MainActor in self?.setSleeping(true) }
+        })
+        observers.append(ws.addObserver(forName: NSWorkspace.didWakeNotification, object: nil, queue: .main) { [weak self] _ in
+            Task { @MainActor in self?.setSleeping(false) }
+        })
+    }
+    func setLocked(_ value: Bool) { locked = value; updateSuspension() }
+    private func setSleeping(_ value: Bool) { sleeping = value; updateSuspension() }
+    private func updateSuspension() {
+        suspended = locked || sleeping
+        queue.clear(); owner = nil
+        nextIdle = Date().addingTimeInterval(20)
+    }
+    func register(_ id: UUID, screen: String?) {
+        windows[id] = screen ?? NSScreen.main?.displayUUID ?? ""
+    }
+    func unregister(_ id: UUID) { windows.removeValue(forKey: id); release(id) }
+    func selected(_ id: UUID) -> Bool {
+        guard !suspended, let screen = windows[id] else { return false }
+        let pointerScreen = NSScreen.screens.first { $0.frame.contains(NSEvent.mouseLocation) }?.displayUUID
+        if let pointerScreen, windows.values.contains(pointerScreen) { return screen == pointerScreen }
+        if let primary = NSScreen.main?.displayUUID, windows.values.contains(primary) { return screen == primary }
+        return screen == windows.values.sorted().first
+    }
+    func acquire(_ id: UUID) -> Bool {
+        guard selected(id), owner == nil || owner == id else { return false }
+        owner = id; return true
+    }
+    func release(_ id: UUID) { if owner == id { owner = nil } }
+    func enqueue(_ cue: CatCue) {
+        guard !suspended, !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion, UserDefaults.standard.object(forKey: "notchCatEnabled") as? Bool ?? true,
+              UserDefaults.standard.object(forKey: "notchCatTaskCues") as? Bool ?? true else { return }
+        queue.enqueue(cue, now: Date())
+    }
+    func clearCues() { queue.clear() }
+    func valid(_ cue: CatCue) -> Bool {
+        let store = AgentActivityStore.shared
+        guard store.enabled else { return false }
+        return store.visible.contains { $0.identity == cue.sessionID && $0.eventID == cue.eventID && store.isUnread($0) }
+    }
+    func takeCue() -> CatCue? {
+        let store = AgentActivityStore.shared
+        let events = Set(store.enabled ? store.unread.map(\.eventID) : [])
+        return queue.take(now: Date(), valid: { events.contains($0.eventID) })
+    }
+    func shouldInterrupt(_ current: CatCue?) -> Bool {
+        queue.pending.contains { cue in
+            Date().timeIntervalSince(cue.occurredAt) <= 15 && valid(cue)
+                && (current == nil || (current?.action == .completed && cue.action == .attention))
+        }
+    }
+    var idleDue: Bool { Date() >= nextIdle }
+    func finished() { nextIdle = Date().addingTimeInterval(Double.random(in: 90...180)) }
+}
+
 @MainActor final class NotchCatDirector: ObservableObject {
     @Published var pose = CatPose()
-    var queue = CatCueQueue()
-    private var hovering = false
-    private var resumeAt = Date.distantPast
-    func pointer(_ inside: Bool) {
-        hovering = inside
-        if !inside { resumeAt = Date().addingTimeInterval(2) }
+    private let id = UUID()
+    private var generation = 0
+    private var hoverRegions: Set<String> = []
+    private var hovering: Bool { !hoverRegions.isEmpty }
+    private var quietUntil = Date.distantPast
+    private var currentCue: CatCue?
+    private var lastSide: CatSide = .right
+    private var runtime: NotchCatRuntime { .shared }
+
+    func pointer(_ inside: Bool, source: String = "shell") {
+        if inside { hoverRegions.insert(source) } else { hoverRegions.remove(source) }
+        if hovering {
+            // Preserve geometry beneath the pointer; decoration never intercepts a click.
+            if pose.active { pose.concealed = true }
+        } else { quietUntil = Date().addingTimeInterval(2) }
     }
-    private var paused: Bool { hovering || Date() < resumeAt }
-    func cue(_ action: CatAction) { queue.enqueue(action, now: Date()) }
-    func run(left: CatWingSpace, right: CatWingSpace, reduced: Bool) async {
-        defer { pose = CatPose() }
+    func stop() {
+        generation += 1; pose = CatPose(); currentCue = nil
+        runtime.unregister(id)
+    }
+    func revalidateCue() {
+        if let currentCue, !runtime.valid(currentCue) { pose.concealed = true }
+    }
+    func clearCues() {
+        runtime.clearCues()
+        if currentCue != nil { pose.concealed = true }
+    }
+    private func delay(_ seconds: Double) async throws {
+        try await Task.sleep(for: .milliseconds(Int(max(0.01, seconds) * 1000)))
+    }
+    func run(spaces: [CatSide: CatWingSpace], screen: String?) async {
+        generation += 1
+        let token = generation
+        pose = CatPose(); currentCue = nil; runtime.release(id)
+        runtime.register(id, screen: screen)
+        defer {
+            if token == generation { pose = CatPose(); currentCue = nil; runtime.unregister(id) }
+        }
         #if SETTINGS_PREVIEW
         return
         #else
-        let sides = CatSide.allCases.filter { ($0 == .left ? left : right).canPeek }
-        guard !sides.isEmpty else { return }
-        var next = Date().addingTimeInterval(4)
-        var lastSide: CatSide = .left
-        while !Task.isCancelled {
-            let now = Date()
-            if paused {
-                do { try await Task.sleep(for: .milliseconds(250)) } catch { return }
-                continue
-            }
-            let cue = queue.take(now: now)
-            if cue != nil || now >= next {
-                let side = sides.first { $0 != lastSide } ?? sides[0]
-                lastSide = side
-                let action = cue ?? (Bool.random() ? .curious : .rest)
-                if reduced {
-                    pose = CatPose(side: side, action: action, elapsed: 4, active: true)
-                    do { try await Task.sleep(for: .seconds(4)) } catch { return }
-                } else {
-                    var elapsed: Double = 0
-                    var previous = Date()
-                    while elapsed < CatPose.duration {
-                        let current = Date()
-                        if !paused { elapsed += min(0.1, current.timeIntervalSince(previous)) }
-                        previous = current
-                        pose = CatPose(side: side, action: action, elapsed: elapsed, active: true)
-                        do { try await Task.sleep(for: .milliseconds(paused ? 150 : 33)) } catch { return }
-                    }
-                }
-                pose = CatPose()
-                next = Date().addingTimeInterval(Double.random(in: 24...48))
-            }
-            do { try await Task.sleep(for: .milliseconds(500)) } catch { return }
+        let backing = screen.flatMap { NSScreen.screen(withUUID: $0)?.backingScaleFactor } ?? 2
+        let sides = CatSide.allCases.filter {
+            guard let space = spaces[$0] else { return false }
+            return space.canPeek && space.scale(body: false, backing: backing) > 0
         }
+        guard !sides.isEmpty else { return }
+        do {
+            // Wait for initial layout and window handoff to settle.
+            try await delay(1)
+            while !Task.isCancelled && token == generation {
+                guard !hovering, Date() >= quietUntil, runtime.selected(id) else {
+                    try await delay(1); continue
+                }
+                guard runtime.acquire(id) else { try await delay(1); continue }
+                let cue = runtime.takeCue()
+                guard cue != nil || runtime.idleDue else {
+                    runtime.release(id); try await delay(1); continue
+                }
+                let side = sides.first { $0 != lastSide } ?? sides[0]
+                guard let space = spaces[side] else { runtime.release(id); continue }
+                lastSide = side
+                // The approved full-body sheet faces left. Front-facing cheek poses can use
+                // either edge without mirroring their marking; don't invent a rightward gait.
+                let full = cue == nil && side == .left && space.canShowBody
+                let action = cue?.action ?? (full || Int.random(in: 0..<3) == 0 ? .rest : .curious)
+                let clip = full ? CatClips.body : CatClips.head(action)
+                let scale = space.scale(body: full, backing: backing)
+                guard scale > 0 else { runtime.release(id); try await delay(1); continue }
+                currentCue = cue
+                var elapsed = 0.0
+                playback: for step in clip.steps {
+                    guard !Task.isCancelled, token == generation else { return }
+                    if hovering || pose.concealed || !runtime.selected(id) || runtime.shouldInterrupt(cue) { break }
+                    if let cue, !runtime.valid(cue) { break }
+                    let startWidth = pose.reservedWidth
+                    let target = step.travel * scale
+                    // Explicit short layout ticks can stop exactly where the pointer arrives.
+                    // No implicit spring is allowed to keep moving a button after that point.
+                    let transition = !full && startWidth != target ? min(0.18, step.duration) : 0
+                    if transition > 0 {
+                        for tick in 1...4 {
+                            guard token == generation, !Task.isCancelled else { return }
+                            if hovering || pose.concealed || !runtime.selected(id) { break playback }
+                            let u = Double(tick) / 4
+                            let eased = u * u * (3 - 2 * u)
+                            let width = (startWidth + (target - startWidth) * eased) * backing
+                            pose = CatPose(side: side, action: action, elapsed: elapsed, active: true,
+                                           fullBody: full, frame: step.asset, width: width.rounded() / backing, scale: scale)
+                            try await delay(transition / 4)
+                        }
+                    } else {
+                        pose = CatPose(side: side, action: action, elapsed: elapsed, active: true,
+                                       fullBody: full, frame: step.asset, width: target, scale: scale)
+                    }
+                    try await delay(step.duration - transition)
+                    elapsed += step.duration
+                }
+                guard token == generation, !Task.isCancelled else { return }
+                // No pose ticking while hovered or while a closed-eye hold is sleeping.
+                if pose.active { pose.concealed = true }
+                while hovering || Date() < quietUntil {
+                    try await delay(0.5)
+                    guard token == generation, !Task.isCancelled else { return }
+                }
+                pose = CatPose(); currentCue = nil
+                runtime.finished(); runtime.release(id)
+                try await delay(1)
+            }
+        } catch { /* Cancellation belongs to the newer generation or hidden window. */ }
         #endif
     }
 }
 
-/// The inner corridor grows toward the camera, moving only this wing's existing content outward.
-/// Its width preference compensates the shell center so the physical camera stays anchored.
+/// Actual rendered content reports occupancy; the cat's spacer is excluded from measurement.
 private struct CatWingModifier: ViewModifier {
     let side: CatSide
     let occupied: CGFloat
     let height: CGFloat
+    let widgetWidth: CGFloat?
+    @State private var measured: CGFloat? = nil
     @Environment(\.notchCatPose) private var pose
     private var space: CatWingSpace {
-        let widget = QuotaCompactMetrics.iconSize(height: height)
-        return CatWingSpace(occupied: occupied, limit: widget + NotchModuleMetrics(widgetWidth: widget).additionalWidth)
+        let width = measured ?? occupied
+        let widget = widgetWidth ?? QuotaCompactMetrics.iconSize(height: height)
+        return CatWingSpace(occupied: width, limit: widget + NotchModuleMetrics(widgetWidth: widget).additionalWidth, height: height)
     }
     func body(content: Content) -> some View {
-        let visible = pose.active && pose.side == side && space.canPeek
-        let width = visible ? space.excursion * pose.extensionAmount : 0
+        let selected = pose.active && pose.side == side && space.canPeek
+        let width = selected ? min(space.room, pose.reservedWidth) : 0
         HStack(spacing: 0) {
             if side == .right { Color.clear.frame(width: width) }
-            content
+            content.background(GeometryReader { proxy in
+                Color.clear.onAppear { measured = proxy.size.width }
+                    .onChange(of: proxy.size.width) { _, value in measured = value }
+            })
             if side == .left { Color.clear.frame(width: width) }
         }
         .frame(height: height)
         .overlay(alignment: side == .left ? .trailing : .leading) {
-            if visible {
-                NotchCatDrawing(pose: pose, empty: space.isEmpty)
-                    .frame(width: space.excursion + 5, height: min(26, height - 4))
-                    .scaleEffect(x: side == .left ? -1 : 1, y: 1)
-                    .frame(width: width + 5, height: height, alignment: side == .left ? .trailing : .leading)
-                    .clipped()
-                    .offset(x: side == .left ? 5 : -5)
-                    .allowsHitTesting(false)
-                    .accessibilityHidden(true)
+            if selected && !pose.concealed && width > 0 {
+                NotchCatDrawing(pose: pose)
+                    .frame(width: width, height: height)
+                    .clipped().allowsHitTesting(false).accessibilityHidden(true)
             }
         }
+        .preference(key: CatWingSpacesKey.self, value: [side: space])
         .preference(key: CatWingOffsetKey.self, value: (side == .left ? -width : width) / 2)
     }
 }
 extension View {
-    func catWing(_ side: CatSide, occupied: CGFloat, height: CGFloat) -> some View {
-        modifier(CatWingModifier(side: side, occupied: occupied, height: height))
+    func catWing(_ side: CatSide, occupied: CGFloat, height: CGFloat, widgetWidth: CGFloat? = nil) -> some View {
+        modifier(CatWingModifier(side: side, occupied: occupied, height: height, widgetWidth: widgetWidth))
     }
 }
 
-/// Original vector character, drawn as articulated parts in a 32 × 26 coordinate space.
-/// The dark ear/face details remain legible at native notch size.
+/// Cache transparent bounds once. Draw original pixels, with no vector morphing or mirroring.
+private enum CatImages {
+    static let images: [String: NSImage] = {
+        var result: [String: NSImage] = [:]
+        for (kind, count) in [("cheek-rub", 6), ("edge-step", 8), ("body-sequence", 8), ("tail-bridge", 4)] {
+            for index in 0..<count {
+                let name = "Cat-\(kind)-\(index)"
+                guard let image = NSImage(named: NSImage.Name(name)),
+                      let cg = image.cgImage(forProposedRect: nil, context: nil, hints: nil),
+                      let rep = NSBitmapImageRep(data: image.tiffRepresentation ?? Data()) else { continue }
+                var minX = rep.pixelsWide, minY = rep.pixelsHigh, maxX = 0, maxY = 0
+                for y in 0..<rep.pixelsHigh { for x in 0..<rep.pixelsWide {
+                    if (rep.colorAt(x: x, y: y)?.alphaComponent ?? 0) > 0.5 {
+                        minX = min(minX, x); minY = min(minY, y); maxX = max(maxX, x + 1); maxY = max(maxY, y + 1)
+                    }
+                } }
+                guard maxX > minX, maxY > minY,
+                      let cropped = cg.cropping(to: CGRect(x: CGFloat(minX), y: CGFloat(minY), width: CGFloat(maxX-minX), height: CGFloat(maxY-minY))) else { continue }
+                result[name] = NSImage(cgImage: cropped, size: NSSize(width: CGFloat(cropped.width), height: CGFloat(cropped.height)))
+            }
+        }
+        return result
+    }()
+}
 struct NotchCatDrawing: View {
     let pose: CatPose
-    var empty = false
+    var empty = false // Kept for the existing isolated preview runner.
     var body: some View {
-        Canvas { context, size in
-            context.scaleBy(x: size.width / 32, y: size.height / 26)
-            let t = pose.elapsed
-            let head = pose.headAmount
-            let x = -15 + 28 * head
-            let sleepy = pose.action == .rest && t > 2.8 && t < 6.7
-            let y = sleepy ? 15.0 : 12.0 + sin(t * 1.7) * 0.45
-            let ink = Color(white: 0.91)
-            let shade = Color(white: 0.66)
-            func ellipse(_ rect: CGRect, _ color: Color) { context.fill(Path(ellipseIn: rect), with: .color(color)) }
-            func line(_ points: [CGPoint], color: Color, width: CGFloat = 1) {
-                var p = Path(); if let first = points.first { p.move(to: first) }
-                for point in points.dropFirst() { p.addLine(to: point) }
-                context.stroke(p, with: .color(color), style: StrokeStyle(lineWidth: width, lineCap: .round, lineJoin: .round))
-            }
-            if empty && head > 0.1 {
-                // Curled body and a gently settling tail, behind the face.
-                var tail = Path(); tail.move(to: CGPoint(x: x - 2, y: 22))
-                tail.addCurve(to: CGPoint(x: x + 13, y: 14 + sin(t * 1.4)),
-                              control1: CGPoint(x: x + 17, y: 26), control2: CGPoint(x: x + 16, y: 15))
-                context.stroke(tail, with: .color(shade), style: StrokeStyle(lineWidth: 2.4, lineCap: .round))
-                ellipse(CGRect(x: x - 10, y: 14, width: 19, height: 11), shade)
-            }
-            // Ear silhouettes, rounded head and inset ears share the existing icon palette.
-            var ears = Path()
-            ears.move(to: CGPoint(x: x - 8, y: y))
-            ears.addLine(to: CGPoint(x: x - 8.4, y: y - 10))
-            ears.addQuadCurve(to: CGPoint(x: x - 2, y: y - 6), control: CGPoint(x: x - 7, y: y - 11))
-            ears.addLine(to: CGPoint(x: x + 3, y: y - 6))
-            ears.addQuadCurve(to: CGPoint(x: x + 8.4, y: y - 10), control: CGPoint(x: x + 8, y: y - 12))
-            ears.addLine(to: CGPoint(x: x + 9, y: y + 1)); ears.closeSubpath()
-            context.fill(ears, with: .color(ink))
-            ellipse(CGRect(x: x - 9.5, y: y - 6.5, width: 19, height: 15), ink)
-            line([CGPoint(x: x - 6.5, y: y - 7.8), CGPoint(x: x - 5, y: y - 5.7)], color: shade, width: 1.5)
-            line([CGPoint(x: x + 6.6, y: y - 7.9), CGPoint(x: x + 5.2, y: y - 5.7)], color: shade, width: 1.5)
-            for eye in [-3.4, 3.4] {
-                if pose.blink || sleepy {
-                    line([CGPoint(x: x + eye - 1, y: y + 0.3), CGPoint(x: x + eye + 1, y: y + 0.3)], color: .black)
-                } else {
-                    ellipse(CGRect(x: x + eye - 0.65, y: y - 1, width: 1.3, height: 2.3), .black)
-                }
-            }
-            ellipse(CGRect(x: x - 0.8, y: y + 2.6, width: 1.6, height: 1.1), Color(white: 0.25))
-            line([CGPoint(x: x, y: y + 3.6), CGPoint(x: x - 1.2, y: y + 4.5)], color: Color(white: 0.4), width: 0.65)
-            line([CGPoint(x: x, y: y + 3.6), CGPoint(x: x + 1.2, y: y + 4.5)], color: Color(white: 0.4), width: 0.65)
-            // The pushing paw stays on the advancing outer edge; a cue raises it once.
-            let lift = pose.action == .completed ? sin(max(0, min(1, (t - 2.6) / 2.2)) * .pi) * 5 : 0
-            let tap = pose.action == .attention && t > 2.5 && t < 4.5 ? abs(sin((t - 2.5) * .pi)) * 2 : 0
-            let pawX = 1 + 24 * pose.extensionAmount
-            ellipse(CGRect(x: pawX - 4, y: 18 - lift - tap, width: 6 * pose.pawAmount, height: 5), ink)
-            line([CGPoint(x: pawX - 1, y: 21 - lift - tap), CGPoint(x: pawX - 1, y: 22 - lift - tap)], color: shade, width: 0.65)
+        if let image = CatImages.images[pose.asset], !pose.concealed {
+            Image(nsImage: image).resizable().interpolation(.none)
+                .frame(width: image.size.width * pose.scale, height: image.size.height * pose.scale)
+                .frame(maxWidth: .infinity, maxHeight: .infinity,
+                       alignment: pose.side == .left ? .bottomLeading : .bottomTrailing)
+                .padding(.bottom, 3)
+                .transaction { $0.animation = nil; $0.disablesAnimations = true }
         }
     }
 }
-
 struct NotchCatSettings: View {
     @AppStorage("notchCatEnabled") private var enabled = true
     @AppStorage("notchCatTaskCues") private var taskCues = true

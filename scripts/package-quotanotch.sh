@@ -24,6 +24,10 @@ if [[ "${GITHUB_REF_NAME:-}" == future ]]; then
   cp docs/Future-preview.md "$staging/Future-试用说明.md"
   cp docs/Future-preview.md "$dist/Future-preview.md"
 fi
+if [[ "${GITHUB_REF_NAME:-}" == feature/notch-cat ]]; then
+  cp docs/Notch-cat-preview.md "$staging/Cat-preview.md"
+  cp docs/Notch-cat-preview.md "$dist/Cat-preview.md"
+fi
 cp LICENSE "$staging/LICENSE"
 git archive --format=zip --prefix=QuotaNotch-source/ -o "$dist/QuotaNotch-source.zip" HEAD
 cp "$dist/QuotaNotch-source.zip" "$staging/QuotaNotch-source.zip"

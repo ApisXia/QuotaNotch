@@ -35,28 +35,32 @@ struct ContentView: View {
 
     @State private var measuredClosedWidth: CGFloat = 0
     @State private var taskWingOffset: CGFloat = 0
-    @State private var catWingOffset: CGFloat = 0
     @StateObject private var cat = NotchCatDirector()
     @AppStorage("notchCatEnabled") private var catEnabled = true
     @AppStorage("notchCatTaskCues") private var catTaskCues = true
     // Deterministic poses are injected only by the isolated screenshot runner.
     var catPreviewPose: CatPose? = nil
 
-    private var catSpaces: (CatWingSpace, CatWingSpace) {
-        let widget = QuotaCompactMetrics.iconSize(height: vm.effectiveClosedNotchHeight)
-        let maxWidth = widget + NotchModuleMetrics(widgetWidth: widget).additionalWidth
-        let present = compactPresentation != .none || agentStore.showAccessory
-        let fullRight = agentStore.showAccessory && (compactPresentation == .combined || compactPresentation == .none)
-        return (CatWingSpace(occupied: present ? widget : 0, limit: maxWidth),
-                CatWingSpace(occupied: fullRight ? maxWidth : present ? widget : 0, limit: maxWidth))
-    }
+    @State private var catSpaces: [CatSide: CatWingSpace] = [:]
+    @ObservedObject private var catRuntime = NotchCatRuntime.shared
     private var catCanAppear: Bool {
-        catEnabled && vm.notchState == .closed && !vm.hideOnClosed && vm.effectiveClosedNotchHeight >= 24
+        catEnabled && !reduceMotion && !catRuntime.suspended && vm.notchState == .closed
+            && !vm.hideOnClosed && vm.effectiveClosedNotchHeight >= 24
             && !eventPresentation.replacesPrimary && eventPresentation.accessory == nil
             && !coordinator.expandingView.show && !coordinator.helloAnimationRunning
     }
+    private var displayedCatPose: CatPose { catCanAppear ? (catPreviewPose ?? cat.pose) : CatPose() }
+    private var catWingOffset: CGFloat {
+        let pose = displayedCatPose
+        guard pose.active, let space = catSpaces[pose.side], space.canPeek else { return 0 }
+        return min(space.room, pose.reservedWidth) * (pose.side == .left ? -0.5 : 0.5)
+    }
     private var catRunID: String {
-        "\(catCanAppear)-\(catSpaces.0.occupied)-\(catSpaces.1.occupied)-\(catSpaces.0.limit)-\(reduceMotion)"
+        let wings = CatSide.allCases.map { side in
+            guard let space = catSpaces[side] else { return side.rawValue + ":absent" }
+            return "\(side.rawValue):\(space.occupied):\(space.limit):\(space.height)"
+        }.joined(separator: "|")
+        return "\(catCanAppear)|\(vm.screenUUID ?? "")|\(wings)|\(String(describing: quotaStore.activePin))|\(String(describing: compactPresentation))|\(agentStore.compactExpanded)"
     }
     @ObservedObject private var agentStore = AgentActivityStore.shared
 
@@ -177,24 +181,29 @@ struct ContentView: View {
             if vm.notchState == .closed {
                 Color.clear.frame(width: vm.closedNotchSize.width, height: vm.effectiveClosedNotchHeight)
                     .contentShape(Rectangle())
-                    .onHover { cat.pointer($0); handleHover($0) }
+                    .onHover { cat.pointer($0, source: "camera"); handleHover($0) }
                     .onTapGesture { openFromPointer(explicit: true) }
             }
         }
         .onPreferenceChange(AgentWingOffsetKey.self) { taskWingOffset = $0 }
-        .onPreferenceChange(CatWingOffsetKey.self) { catWingOffset = $0 }
-        .onReceive(NotificationCenter.default.publisher(for: .notchCatCue)) { note in
-            if catEnabled && catTaskCues, let raw = note.object as? String, let action = CatAction(rawValue: raw) { cat.cue(action) }
+        .onPreferenceChange(CatWingSpacesKey.self) { catSpaces = $0 }
+        .onChange(of: catEnabled) { _, enabled in
+            if !enabled { cat.stop(); cat.clearCues() }
         }
+        .onChange(of: reduceMotion) { _, reduced in if reduced { cat.clearCues() } }
+        .onChange(of: catTaskCues) { _, enabled in if !enabled { cat.clearCues() } }
+        .onChange(of: agentStore.unread.map(\.eventID)) { _, _ in cat.revalidateCue() }
+        .onDisappear { cat.stop() }
         .task(id: catRunID) {
-            guard catCanAppear else { cat.pose = CatPose(); return }
-            await cat.run(left: catSpaces.0, right: catSpaces.1, reduced: reduceMotion)
+            guard catCanAppear else { cat.stop(); return }
+            await cat.run(spaces: catSpaces, screen: vm.screenUUID)
         }
         .onReceive(NotificationCenter.default.publisher(for: .agentOpenNotch)) { _ in
             coordinator.currentView = .activity; agentStore.notchReadEnabled = true
             if vm.notchState == .closed { doOpen() }
         }
         .onChange(of: vm.notchState) { _, state in
+            if state == .open { cat.pointer(false, source: "camera") }
             if state == .closed {
                 agentStore.notchReadEnabled = false
                 agentStore.expandedTaskID = nil
@@ -266,7 +275,7 @@ struct ContentView: View {
                 } else if vm.notchState == .closed {
                     PrimaryNotchLayout {
                         closedPrimaryContent
-                            .environment(\.notchCatPose, catCanAppear ? (catPreviewPose ?? cat.pose) : CatPose())
+                            .environment(\.notchCatPose, displayedCatPose)
                         closedAccessoryContent
                     }
                 } else {

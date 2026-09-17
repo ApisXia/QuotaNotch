@@ -161,7 +161,10 @@ import UserNotifications
                 if baseline {
                     let cue: CatAction? = session.state == .completed ? .completed :
                         (session.state == .waiting || session.state == .failed ? .attention : nil)
-                    if let cue { NotificationCenter.default.post(name: .notchCatCue, object: cue.rawValue) }
+                    if let cue {
+                        NotchCatRuntime.shared.enqueue(CatCue(sessionID: session.identity, eventID: session.eventID,
+                                                              action: cue, occurredAt: session.updatedAt))
+                    }
                 }
             }
             lastEvents[session.identity] = session.eventID

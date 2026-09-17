@@ -4,14 +4,19 @@ import Foundation
 enum CatSide: String, CaseIterable { case left, right }
 enum CatAction: String, CaseIterable { case curious, rest, completed, attention }
 
-/// Space belongs to information first. The pet never scales a widget or exceeds its wing budget.
 struct CatWingSpace: Equatable {
     let occupied: CGFloat
     let limit: CGFloat
+    var height: CGFloat = 32
     var room: CGFloat { max(0, limit - occupied) }
-    var canPeek: Bool { room >= 16 }
-    var isEmpty: Bool { occupied == 0 }
+    var canPeek: Bool { room >= 16 && height >= 24 }
+    var isEmpty: Bool { occupied < 0.5 }
+    var canShowBody: Bool { isEmpty && room >= 30 && height >= 26 }
     var excursion: CGFloat { canPeek ? min(room, isEmpty ? 32 : 24) : 0 }
+    func scale(body: Bool, backing: CGFloat) -> CGFloat {
+        let fit = min(1, min(room / (body ? 30 : 24), (height - 4) / (body ? 22 : 18)))
+        return max(0, floor(fit * max(1, backing)) / max(1, backing))
+    }
 }
 
 struct CatPose: Equatable {
@@ -19,33 +24,50 @@ struct CatPose: Equatable {
     var action: CatAction = .curious
     var elapsed: Double = 0
     var active = false
-    static let duration: Double = 9
-    // Paw leads the shell movement; head follows after contact. Return order is reversed.
-    var extensionAmount: Double { active ? Self.envelope(elapsed, start: 0.35, rise: 1.1, end: 7.35, fall: 1.45) : 0 }
-    var headAmount: Double { active ? Self.envelope(elapsed, start: 0.85, rise: 1.15, end: 6.9, fall: 1.1) : 0 }
-    var pawAmount: Double { active ? Self.envelope(elapsed, start: 0, rise: 0.45, end: 8.3, fall: 0.6) : 0 }
-    var blink: Bool { (elapsed > 3.15 && elapsed < 3.32) || (elapsed > 5.7 && elapsed < 5.9) }
-    static func envelope(_ t: Double, start: Double, rise: Double, end: Double, fall: Double) -> Double {
-        func smooth(_ x: Double) -> Double { let x = min(1, max(0, x)); return x * x * (3 - 2 * x) }
-        return smooth((t - start) / rise) * (1 - smooth((t - end) / fall))
-    }
+    var fullBody = false
+    var frame: String? = nil
+    var width: CGFloat? = nil
+    var scale: CGFloat = 1
+    var concealed = false
+    var clip: CatClip { fullBody ? CatClips.body : CatClips.head(action) }
+    var asset: String { frame ?? clip.step(at: elapsed).asset }
+    var reservedWidth: CGFloat { active ? (width ?? clip.step(at: elapsed).travel * scale) : 0 }
+    var extensionAmount: Double { Double(reservedWidth / (fullBody ? 30 : 24)) }
 }
 
-/// Coalesced cues expire instead of replaying after the user closes a panel minutes later.
+/// Events retain their original age and identity; duplicate arrivals cannot renew a cue.
+struct CatCue: Equatable {
+    let sessionID: String
+    let eventID: String
+    let action: CatAction
+    let occurredAt: Date
+}
 struct CatCueQueue {
-    private(set) var pending: CatAction?
-    private var queuedAt: Date = .distantPast
-    private var lastShown: Date = .distantPast
-    mutating func enqueue(_ action: CatAction, now: Date) {
-        guard action == .completed || action == .attention else { return }
-        guard now.timeIntervalSince(lastShown) >= 30 else { return }
-        if pending != .attention { pending = action }
-        queuedAt = now
+    private(set) var pending: [CatCue] = []
+    private var completedShown = Date.distantPast
+    private var attentionShown = Date.distantPast
+    mutating func clear() { pending.removeAll() }
+    mutating func enqueue(_ cue: CatCue, now: Date) {
+        guard cue.action == .completed || cue.action == .attention,
+              now.timeIntervalSince(cue.occurredAt) >= -2,
+              now.timeIntervalSince(cue.occurredAt) <= 15,
+              !pending.contains(where: { $0.eventID == cue.eventID }) else { return }
+        pending.removeAll { $0.sessionID == cue.sessionID }
+        pending.append(cue)
+        if pending.count > 32 { pending.removeFirst(pending.count - 32) }
     }
-    mutating func take(now: Date) -> CatAction? {
-        defer { pending = nil }
-        guard let pending, now.timeIntervalSince(queuedAt) <= 15 else { return nil }
-        lastShown = now
-        return pending
+    mutating func take(now: Date, valid: (CatCue) -> Bool) -> CatCue? {
+        pending.removeAll { now.timeIntervalSince($0.occurredAt) > 15 || !valid($0) }
+        let ordered = pending.sorted {
+            if $0.action != $1.action { return $0.action == .attention }
+            return $0.occurredAt > $1.occurredAt
+        }
+        guard let cue = ordered.first(where: {
+            now.timeIntervalSince($0.action == .attention ? attentionShown : completedShown) >= 30
+        }) else { return nil }
+        // Consume the burst as one reaction; an attention reaction also supersedes completions.
+        pending.removeAll { cue.action == .attention || $0.action == .completed }
+        if cue.action == .attention { attentionShown = now } else { completedShown = now }
+        return cue
     }
 }

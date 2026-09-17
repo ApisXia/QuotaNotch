@@ -1,12 +1,13 @@
-# Notch cat preview · build 292
+# Pixel cat preview · build 293
 
-An original white/gray vector cat shares the existing closed-notch wings. It peeks from either side and nudges a widget only into unused space; widget + minimal is the per-wing limit. Music keeps its usual position. No extra row or external popup is added.
+Experimental build on feature/notch-cat, based on 1.03. Not a stable release.
 
-- Curious peeking, resting, completion greeting, and attention gesture.
-- Task reactions coalesce and expire, do not mark tasks read, and do not replay historical results at launch.
-- Pointer entry pauses motion so controls do not move under the cursor. Motion resumes after departure.
-- Expanded panels, system overlays, hidden notch, and unsupported small heights suppress the cat.
-- Appearance settings: cat on/off and task reactions on/off. Reduced Motion uses a still pose.
-- No global input monitoring, network service, downloaded art, or new permissions.
+- Uses the approved cream pixel cat, with four authored animation timelines.
+- Measures actual free wing space; respects the widget + minimal width limit.
+- Pointer entry hides decoration and holds its occupied width until departure.
+- Expanded panels, important overlays, screen lock, sleep and Reduced Motion suppress the cat.
+- One cat across all displays. Task reactions use fresh unread session events and coalesce bursts.
+- Full-body movement currently appears on the left only; frontal cheek poses work on either side without mirroring markings.
+- Two settings: cat enabled and task reactions enabled.
 
-Validation includes wing bounds/animation lifecycle/cue queue unit tests, actual native screenshots for all eight module combinations at three heights and both sides, and the existing English/Chinese layout and navigation regression suite. This is an experimental branch, not a stable release.
+The installer is ad-hoc signed, not notarized. Native layout regression checks and core tests run in the build workflow.
