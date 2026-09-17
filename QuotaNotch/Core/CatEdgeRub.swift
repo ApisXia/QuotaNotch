@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-only
 import Foundation
+import CoreGraphics
 
 /// Screen coordinates deliberately separate pointer travel from moving layout geometry.
 struct CatEdgeRub {

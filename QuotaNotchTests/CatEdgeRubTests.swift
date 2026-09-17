@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-only
 import XCTest
+import CoreGraphics
 @testable import QuotaNotchCore
 
 final class CatEdgeRubTests: XCTestCase {

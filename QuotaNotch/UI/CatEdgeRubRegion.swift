@@ -46,7 +46,7 @@ struct CatEdgeRubRegion: NSViewRepresentable {
         override func viewDidMoveToWindow() {
             super.viewDidMoveToWindow(); detach()
             guard window != nil else { return }
-            monitor = NSEvent.addLocalMonitorForEvents(matching: [.mouseMoved, .leftMouseDown, .rightMouseDown,
+            monitor = NSEvent.addLocalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown,
                 .otherMouseDown, .leftMouseDragged, .rightMouseDragged, .scrollWheel]) { [weak self] event in
                 self?.observe(event)
                 return event
@@ -61,6 +61,7 @@ struct CatEdgeRubRegion: NSViewRepresentable {
                 options: [.activeAlways, .mouseMoved, .mouseEnteredAndExited], owner: self, userInfo: nil)
             addTrackingArea(area); tracking = area
         }
+        override func mouseMoved(with event: NSEvent) { observe(event) }
         override func mouseExited(with event: NSEvent) {
             // Geometry-generated enter/exit events never contribute a stroke.
             if !screenFrame.insetBy(dx: -20, dy: -6).contains(NSEvent.mouseLocation) { clear() }
