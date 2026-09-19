@@ -1,4 +1,4 @@
-# Pixel cat preview · build 296
+# Pixel cat preview · build 297
 
 Experimental build on feature/notch-cat, based on 1.03. Not a stable release.
 

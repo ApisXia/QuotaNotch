@@ -534,8 +534,10 @@ struct SettingsPreviewRunner {
                 previous = width
             }
             verifyPresentation(intermediate && !director.pose.active && director.pose.reservedWidth == 0,
-                "Retreat did not finish continuously: " + message)
+                "Retreat did not finish continuously: \(message), initial=\(initial), final=\(director.pose.reservedWidth), active=\(director.pose.active), intermediate=\(intermediate)")
         }
+        // Start the continuity check after entry, not on its first quantized pixel.
+        sampleFor(0.9)
         verifyRetreat("held mouse button") { buttons = 1; director.cancelSummon() }
         verifyPresentation(region.hitTest(.zero) == nil, "Cat region intercepted a widget click")
         buttons = 0; rub(.right, at: 4)
