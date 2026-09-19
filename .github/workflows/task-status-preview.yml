@@ -1,6 +1,12 @@
 name: Task status visual preview
 on:
   workflow_dispatch:
+  push:
+    branches: [feature/notch-cat]
+    paths:
+      - QuotaNotch/UI/AgentCompactView.swift
+      - scripts/render-task-status.*
+      - .github/workflows/task-status-preview.yml
 permissions:
   contents: read
 jobs:
