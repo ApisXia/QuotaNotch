@@ -70,9 +70,7 @@ struct AgentPaperGlyph: View {
                     .overlay { AgentSpeechMark().fill(AgentText.color(.waiting).opacity(0.14)) }
                     .overlay { AgentSpeechMark().stroke(AgentText.color(.waiting), style: StrokeStyle(lineWidth: 1.05, lineJoin: .round)) }
                     .overlay {
-                        HStack(spacing: 1.7) {
-                            ForEach(0..<3) { _ in Circle().fill(ink.opacity(0.94)).frame(width: 1.25, height: 1.25) }
-                        }.offset(y: -0.7)
+                        AgentReplyDots().fill(ink.opacity(0.94))
                     }
                     .frame(width: 12, height: 12)
                     .offset(x: 1.2, y: 0.5)
@@ -157,6 +155,19 @@ private struct AgentSpeechMark: Shape {
         p.closeSubpath()
         return p.applying(CGAffineTransform(scaleX: rect.width, y: rect.height))
             .applying(CGAffineTransform(translationX: rect.minX, y: rect.minY))
+    }
+}
+/// Align the reply dots to the bubble body (y: 0.08...0.80), excluding its tail.
+private struct AgentReplyDots: Shape {
+    func path(in rect: CGRect) -> Path {
+        let diameter = rect.width * 0.10
+        let centerY = rect.minY + rect.height * 0.44
+        var path = Path()
+        for centerX in [0.29, 0.50, 0.71] {
+            path.addEllipse(in: CGRect(x: rect.minX + rect.width * centerX - diameter / 2,
+                                       y: centerY - diameter / 2, width: diameter, height: diameter))
+        }
+        return path
     }
 }
 private struct AgentCrossMark: Shape {
