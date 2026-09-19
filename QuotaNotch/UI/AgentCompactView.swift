@@ -36,13 +36,13 @@ struct AgentPaperGlyph: View {
         }
     }
 
-    private func paper(_ accent: Color, coloredEdge: Bool = false, rules: Bool = true, opacity: Double = 1) -> some View {
+    private func paper(_ accent: Color, coloredEdge: Bool = false, rules: Bool = true, opacity: Double = 1, neutralFold: Bool = false) -> some View {
         ZStack {
             AgentFoldedPage().fill(paperBackground)
             AgentFoldedPage().fill(accent.opacity(0.10))
             AgentFoldedPage().stroke(coloredEdge ? accent : ink.opacity(0.88),
                 style: StrokeStyle(lineWidth: 1.05, lineCap: .round, lineJoin: .round))
-            AgentPageFold().stroke(accent.opacity(0.85),
+            AgentPageFold().stroke(neutralFold ? ink.opacity(0.88) : accent.opacity(0.85),
                 style: StrokeStyle(lineWidth: 0.8, lineCap: .round, lineJoin: .round))
             if rules {
                 VStack(alignment: .leading, spacing: 2) {
@@ -78,7 +78,7 @@ struct AgentPaperGlyph: View {
                     .offset(x: 1.2, y: 0.5)
             }.offset(y: reduced ? 0 : AgentGlyphMotion.waitingOffset(at: elapsed))
         case .failed:
-            paper(AgentText.color(.failed), rules: false).overlay {
+            paper(AgentText.color(.failed), rules: false, neutralFold: true).overlay {
                 AgentCrossMark().stroke(AgentText.color(.failed), style: StrokeStyle(lineWidth: 1.5, lineCap: .round))
                     .frame(width: 5.4, height: 5.4).offset(y: 1)
             }
@@ -95,7 +95,7 @@ struct AgentPaperGlyph: View {
                     }.offset(x: spread, y: spread)
             }
         case .interrupted:
-            paper(AgentText.color(.interrupted), rules: false).overlay {
+            paper(AgentText.color(.interrupted), rules: false, neutralFold: true).overlay {
                 HStack(spacing: 1.6) {
                     ForEach(0..<2) { _ in
                         RoundedRectangle(cornerRadius: 0.45).fill(AgentText.color(.interrupted))
