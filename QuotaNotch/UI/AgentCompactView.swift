@@ -374,6 +374,12 @@ extension Notification.Name {
 // The isolated preview observes the modules actually rendered, independently of fixture expectations.
 // The installable build has no audit preferences or state.
 #if SETTINGS_PREVIEW
+struct NotchModuleFrameAuditKey: PreferenceKey {
+    static var defaultValue: [String: CGRect] = [:]
+    static func reduce(value: inout [String: CGRect], nextValue: () -> [String: CGRect]) {
+        value.merge(nextValue(), uniquingKeysWith: { _, new in new })
+    }
+}
 struct NotchModuleAuditKey: PreferenceKey {
     static var defaultValue: [String: String] = [:]
     static func reduce(value: inout [String: String], nextValue: () -> [String: String]) {
@@ -382,9 +388,18 @@ struct NotchModuleAuditKey: PreferenceKey {
 }
 #endif
 extension View {
+    @ViewBuilder func auditNotchFrame(_ name: String) -> some View {
+        #if SETTINGS_PREVIEW
+        self.background(GeometryReader { proxy in
+            Color.clear.preference(key: NotchModuleFrameAuditKey.self, value: [name: proxy.frame(in: .global)])
+        })
+        #else
+        self
+        #endif
+    }
     @ViewBuilder func auditNotchModule(_ name: String, mode: String = "widget") -> some View {
         #if SETTINGS_PREVIEW
-        self.preference(key: NotchModuleAuditKey.self, value: [name: mode])
+        self.preference(key: NotchModuleAuditKey.self, value: [name: mode]).auditNotchFrame(name)
         #else
         self
         #endif
@@ -416,7 +431,7 @@ struct AgentTaskOnlyWings: View {
             }.buttonStyle(.plain)
                 .accessibilityLabel(AgentText.t("任务", "Tasks") + " · " + AgentText.state(emphasis?.state ?? .unknown))
                 .catWing(.left, occupied: iconWidth, height: height)
-            Color.clear.frame(width: centerWidth, height: height)
+            Color.clear.frame(width: centerWidth, height: height).auditNotchFrame("camera")
             Button(action: open) {
                 VStack(alignment: .leading, spacing: 1) {
                     ForEach(recent, id: \.identity) { session in

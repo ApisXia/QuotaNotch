@@ -376,7 +376,7 @@ struct ContentView: View {
         } else {
             HStack(spacing: 0) {
                 Color.clear.frame(width: 0).catWing(.left, occupied: 0, height: vm.effectiveClosedNotchHeight)
-                Color.clear.frame(width: vm.closedNotchSize.width - 20, height: vm.effectiveClosedNotchHeight)
+                Color.clear.frame(width: vm.closedNotchSize.width - 20, height: vm.effectiveClosedNotchHeight).auditNotchFrame("camera")
                 Color.clear.frame(width: 0).catWing(.right, occupied: 0, height: vm.effectiveClosedNotchHeight)
             }
         }
@@ -432,10 +432,10 @@ struct ContentView: View {
                     .frame(width: size, height: size)
                     .clipShape(RoundedRectangle(cornerRadius: MusicPlayerImageSizes.cornerRadiusInset.closed))
                     .frame(width: size, height: height)
-                    .auditNotchModule("music")
+                    .auditNotchModule("music").auditNotchFrame("album")
             }.buttonStyle(.plain)
                 .catWing(.left, occupied: size, height: height)
-            Color.clear.frame(width: vm.closedNotchSize.width - cornerRadiusInsets.closed.top, height: height)
+            Color.clear.frame(width: vm.closedNotchSize.width - cornerRadiusInsets.closed.top, height: height).auditNotchFrame("camera")
             AgentCompactDock(primaryWidth: 0, height: height, anchorWidth: size, widgetWidth: size, open: openTasks) { EmptyView() }
                 .catWing(.right, occupied: size, height: height)
         }.frame(height: height)
@@ -458,6 +458,7 @@ struct ContentView: View {
                     height: max(0, vm.effectiveClosedNotchHeight - 12)
                 )
 
+                .auditNotchFrame("album")
                 .catWing(.left, occupied: size, height: height)
             Rectangle()
                 .fill(.black)
@@ -504,7 +505,7 @@ struct ContentView: View {
                         ? 380
                         : vm.closedNotchSize.width
                             + -cornerRadiusInsets.closed.top
-                )
+                ).auditNotchFrame("camera")
 
             HStack {
                     Rectangle()

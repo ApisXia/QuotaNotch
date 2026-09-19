@@ -210,11 +210,33 @@ struct SettingsPreviewRunner {
         QuotaNotchStore.shared.menuOpen = true // Keep the fixture open without simulating pointer input.
         defer { QuotaNotchStore.shared.menuOpen = false }
         var renderedModules: [String: String] = [:]
+        var renderedFrames: [String: CGRect] = [:]
+        let savedComfortable = UserDefaults.standard.bool(forKey: "quotaComfortable")
+        UserDefaults.standard.set(false, forKey: "quotaComfortable")
+        defer { UserDefaults.standard.set(savedComfortable, forKey: "quotaComfortable") }
         var modeAudit: [[String: Any]] = []
         let host = NSHostingView(rootView: ContentView().environmentObject(vm)
             .onPreferenceChange(NotchModuleAuditKey.self) { renderedModules = $0 }
+            .onPreferenceChange(NotchModuleFrameAuditKey.self) { renderedFrames = $0 }
             .transaction { $0.animation = nil; $0.disablesAnimations = true }
             .background(Color(red: 0.25, green: 0.15, blue: 0.35)))
+        func verifyGeometry(_ label: String, widget: CGFloat) {
+            guard let camera = renderedFrames["camera"] else { fatalError("Missing camera geometry in \(label)") }
+            verifyPresentation(abs(camera.midX - host.bounds.midX) <= 1, "Physical notch shifted in \(label): \(camera)")
+            if let album = renderedFrames["album"] {
+                verifyPresentation(abs(album.width - widget) <= 1, "Album stretched in \(label): \(album)")
+                verifyPresentation(abs(album.maxX + QuotaCompactMetrics.spacing - camera.minX) <= 1,
+                    "Album moved away from physical notch in \(label): \(album), camera \(camera)")
+            }
+            for name in ["quota", "task"] {
+                if let mode = renderedModules[name], let frame = renderedFrames[name] {
+                    let expected = mode == "minimal" ? CGFloat(16) : widget
+                    verifyPresentation(abs(frame.width - expected) <= 1, "\(name) width changed in \(label): \(frame.width) vs \(expected)")
+                    verifyPresentation(frame.maxX <= camera.minX + 1 || frame.minX >= camera.maxX - 1,
+                        "\(name) overlaps physical notch in \(label)")
+                }
+            }
+        }
         let window = NSWindow(contentRect: NSRect(origin: .zero, size: windowSize),
                               styleMask: [.borderless], backing: .buffered, defer: false)
         window.isReleasedWhenClosed = false
@@ -351,6 +373,7 @@ struct SettingsPreviewRunner {
                 if scenario.tasks && !scenario.quota && !scenario.music { expected["task-summary"] = "widget" }
                 verifyPresentation(renderedModules == expected,
                     "Wrong presentation in \(layout), height \(headerHeight), selection \(expanded): \(renderedModules), expected \(expected)")
+                verifyGeometry("\(layout)-\(headerHeight)-\(expanded)", widget: QuotaCompactMetrics.iconSize(height: headerHeight))
                 modeAudit.append(["case": layout, "height": headerHeight, "taskSelected": expanded, "rendered": renderedModules])
                 let bitmap = host.bitmapImageRepForCachingDisplay(in: host.bounds)!
                 host.cacheDisplay(in: host.bounds, to: bitmap)
@@ -410,10 +433,31 @@ struct SettingsPreviewRunner {
                         : ["music": "widget", "quota": expanded ? "minimal" : "widget",
                            "task": expanded ? "widget" : "minimal", "divider": "switchable"]
                     verifyPresentation(renderedModules == expected, "Playback transition \(playback) retained the wrong presentation: \(renderedModules)")
+                    verifyGeometry("\(playback)-\(headerHeight)-\(expanded)", widget: QuotaCompactMetrics.iconSize(height: headerHeight))
                     modeAudit.append(["case": playback, "height": headerHeight, "taskSelected": expanded, "rendered": renderedModules])
                     let bitmap = host.bitmapImageRepForCachingDisplay(in: host.bounds)!
                     host.cacheDisplay(in: host.bounds, to: bitmap)
                     try bitmap.representation(using: .png, properties: [:])!.write(to: output.appendingPathComponent("Notch-transition-\(Int(headerHeight))-\(expanded)-\(playback).png"))
+                }
+            }
+        }
+        for comfortable in [true, false] {
+            UserDefaults.standard.set(comfortable, forKey: "quotaComfortable")
+            for headerHeight: CGFloat in [24, 32, 38] {
+                vm.closedNotchSize.height = headerHeight
+                for scenario in cases.reversed() {
+                    QuotaNotchStore.shared.configureSettingsPreview(paused: !scenario.quota)
+                    MusicManager.shared.isPlaying = scenario.music
+                    MusicManager.shared.isPlayerIdle = !scenario.music
+                    activity.configurePreview(scenario.tasks ? fixtures : [])
+                    for expanded in [true, false] {
+                        activity.compactExpanded = expanded
+                        settle(); host.layoutSubtreeIfNeeded()
+                        let widget = QuotaCompactMetrics.iconSize(height: headerHeight, comfortable: scenario.quota && comfortable)
+                        verifyGeometry("reverse-\(scenario.name)-\(headerHeight)-\(expanded)-comfortable=\(comfortable)", widget: widget)
+                        modeAudit.append(["case": "reverse-" + scenario.name, "height": headerHeight,
+                                          "taskSelected": expanded, "comfortable": comfortable, "rendered": renderedModules])
+                    }
                 }
             }
         }

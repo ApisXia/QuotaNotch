@@ -266,7 +266,7 @@ struct QuotaPinnedWings: View {
                 .accessibilityLabel(showsMusic ? QuotaText.localized("打开音乐") : QuotaText.format("打开 %@ 额度", provider.title))
 
                 .catWing(.left, occupied: leftWidth, height: height, widgetWidth: iconSize)
-                Color.clear.frame(width: centerWidth, height: height)
+                Color.clear.frame(width: centerWidth, height: height).auditNotchFrame("camera")
 
                 AgentCompactDock(primaryWidth: rightPrimaryWidth, height: height, anchorWidth: leftWidth, widgetWidth: iconSize, open: {
                     BoringViewCoordinator.shared.currentView = .activity
@@ -316,7 +316,7 @@ struct QuotaPinnedWings: View {
             .frame(width: iconSize, height: iconSize)
             .clipShape(RoundedRectangle(cornerRadius: MusicPlayerImageSizes.cornerRadiusInset.closed))
             .matchedGeometryEffect(id: "albumArt", in: albumArtNamespace)
-            .auditNotchModule("music")
+            .auditNotchModule("music").auditNotchFrame("album")
             .overlay(alignment: .bottomTrailing) {
                 Group {
                         AudioSpectrumView(isPlaying: $music.isPlaying)
