@@ -81,7 +81,22 @@ struct SettingsPreviewRunner {
         }
         activity.configurePreview(fixtures)
         precondition(activity.running == 3 && activity.waiting == 2)
-        activity.markAllRead(); precondition(activity.unread.isEmpty)
+        let initialIDs = activity.visible.map(\.identity)
+        let project = fixtures[0].groupID
+        let otherUnread = Set(activity.unread.filter { $0.groupID != project }.map(\.eventID))
+        activity.markAllRead(inProject: project)
+        verifyPresentation(activity.unread.allSatisfy { $0.groupID != project }, "Project read left unread events in that project")
+        verifyPresentation(Set(activity.unread.map(\.eventID)) == otherUnread, "Project read affected another project")
+        activity.markAllRead()
+        verifyPresentation(activity.unread.isEmpty && activity.visible.map(\.identity) == initialIDs,
+                           "Bulk read removed history or left unread events")
+        verifyPresentation(activity.running == 3 && activity.waiting == 2 && activity.attention.needsAction,
+                           "Bulk read changed live states or hid waiting tasks")
+        var nextEvent = fixtures[0]; nextEvent.turnID = "next-event"
+        verifyPresentation(activity.isUnread(nextEvent), "Bulk read swallowed a later event from the same task")
+        activity.markAllRead()
+        verifyPresentation(activity.visible.map(\.identity) == initialIDs, "Repeated bulk read changed history")
+        print("Verified bulk read scope, history retention, active/waiting states and later unread events")
         activity.configurePreview(fixtures)
         activity.dismissFinished(); precondition(activity.visible.count == 5)
         activity.configurePreview(fixtures)
@@ -418,6 +433,12 @@ struct SettingsPreviewRunner {
                                "Task filtering or inline details changed the fixed panel height")
         }
         try snapshot("Task-panel-compact")
+        let originalIDs = store.notchSessions.map(\.identity)
+        store.markAllRead()
+        try snapshot("Task-panel-all-read")
+        verifyPresentation(store.unread.isEmpty && store.notchSessions.map(\.identity) == originalIDs,
+                           "Bulk read removed or reordered notch rows")
+        store.configurePreview(fixtures); store.retainNotchOrder()
         let unread = store.unread.count
         store.selectNotchFilter(.all)
         try snapshot("Task-panel-all")

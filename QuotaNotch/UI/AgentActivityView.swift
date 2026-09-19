@@ -23,6 +23,16 @@ struct AgentNotchView: View {
                 Spacer(minLength: 4)
                 Text(AgentText.t("\(tasks.count) 项", "\(tasks.count) tasks"))
                     .font(.system(size: 10)).foregroundStyle(.secondary).monospacedDigit()
+                Button { store.markAllRead() } label: {
+                    Text(AgentText.t("一键已读", "Read all"))
+                        .font(.system(size: 10, weight: .medium)).fixedSize()
+                        .padding(.horizontal, 7).padding(.vertical, 3)
+                        .background(Color.white.opacity(store.unread.isEmpty ? 0.04 : 0.1), in: Capsule())
+                }
+                .buttonStyle(.plain).foregroundStyle(.secondary)
+                .disabled(!store.enabled || store.unread.isEmpty)
+                .accessibilityIdentifier("task-mark-all-read")
+                .help(AgentText.t("将所有项目当前未读任务标为已读，保留任务历史和运行状态。", "Mark current unread tasks across all projects as read. Keep history and running states."))
             }.frame(height: 22)
             if tasks.isEmpty {
                 Text(store.enabled ? AgentText.t("当前筛选下没有任务。", "No tasks match this filter.") : AgentText.t("任务监控已暂停。", "Task monitoring is paused."))
@@ -276,8 +286,15 @@ struct AgentActivityView: View {
                         .font(.system(size: 12)).foregroundStyle(.secondary)
                 }
                 Spacer()
+                Button(selectedProject == "all" ? AgentText.t("一键已读", "Read all") : AgentText.t("本项目已读", "Read project")) {
+                    store.markAllRead(inProject: selectedProject == "all" ? nil : selectedProject)
+                }
+                .controlSize(.small)
+                .disabled(!store.enabled || !projectSessions.contains { store.isUnread($0) })
+                .help(selectedProject == "all"
+                      ? AgentText.t("标记所有项目的当前未读任务，保留历史。", "Mark current unread tasks across all projects as read. Keep history.")
+                      : AgentText.t("仅标记当前项目的未读任务，包含其他筛选下的任务。", "Mark unread tasks in this project, including tasks in other filters."))
                 Menu {
-                    Button(AgentText.t("全部标为已读", "Mark all as read")) { store.markAllRead() }
                     Button(AgentText.t("清除已结束的任务", "Clear finished tasks")) { store.dismissFinished() }
                     Divider()
                     Button(AgentText.t("监控设置", "Monitor settings")) {

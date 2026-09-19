@@ -1,6 +1,8 @@
-# Pixel cat preview · build 301
+# Pixel cat preview · build 302
 
 Experimental build on feature/notch-cat, based on 1.03. Not a stable release.
+
+Task panels now expose a direct Read all action. The notch covers all current unread tasks; a selected project in the task window scopes the action to that project. Reading preserves history and live states, and later events become unread again.
 
 - Uses the approved cream pixel cat, with distinct watching, dozing and rubbing sequences.
 - Measures actual free wing space; respects the widget + minimal width limit.

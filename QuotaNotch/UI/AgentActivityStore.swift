@@ -102,7 +102,15 @@ import UserNotifications
         if keepVisible { retainedReadEvents[session.identity] = session.eventID }
         acknowledged[session.identity] = session.eventID; saveReadState()
     }
-    func markAllRead() { for session in sessions { acknowledged[session.identity] = session.eventID }; saveReadState() }
+    /// Acknowledge a snapshot of current unread events; preserve history and live states.
+    func markAllRead(inProject groupID: String? = nil) {
+        let targets = unread.filter { groupID == nil || $0.groupID == groupID }
+        guard !targets.isEmpty else { return }
+        var updated = acknowledged
+        for session in targets { updated[session.identity] = session.eventID }
+        acknowledged = updated
+        saveReadState()
+    }
     func dismissFinished() {
         for session in sessions where !session.state.isActive {
             dismissed[session.identity] = session.eventID; acknowledged[session.identity] = session.eventID
