@@ -99,6 +99,7 @@ struct CatWingSpacesKey: PreferenceKey {
     private var hovering: Bool { !hoverRegions.isEmpty }
     private var quietUntil = Date.distantPast
     private var currentCue: CatCue?
+    private var edgeHover: CatSide?
     private var manualSide: CatSide?
     private var retreatRequested = false
     private var gestureCount = 0
@@ -107,9 +108,10 @@ struct CatWingSpacesKey: PreferenceKey {
     private var sleeper: Task<Void, Never>?
     private var availableSpaces: [CatSide: CatWingSpace] = [:]
     private var pointerBlocks: Bool {
-        hoverRegions.contains("camera") || (hovering && manualSide == nil)
+        hoverRegions.contains("camera") || ((hovering || edgeHover != nil) && manualSide == nil)
     }
     func edgePointer(_ side: CatSide?) {
+        edgeHover = side
         if pointerBlocks { requestRetreat() }
     }
     private func requestRetreat() {
