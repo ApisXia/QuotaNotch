@@ -167,7 +167,7 @@ struct SettingsPreviewRunner {
                             MinimalQuotaGlyph(brand: .claude, percent: samples[index], size: metrics.minimalIconSize)
                         }
                         NotchMinimalIcon(metrics: metrics) {
-                            AgentPaperGlyph(state: states[index], minimal: true)
+                            AgentPaperGlyph(state: states[index])
                                 .scaleEffect(metrics.minimalIconSize / 16)
                                 .frame(width: metrics.minimalIconSize, height: metrics.minimalIconSize)
                         }
@@ -421,10 +421,10 @@ struct SettingsPreviewRunner {
                     HStack(spacing: 8) {
                         Text(AgentText.state(state)).font(.system(size: 11)).frame(width: 100, alignment: .leading)
                         AgentPaperGlyph(state: state, previewElapsed: elapsed).scaleEffect(20.0 / 16).frame(width: 38, height: 28)
-                        AgentPaperGlyph(state: state, minimal: true, previewElapsed: elapsed).scaleEffect(14.0 / 16).frame(width: 38, height: 28)
-                        AgentPaperGlyph(state: state, minimal: true, previewElapsed: elapsed).scaleEffect(10.0 / 16).frame(width: 38, height: 28)
+                        AgentPaperGlyph(state: state, previewElapsed: elapsed).scaleEffect(14.0 / 16).frame(width: 38, height: 28)
+                        AgentPaperGlyph(state: state, previewElapsed: elapsed).scaleEffect(10.0 / 16).frame(width: 38, height: 28)
                         AgentTaskStateMark(state: state, previewElapsed: elapsed).frame(width: 38, height: 28)
-                        AgentPaperGlyph(state: state, minimal: true, previewElapsed: elapsed, previewReducedMotion: true)
+                        AgentPaperGlyph(state: state, previewElapsed: elapsed, previewReducedMotion: true)
                             .scaleEffect(14.0 / 16).frame(width: 38, height: 28)
                         AgentPaperGlyph(state: state, previewElapsed: elapsed).scaleEffect(2).frame(width: 38, height: 28)
                     }

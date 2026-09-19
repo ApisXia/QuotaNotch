@@ -24,8 +24,8 @@ import UniformTypeIdentifiers
                         }.frame(width: 140)
                         HStack(spacing: 20) {
                             AgentPaperGlyph(state: state, previewElapsed: elapsed).scaleEffect(1.25)
-                            AgentPaperGlyph(state: state, minimal: true, previewElapsed: elapsed).scaleEffect(0.875)
-                            AgentPaperGlyph(state: state, minimal: true, previewElapsed: elapsed).scaleEffect(0.625)
+                            AgentPaperGlyph(state: state, previewElapsed: elapsed).scaleEffect(0.875)
+                            AgentPaperGlyph(state: state, previewElapsed: elapsed).scaleEffect(0.625)
                         }.frame(width: 140)
                         AgentPaperGlyph(state: state, previewElapsed: elapsed).scaleEffect(2.4).frame(width: 58)
                     }.frame(height: 32)

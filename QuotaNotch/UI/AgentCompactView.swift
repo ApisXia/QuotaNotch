@@ -10,7 +10,6 @@ struct AgentWingOffsetKey: PreferenceKey {
 /// One state owns the silhouette, color and motion. The surrounding slot never animates.
 struct AgentPaperGlyph: View {
     let state: AgentRunState
-    var minimal = false
     var previewElapsed: Double? = nil
     var previewReducedMotion = false
     @Environment(\.accessibilityReduceMotion) private var systemReduced
@@ -42,10 +41,10 @@ struct AgentPaperGlyph: View {
             AgentFoldedPage().fill(paperBackground)
             AgentFoldedPage().fill(accent.opacity(0.10))
             AgentFoldedPage().stroke(coloredEdge ? accent : ink.opacity(0.88),
-                style: StrokeStyle(lineWidth: minimal ? 1.25 : 1.05, lineCap: .round, lineJoin: .round))
+                style: StrokeStyle(lineWidth: 1.05, lineCap: .round, lineJoin: .round))
             AgentPageFold().stroke(accent.opacity(0.85),
-                style: StrokeStyle(lineWidth: minimal ? 1 : 0.8, lineCap: .round, lineJoin: .round))
-            if rules && !minimal {
+                style: StrokeStyle(lineWidth: 0.8, lineCap: .round, lineJoin: .round))
+            if rules {
                 VStack(alignment: .leading, spacing: 2) {
                     Capsule().fill(ink.opacity(0.66)).frame(width: 5.3, height: 0.8)
                     Capsule().fill(accent.opacity(0.8)).frame(width: 3.3, height: 0.8)
@@ -66,34 +65,34 @@ struct AgentPaperGlyph: View {
             }
         case .waiting:
             ZStack {
-                if !minimal { paper(ink, rules: false, opacity: 0.48).offset(x: -1.4, y: -0.8) }
+                paper(ink, rules: false, opacity: 0.48).offset(x: -1.4, y: -0.8)
                 AgentSpeechMark().fill(paperBackground)
                     .overlay { AgentSpeechMark().fill(AgentText.color(.waiting).opacity(0.14)) }
-                    .overlay { AgentSpeechMark().stroke(AgentText.color(.waiting), style: StrokeStyle(lineWidth: minimal ? 1.3 : 1.05, lineJoin: .round)) }
+                    .overlay { AgentSpeechMark().stroke(AgentText.color(.waiting), style: StrokeStyle(lineWidth: 1.05, lineJoin: .round)) }
                     .overlay {
-                        HStack(spacing: minimal ? 1.6 : 1.7) {
+                        HStack(spacing: 1.7) {
                             ForEach(0..<3) { _ in Circle().fill(ink.opacity(0.94)).frame(width: 1.25, height: 1.25) }
                         }.offset(y: -0.7)
                     }
-                    .frame(width: minimal ? 13 : 12, height: 12)
-                    .offset(x: minimal ? 0 : 1.2, y: 0.5)
+                    .frame(width: 12, height: 12)
+                    .offset(x: 1.2, y: 0.5)
             }.offset(y: reduced ? 0 : AgentGlyphMotion.waitingOffset(at: elapsed))
         case .failed:
             paper(AgentText.color(.failed), rules: false).overlay {
-                AgentCrossMark().stroke(AgentText.color(.failed), style: StrokeStyle(lineWidth: minimal ? 1.75 : 1.5, lineCap: .round))
+                AgentCrossMark().stroke(AgentText.color(.failed), style: StrokeStyle(lineWidth: 1.5, lineCap: .round))
                     .frame(width: 5.4, height: 5.4).offset(y: 1)
             }
         case .completed:
             let spread = reduced ? 0.65 : AgentGlyphMotion.completionSpread(at: elapsed)
             ZStack {
-                if !minimal { paper(ink, rules: false, opacity: 0.55).offset(x: -spread, y: -spread) }
+                paper(ink, rules: false, opacity: 0.55).offset(x: -spread, y: -spread)
                 paper(AgentText.color(.completed), coloredEdge: true, rules: false)
                     .overlay {
                         VStack(alignment: .leading, spacing: 2) {
-                            if !minimal { Capsule().fill(ink.opacity(0.7)).frame(width: 5, height: 0.8) }
+                            Capsule().fill(ink.opacity(0.7)).frame(width: 5, height: 0.8)
                             Capsule().fill(AgentText.color(.completed)).frame(width: 5, height: 1.6)
                         }.offset(y: 2.1)
-                    }.offset(x: minimal ? 0 : spread, y: minimal ? 0 : spread)
+                    }.offset(x: spread, y: spread)
             }
         case .interrupted:
             paper(AgentText.color(.interrupted), rules: false).overlay {
@@ -169,56 +168,17 @@ private struct AgentCrossMark: Shape {
     }
 }
 
-/// Independently drawn at six points; keep the camera-side gap and all task-name space.
+/// The list uses the same artwork at six points, preserving its existing camera-side slot.
 struct AgentTaskStateMark: View {
     static let size: CGFloat = 6
     let state: AgentRunState
     var animate = true
     var previewElapsed: Double? = nil
-    @Environment(\.accessibilityReduceMotion) private var reduced
-    @State private var origin = Date()
     var body: some View {
-        TimelineView(.animation(minimumInterval: 1.0 / 20,
-            paused: reduced || !animate || previewElapsed != nil || (state != .running && state != .waiting))) { timeline in
-            let elapsed = previewElapsed ?? max(0, timeline.date.timeIntervalSince(origin))
-            glyph(at: elapsed).frame(width: Self.size, height: Self.size)
-        }.allowsHitTesting(false).accessibilityHidden(true)
-            .onChange(of: state) { _, _ in origin = Date() }
-    }
-    @ViewBuilder private func glyph(at elapsed: Double) -> some View {
-        switch state {
-        case .running:
-            let x = reduced || !animate ? 0.6 : AgentGlyphMotion.pageX(at: elapsed) * 0.4
-            let y = reduced || !animate ? 0.5 : AgentGlyphMotion.pageY(at: elapsed) * 0.4
-            ZStack {
-                AgentFoldedPage().stroke(Color.primary.opacity(0.7), lineWidth: 0.7)
-                    .frame(width: 3.8, height: 4.5).offset(x: -x, y: -y)
-                AgentFoldedPage().fill(Color.black)
-                    .overlay { AgentFoldedPage().stroke(AgentText.color(.running), lineWidth: 0.85) }
-                    .frame(width: 3.8, height: 4.5).offset(x: x, y: y)
-            }
-        case .waiting:
-            AgentSpeechMark().fill(AgentText.color(state).opacity(0.14))
-                .overlay { AgentSpeechMark().stroke(AgentText.color(state), lineWidth: 0.8) }
-                .frame(width: 5.2, height: 5.2)
-                .offset(y: reduced || !animate ? 0 : AgentGlyphMotion.waitingOffset(at: elapsed) * 0.4)
-        case .completed:
-            AgentFoldedPage().stroke(AgentText.color(state), lineWidth: 0.8)
-                .frame(width: 4.3, height: 5.2)
-                .overlay { Capsule().fill(AgentText.color(state)).frame(width: 2.1, height: 0.8).offset(y: 1.1) }
-        case .failed:
-            AgentCrossMark().stroke(AgentText.color(state), style: StrokeStyle(lineWidth: 1.3, lineCap: .round))
-                .frame(width: 4, height: 4)
-        case .interrupted:
-            HStack(spacing: 1.2) {
-                ForEach(0..<2) { _ in
-                    RoundedRectangle(cornerRadius: 0.35).fill(AgentText.color(state))
-                        .frame(width: 1.35, height: 4.5)
-                }
-            }
-        case .unknown:
-            AgentFoldedPage().stroke(Color.secondary, lineWidth: 0.7).frame(width: 4.3, height: 5.2)
-        }
+        AgentPaperGlyph(state: state, previewElapsed: previewElapsed, previewReducedMotion: !animate)
+            .scaleEffect(Self.size / 18)
+            .frame(width: Self.size, height: Self.size)
+            .allowsHitTesting(false).accessibilityHidden(true)
     }
 }
 
@@ -292,7 +252,7 @@ struct AgentCompactDock<Primary: View>: View {
         } else {
             NotchMinimalIcon(metrics: metrics) {
                 // Paper outlines have intrinsic margins; normalize their visible ink to the brand mark.
-                AgentPaperGlyph(state: summary.primaryState, minimal: true).scaleEffect(metrics.minimalIconSize / 16)
+                AgentPaperGlyph(state: summary.primaryState).scaleEffect(metrics.minimalIconSize / 16)
                     .frame(width: metrics.minimalIconSize, height: metrics.minimalIconSize)
             }
             .auditNotchModule("task", mode: "minimal")

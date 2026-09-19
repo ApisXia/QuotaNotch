@@ -1,4 +1,4 @@
-# Pixel cat preview · build 304
+# Pixel cat preview · build 305
 
 Experimental build on feature/notch-cat, based on 1.03. Not a stable release.
 
@@ -23,4 +23,4 @@ The installer is ad-hoc signed, not notarized. Native layout regression checks a
 
 Unified task-state presentation: one primary state controls shape, color, motion and badge count. Unread failures precede waiting, then running; other unread results follow recency. Waiting stays visible after reading. The fixed widget/minimal slots use page exchange, a double-bouncing bubble, a red cross, a closed green page, and purple twin bars for interruption. Cloud artifacts include a real-size animated glyph board.
 
-Build 304 applies the approved folded-page design across widgets, minimal slots, task-only summaries, panel rows, the full task window and details. Six-point list marks use optically simplified outlines, and interruption consistently uses purple twin bars. Existing module widths and task-title space remain fixed.
+Build 305 applies the approved folded-page design across widgets, minimal slots, task-only summaries, panel rows, the full task window and details. Every size, including six-point list marks, scales the same master artwork with identical details, line proportions and layers; interruption consistently uses purple twin bars. Existing module widths and task-title space remain fixed.
