@@ -509,10 +509,6 @@ struct SettingsPreviewRunner {
                 settle() // The production Timer samples input; no direct call into recognition.
             }
         }
-        rub(.left, at: 0)
-        verifyPresentation(calls == [.left], "Pointer sampling did not recognize left rub")
-        verifyPresentation(director.pose.active && !director.pose.concealed && director.pose.side == .left && director.pose.reservedWidth > 0,
-            "Recognized left rub did not produce a visible cat while the shell was hovered")
         func sampleFor(_ duration: TimeInterval, _ check: () -> Void = {}) {
             let end = Date().addingTimeInterval(duration)
             while Date() < end {
@@ -520,6 +516,20 @@ struct SettingsPreviewRunner {
                 check()
             }
         }
+        func waitForVisible(_ side: CatSide, crowded: Bool = false) {
+            let deadline = Date().addingTimeInterval(1.25)
+            func visible() -> Bool {
+                director.pose.active && !director.pose.concealed && director.pose.side == side
+                    && director.pose.reservedWidth >= 4 && director.pose.crowded == crowded
+            }
+            while !visible() && Date() < deadline {
+                RunLoop.main.run(until: Date().addingTimeInterval(0.015))
+            }
+            verifyPresentation(visible(), "No visible cat after accepted gesture: side=\(side), crowded=\(crowded), pose=\(director.pose)")
+        }
+        rub(.left, at: 0)
+        verifyPresentation(calls == [.left], "Pointer sampling did not recognize left rub")
+        waitForVisible(.left)
         func verifyRetreat(_ message: String, trigger: () -> Void) {
             let initial = director.pose.reservedWidth
             verifyPresentation(initial > 0, "Retreat test had no visible starting pose: " + message)
@@ -549,8 +559,7 @@ struct SettingsPreviewRunner {
         verifyPresentation(region.hitTest(.zero) == nil, "Cat region intercepted a widget click")
         buttons = 0; rub(.right, at: 4)
         verifyPresentation(calls == [.left, .right], "Pointer sampling did not recognize right rub")
-        verifyPresentation(director.pose.active && !director.pose.concealed && director.pose.side == .right,
-            "Recognized right rub did not produce a visible cat")
+        waitForVisible(.right)
         // Staying over the shell, leaving/re-entering an edge and repeated requests
         // must not hide, reset or indefinitely extend a committed interaction.
         director.edgePointer(nil); director.edgePointer(.left)
@@ -560,30 +569,30 @@ struct SettingsPreviewRunner {
             verifyPresentation(!director.pose.active || director.pose.side == .right, "A repeated gesture was queued for the opposite side")
         }
         verifyPresentation(!director.pose.active && director.pose.reservedWidth == 0, "Hover held the cat spacer open after natural completion")
-        director.summon(.right); sampleFor(0.8)
+        director.summon(.right); waitForVisible(.right)
         verifyRetreat("physical notch hover") { director.pointer(true, source: "camera") }
         director.pointer(false, source: "camera")
-        director.summon(.left); sampleFor(0.8)
+        director.summon(.left); waitForVisible(.left)
         verifyRetreat("layout capacity changed") { director.updateSpaces([.left: CatWingSpace(occupied: 21, limit: 46, height: 32), .right: open]) }
         playback.cancel(); director.stop(); settle()
         let full = CatWingSpace(occupied: 46, limit: 46, height: 32)
         playback = Task { await director.run(spaces: [.left: open, .right: full], screen: screen, previewPlayback: true) }
         settle(); rub(.right, at: 8)
-        verifyPresentation(calls == [.left, .right, .right] && director.pose.active && !director.pose.concealed && director.pose.side == .right && director.pose.crowded,
-            "A full right wing did not respond on the requested side")
+        verifyPresentation(calls == [.left, .right, .right], "A full right wing did not recognize its gesture")
+        waitForVisible(.right, crowded: true)
         sampleFor(3.5) {
             verifyPresentation(director.pose.reservedWidth <= 8, "Crowded peek exceeded its eight-point budget")
             verifyPresentation(!director.pose.active || director.pose.side == .right, "Crowded peek swapped sides")
         }
         verifyPresentation(!director.pose.active, "Crowded peek did not withdraw while hovered")
         director.updateSpaces([.left: full, .right: full])
-        director.summon(.left); sampleFor(0.7)
+        director.summon(.left); waitForVisible(.left, crowded: true)
         verifyPresentation(director.pose.active && director.pose.side == .left && director.pose.crowded, "Both full wings discarded the requested left peek")
         verifyRetreat("crowded cancellation") { director.cancelSummon() }
         director.summon(.right); director.cancelSummon()
         sampleFor(0.4)
         verifyPresentation(!director.pose.active, "Cancelled pending summon still appeared")
-        director.summon(.left); sampleFor(0.7)
+        director.summon(.left); waitForVisible(.left, crowded: true)
         verifyPresentation(director.pose.active && director.pose.side == .left, "Pending cancellation blocked the next gesture")
         verifyRetreat("next gesture after pending cancellation") { director.cancelSummon() }
         region.enabled = false; region.refreshSampling(); region.clear()
