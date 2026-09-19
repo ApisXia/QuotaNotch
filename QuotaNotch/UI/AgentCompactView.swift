@@ -76,9 +76,12 @@ struct AgentPaperGlyph: View {
                     .offset(x: 1.2, y: 0.5)
             }.offset(y: reduced ? 0 : AgentGlyphMotion.waitingOffset(at: elapsed))
         case .failed:
-            paper(AgentText.color(.failed), rules: false, neutralFold: true).overlay {
-                AgentCrossMark().stroke(AgentText.color(.failed), style: StrokeStyle(lineWidth: 1.5, lineCap: .round))
-                    .frame(width: 5.4, height: 5.4).offset(y: 1)
+            ZStack {
+                paper(ink, rules: false, opacity: 0.55).offset(x: -0.65, y: -0.65)
+                paper(AgentText.color(.failed), rules: false, neutralFold: true).overlay {
+                    AgentCrossMark().stroke(AgentText.color(.failed), style: StrokeStyle(lineWidth: 1.5, lineCap: .round))
+                        .frame(width: 5.4, height: 5.4).offset(y: 1)
+                }.offset(x: 0.65, y: 0.65)
             }
         case .completed:
             let spread = reduced ? 0.65 : AgentGlyphMotion.completionSpread(at: elapsed)
@@ -93,13 +96,16 @@ struct AgentPaperGlyph: View {
                     }.offset(x: spread, y: spread)
             }
         case .interrupted:
-            paper(AgentText.color(.interrupted), rules: false, neutralFold: true).overlay {
-                HStack(spacing: 1.6) {
-                    ForEach(0..<2) { _ in
-                        RoundedRectangle(cornerRadius: 0.45).fill(AgentText.color(.interrupted))
-                            .frame(width: 1.6, height: 5)
-                    }
-                }.offset(y: 1.2)
+            ZStack {
+                paper(ink, rules: false, opacity: 0.55).offset(x: -0.65, y: -0.65)
+                paper(AgentText.color(.interrupted), rules: false, neutralFold: true).overlay {
+                    HStack(spacing: 1.6) {
+                        ForEach(0..<2) { _ in
+                            RoundedRectangle(cornerRadius: 0.45).fill(AgentText.color(.interrupted))
+                                .frame(width: 1.6, height: 5)
+                        }
+                    }.offset(y: 1.2)
+                }.offset(x: 0.65, y: 0.65)
             }
         case .unknown:
             paper(ink, opacity: 0.40)
