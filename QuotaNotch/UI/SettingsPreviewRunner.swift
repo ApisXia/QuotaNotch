@@ -6,6 +6,8 @@ import SwiftUI
 import Combine
 import Defaults
 import EventKit
+import ImageIO
+import UniformTypeIdentifiers
 
 @main
 struct SettingsPreviewRunner {
@@ -110,6 +112,7 @@ struct SettingsPreviewRunner {
             try capture(AgentSessionDetails(session: session), width: 520,
                         name: "Task-details-\(session.provider.rawValue)", output: output, height: 430)
         }
+        try captureTaskGlyphMotion(output: output)
         try verifyCatRubRegion()
         try captureCat(output: output, fixtures: fixtures)
         try captureNotchSwitching(output: output)
@@ -118,7 +121,7 @@ struct SettingsPreviewRunner {
             try capture(VStack(alignment: .leading, spacing: 12) {
                 ForEach([AgentRunState.running, .waiting, .completed, .failed, .interrupted, .unknown], id: \.self) { state in
                     HStack(spacing: 14) {
-                        AgentPaperGlyph(kind: AgentPaperGlyph.kind(state), running: state == .running, accent: AgentText.color(state))
+                        AgentPaperGlyph(state: state)
                         Text(AgentText.state(state)).font(.system(size: 12)).foregroundStyle(AgentText.color(state))
                         Spacer()
                         Text("Project · Codex").font(.system(size: 12)).foregroundStyle(.primary)
@@ -164,8 +167,7 @@ struct SettingsPreviewRunner {
                             MinimalQuotaGlyph(brand: .claude, percent: samples[index], size: metrics.minimalIconSize)
                         }
                         NotchMinimalIcon(metrics: metrics) {
-                            AgentPaperGlyph(kind: AgentPaperGlyph.kind(states[index]), running: states[index] == .running,
-                                            accent: AgentText.color(states[index]))
+                            AgentPaperGlyph(state: states[index])
                                 .scaleEffect(metrics.minimalIconSize / 16)
                                 .frame(width: metrics.minimalIconSize, height: metrics.minimalIconSize)
                         }
@@ -403,6 +405,53 @@ struct SettingsPreviewRunner {
         AgentActivityStore.shared.compactExpanded = false
         window.orderOut(nil); window.contentView = nil; window.close()
         vm.destroy()
+    }
+
+    /// Actual production glyphs at their real sizes, sampled into an animated cloud artifact.
+    @MainActor private static func captureTaskGlyphMotion(output: URL) throws {
+        func board(_ elapsed: Double) -> some View {
+            VStack(alignment: .leading, spacing: 14) {
+                HStack {
+                    Text(AgentText.t("任务状态", "Task states")).frame(width: 100, alignment: .leading)
+                    ForEach(["20", "14", "10", "6", "Still", "2×"], id: \.self) { label in
+                        Text(label).frame(width: 38)
+                    }
+                }.font(.system(size: 10)).foregroundStyle(.secondary)
+                ForEach(AgentRunState.allCases, id: \.self) { state in
+                    HStack(spacing: 8) {
+                        Text(AgentText.state(state)).font(.system(size: 11)).frame(width: 100, alignment: .leading)
+                        AgentPaperGlyph(state: state, previewElapsed: elapsed).scaleEffect(20.0 / 16).frame(width: 38, height: 28)
+                        AgentPaperGlyph(state: state, minimal: true, previewElapsed: elapsed).scaleEffect(14.0 / 16).frame(width: 38, height: 28)
+                        AgentPaperGlyph(state: state, minimal: true, previewElapsed: elapsed).scaleEffect(10.0 / 16).frame(width: 38, height: 28)
+                        AgentTaskStateMark(state: state, previewElapsed: elapsed).frame(width: 38, height: 28)
+                        AgentPaperGlyph(state: state, minimal: true, previewElapsed: elapsed)
+                            .environment(\.accessibilityReduceMotion, true).scaleEffect(14.0 / 16).frame(width: 38, height: 28)
+                        AgentPaperGlyph(state: state, previewElapsed: elapsed).scaleEffect(2).frame(width: 38, height: 28)
+                    }
+                }
+            }.padding(18).frame(width: 430, height: 310).background(.black).preferredColorScheme(.dark)
+        }
+        let host = NSHostingView(rootView: board(0))
+        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 430, height: 310), styleMask: [.borderless], backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false; window.contentView = host; window.orderFront(nil)
+        defer { window.orderOut(nil); window.contentView = nil; window.close() }
+        settle()
+        let url = output.appendingPathComponent("Task-status-motion.gif")
+        guard let destination = CGImageDestinationCreateWithURL(url as CFURL, UTType.gif.identifier as CFString, 54, nil) else { fatalError("Cannot create task motion preview") }
+        CGImageDestinationSetProperties(destination, [kCGImagePropertyGIFDictionary: [kCGImagePropertyGIFLoopCount: 0]] as CFDictionary)
+        for frame in 0..<54 {
+            host.rootView = board(Double(frame) / 15)
+            RunLoop.main.run(until: Date().addingTimeInterval(0.03))
+            host.layoutSubtreeIfNeeded()
+            let bitmap = host.bitmapImageRepForCachingDisplay(in: host.bounds)!
+            host.cacheDisplay(in: host.bounds, to: bitmap)
+            CGImageDestinationAddImage(destination, bitmap.cgImage!, [kCGImagePropertyGIFDictionary: [kCGImagePropertyGIFDelayTime: 1.0 / 15]] as CFDictionary)
+            if [0, 3, 6, 9, 18, 36].contains(frame) {
+                try bitmap.representation(using: .png, properties: [:])!.write(to: output.appendingPathComponent("Task-status-frame-\(frame).png"))
+            }
+        }
+        verifyPresentation(CGImageDestinationFinalize(destination), "Failed to save task motion preview")
+        print("Rendered production task glyphs at widget, minimal and six-point list sizes, including reduced motion")
     }
 
     @MainActor private static func captureTaskPanel(output: URL, fixtures: [AgentSession]) throws {

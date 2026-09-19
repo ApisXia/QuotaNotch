@@ -9,16 +9,19 @@ struct AgentAttentionSummary: Equatable {
     var waiting = 0
     var unread = 0
     var kind: AgentAttentionKind = .completed
+    var primaryState: AgentRunState = .unknown
+    var primaryCount = 0
     var needsAction = false
     var isVisible: Bool { count > 0 }
 
     static func make(_ sessions: [AgentSession], acknowledged: [String: String]) -> Self {
         var result = Self()
         var kinds = Set<String>()
-        var seen = Set<String>()
-        for session in sessions where seen.insert(session.identity).inserted {
+        var eligible: [AgentSession] = []
+        for session in AgentCurrentSessions.latest(sessions) {
             let unread = session.state.isUnreadEvent && acknowledged[session.identity] != session.eventID
             guard session.state.isActive || unread else { continue }
+            eligible.append(session)
             result.count += 1
             if unread { result.unread += 1 }
             switch session.state {
@@ -30,6 +33,10 @@ struct AgentAttentionSummary: Equatable {
             }
         }
         result.kind = kinds.count > 1 ? .mixed : AgentAttentionKind(rawValue: kinds.first ?? "completed") ?? .other
+        if let primary = AgentTaskOnlySummary.emphasis(eligible) {
+            result.primaryState = primary.state
+            result.primaryCount = eligible.filter { $0.state == primary.state }.count
+        }
         return result
     }
 }
@@ -76,12 +83,28 @@ enum AgentTaskOnlySummary {
     }
     static func emphasis(_ sessions: [AgentSession]) -> AgentSession? {
         func priority(_ state: AgentRunState) -> Int {
-            switch state { case .failed: return 0; case .running: return 1; default: return 2 }
+            switch state { case .failed: return 0; case .waiting: return 1; case .running: return 2; default: return 3 }
         }
         return AgentCurrentSessions.latest(sessions).min {
             if priority($0.state) != priority($1.state) { return priority($0.state) < priority($1.state) }
             if $0.updatedAt != $1.updatedAt { return $0.updatedAt > $1.updatedAt }
             return $0.identity < $1.identity
         }
+    }
+}
+
+/// Normalized clock-based motion; no percentage or audio-level semantics.
+enum AgentGlyphMotion {
+    static func pageX(at elapsed: Double) -> Double { sin(max(0, elapsed) / 1.8 * 2 * .pi) * 1.6 }
+    static func pageY(at elapsed: Double) -> Double { cos(max(0, elapsed) / 1.8 * 2 * .pi) * 1.4 }
+    static func waitingOffset(at elapsed: Double) -> Double {
+        let t = max(0, elapsed).truncatingRemainder(dividingBy: 3.6)
+        if t < 0.22 { return -sin(t / 0.22 * .pi) * 1.5 }
+        if t >= 0.34 && t < 0.52 { return -sin((t - 0.34) / 0.18 * .pi) * 1.1 }
+        return 0
+    }
+    static func completionSpread(at elapsed: Double) -> Double {
+        let u = min(1, max(0, elapsed) / 0.35)
+        return 0.65 + 1.4 * (1 - u * u * (3 - 2 * u))
     }
 }

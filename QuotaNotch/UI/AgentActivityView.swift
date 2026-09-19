@@ -87,7 +87,7 @@ private struct AgentNotchTaskRow: View {
     var body: some View {
         Button(action: open) {
             HStack(spacing: AgentNotchRowMetrics.gap) {
-                AgentPaperGlyph(kind: AgentPaperGlyph.kind(session.state), running: session.state == .running, accent: AgentText.color(session.state))
+                AgentPaperGlyph(state: session.state)
                     .frame(width: AgentNotchRowMetrics.iconWidth)
                 identity
                 status
@@ -354,7 +354,7 @@ struct AgentTaskRow: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
         HStack(alignment: .top, spacing: 10) {
-            AgentPaperGlyph(kind: AgentPaperGlyph.kind(session.state), running: session.state == .running, accent: AgentText.color(session.state))
+            AgentPaperGlyph(state: session.state)
                 .frame(width: 20).padding(.top, 3)
             VStack(alignment: .leading, spacing: 7) {
                 HStack(spacing: 6) {

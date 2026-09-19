@@ -7,119 +7,158 @@ struct AgentWingOffsetKey: PreferenceKey {
     static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) { value = nextValue() }
 }
 
-/// A common paper silhouette; position and outline remain readable with motion disabled.
+/// One state owns the silhouette, color and motion. The surrounding slot never animates.
 struct AgentPaperGlyph: View {
-    let kind: AgentAttentionKind
-    var running = false
-    var accent: Color? = nil
+    let state: AgentRunState
+    var minimal = false
+    var previewElapsed: Double? = nil
     @Environment(\.accessibilityReduceMotion) private var reduced
+    @Environment(\.colorScheme) private var scheme
+    @State private var origin = Date()
+    @State private var completionSettled = false
+    private var moving: Bool { state == .running || state == .waiting || (state == .completed && !completionSettled) }
+    private var ink: Color { Color.primary }
+    private var paperBackground: Color { scheme == .dark ? .black : .white }
+
     var body: some View {
-        TimelineView(.animation(minimumInterval: 1.0 / 15, paused: !running || reduced)) { timeline in
-            let drift = running && !reduced ? sin(timeline.date.timeIntervalSinceReferenceDate * 1.6) * 0.8 : 0
-            let spread: CGFloat = kind == .completed ? 1 : kind == .waiting ? 4 : kind == .mixed ? 3 : 2.5
-            ZStack {
-                RoundedRectangle(cornerRadius: 2.2).strokeBorder(lineWidth: 1.1)
-                    .foregroundStyle(Color.primary.opacity(0.78))
-                    .frame(width: 10, height: 12).offset(x: -spread / 2, y: -spread / 2)
-                RoundedRectangle(cornerRadius: 2.2).fill(Color(nsColor: .windowBackgroundColor))
-                    .frame(width: 10, height: 12).opacity(0.15)
-                RoundedRectangle(cornerRadius: 2.2).strokeBorder(lineWidth: 1.05)
-                    .foregroundStyle(Color.primary.opacity(0.95))
-                    .frame(width: 10, height: 12).offset(x: spread / 2, y: spread / 2)
-                Group {
-                    if running {
-                        Capsule().frame(width: 4.5, height: 2)
-                            .offset(x: spread / 2 + drift, y: spread / 2 - 2)
-                    } else if kind == .waiting {
-                        HStack(spacing: 1.5) {
-                            Capsule().frame(width: 1.5, height: 4)
-                            Capsule().frame(width: 1.5, height: 4)
-                        }.offset(x: spread / 2, y: spread / 2 - 2)
-                    } else if kind == .completed {
-                        Circle().frame(width: 3.5, height: 3.5).offset(x: spread / 2, y: spread / 2 - 2)
-                    } else {
-                        Capsule().frame(width: 4.5, height: 2).offset(x: spread / 2, y: spread / 2 - 2)
-                    }
-                }.foregroundStyle(statusColor)
-            }.frame(width: 18, height: 18)
-        }.accessibilityHidden(true)
-    }
-    private var statusColor: Color {
-        if let accent { return accent }
-        switch kind {
-        case .running: return AgentText.color(.running)
-        case .waiting: return AgentText.color(.waiting)
-        case .completed: return AgentText.color(.completed)
-        case .other: return AgentText.color(.interrupted)
-        case .mixed: return AgentText.color(running ? .running : .waiting)
+        TimelineView(.animation(minimumInterval: 1.0 / 30, paused: reduced || !moving || previewElapsed != nil)) { timeline in
+            let elapsed = previewElapsed ?? max(0, timeline.date.timeIntervalSince(origin))
+            drawing(at: elapsed)
+                .frame(width: 18, height: 18)
+        }
+        .accessibilityHidden(true)
+        .task(id: state) {
+            origin = Date(); completionSettled = false
+            guard state == .completed else { completionSettled = true; return }
+            try? await Task.sleep(for: .milliseconds(350))
+            if !Task.isCancelled { completionSettled = true }
         }
     }
-    static func kind(_ state: AgentRunState) -> AgentAttentionKind {
-        switch state { case .running: return .running; case .waiting: return .waiting
-        case .completed: return .completed; default: return .other }
+
+    private func paper(_ color: Color, fill: Double = 0, opacity: Double = 1) -> some View {
+        RoundedRectangle(cornerRadius: 1.8).fill(paperBackground)
+            .overlay { RoundedRectangle(cornerRadius: 1.8).fill(color.opacity(fill)) }
+            .overlay { RoundedRectangle(cornerRadius: 1.8).strokeBorder(color, lineWidth: minimal ? 1.55 : 1.3) }
+            .frame(width: 11.5, height: 13.5).opacity(opacity)
+    }
+
+    @ViewBuilder private func drawing(at elapsed: Double) -> some View {
+        switch state {
+        case .running:
+            let x = reduced ? 1.5 : AgentGlyphMotion.pageX(at: elapsed)
+            let y = reduced ? 1.3 : AgentGlyphMotion.pageY(at: elapsed)
+            ZStack {
+                paper(ink, opacity: 0.85).offset(x: -x, y: -y).zIndex(-y)
+                paper(AgentText.color(.running), fill: 0.48).overlay {
+                    RoundedRectangle(cornerRadius: 1.8).strokeBorder(ink.opacity(0.85), lineWidth: 0.8)
+                        .frame(width: 11.5, height: 13.5)
+                }.offset(x: x, y: y).zIndex(y)
+            }
+        case .waiting:
+            ZStack {
+                if !minimal { paper(ink, opacity: 0.75).offset(x: -1.2, y: -0.3) }
+                AgentSpeechMark().fill(paperBackground)
+                    .overlay { AgentSpeechMark().fill(AgentText.color(.waiting).opacity(0.8)) }
+                    .overlay { AgentSpeechMark().stroke(ink.opacity(0.95), style: StrokeStyle(lineWidth: minimal ? 1.4 : 1.15, lineJoin: .round)) }
+                    .frame(width: minimal ? 13 : 12, height: 13)
+                    .offset(x: minimal ? 0 : 1.4, y: 0.5)
+            }.offset(y: reduced ? 0 : AgentGlyphMotion.waitingOffset(at: elapsed))
+        case .failed:
+            paper(ink).overlay {
+                AgentCrossMark().stroke(AgentText.color(.failed), style: StrokeStyle(lineWidth: minimal ? 2.2 : 1.9, lineCap: .round))
+                    .frame(width: 6.5, height: 6.5)
+            }
+        case .completed:
+            let spread = reduced ? 0.65 : AgentGlyphMotion.completionSpread(at: elapsed)
+            ZStack {
+                if !minimal { paper(ink, opacity: 0.8).offset(x: -spread, y: -spread) }
+                paper(AgentText.color(.completed), fill: 0.65)
+                    .offset(x: minimal ? 0 : spread, y: minimal ? 0 : spread)
+            }
+        case .interrupted:
+            paper(ink, opacity: 0.85).overlay {
+                RoundedRectangle(cornerRadius: 1).fill(AgentText.color(.interrupted))
+                    .frame(width: 7, height: 7)
+            }
+        case .unknown:
+            paper(ink, opacity: 0.45)
+        }
     }
 }
 
-/// Tiny state marks fit inside the existing camera-side gap, leaving task names their full width.
+/// A recognizable bubble rather than pause bars. Coordinates are normalized for tiny marks.
+private struct AgentSpeechMark: Shape {
+    func path(in rect: CGRect) -> Path {
+        var p = Path()
+        p.move(to: CGPoint(x: 0.2, y: 0.08))
+        p.addLine(to: CGPoint(x: 0.8, y: 0.08))
+        p.addQuadCurve(to: CGPoint(x: 0.94, y: 0.22), control: CGPoint(x: 0.94, y: 0.08))
+        p.addLine(to: CGPoint(x: 0.94, y: 0.66))
+        p.addQuadCurve(to: CGPoint(x: 0.8, y: 0.8), control: CGPoint(x: 0.94, y: 0.8))
+        p.addLine(to: CGPoint(x: 0.45, y: 0.8))
+        p.addLine(to: CGPoint(x: 0.19, y: 0.98))
+        p.addLine(to: CGPoint(x: 0.23, y: 0.8))
+        p.addLine(to: CGPoint(x: 0.2, y: 0.8))
+        p.addQuadCurve(to: CGPoint(x: 0.06, y: 0.66), control: CGPoint(x: 0.06, y: 0.8))
+        p.addLine(to: CGPoint(x: 0.06, y: 0.22))
+        p.addQuadCurve(to: CGPoint(x: 0.2, y: 0.08), control: CGPoint(x: 0.06, y: 0.08))
+        p.closeSubpath()
+        return p.applying(CGAffineTransform(scaleX: rect.width, y: rect.height))
+            .applying(CGAffineTransform(translationX: rect.minX, y: rect.minY))
+    }
+}
+private struct AgentCrossMark: Shape {
+    func path(in rect: CGRect) -> Path {
+        var p = Path()
+        p.move(to: CGPoint(x: rect.minX, y: rect.minY)); p.addLine(to: CGPoint(x: rect.maxX, y: rect.maxY))
+        p.move(to: CGPoint(x: rect.maxX, y: rect.minY)); p.addLine(to: CGPoint(x: rect.minX, y: rect.maxY))
+        return p
+    }
+}
+
+/// Independently drawn at six points; keep the camera-side gap and all task-name space.
 struct AgentTaskStateMark: View {
     static let size: CGFloat = 6
     let state: AgentRunState
     var animate = true
+    var previewElapsed: Double? = nil
     @Environment(\.accessibilityReduceMotion) private var reduced
-    private let stroke = StrokeStyle(lineWidth: 0.85, lineCap: .round, lineJoin: .round)
-
+    @State private var origin = Date()
     var body: some View {
-        glyph
-            .frame(width: Self.size, height: Self.size)
-            .foregroundStyle(AgentText.color(state))
-            .allowsHitTesting(false)
-            .accessibilityHidden(true)
+        TimelineView(.animation(minimumInterval: 1.0 / 20,
+            paused: reduced || !animate || previewElapsed != nil || (state != .running && state != .waiting))) { timeline in
+            let elapsed = previewElapsed ?? max(0, timeline.date.timeIntervalSince(origin))
+            glyph(at: elapsed).frame(width: Self.size, height: Self.size)
+        }.allowsHitTesting(false).accessibilityHidden(true)
+            .onChange(of: state) { _, _ in origin = Date() }
     }
-
-    @ViewBuilder private var glyph: some View {
+    @ViewBuilder private func glyph(at elapsed: Double) -> some View {
         switch state {
         case .running:
-            TimelineView(.animation(minimumInterval: 1.0 / 15, paused: reduced || !animate)) { timeline in
-                let angle = reduced || !animate ? 0 : timeline.date.timeIntervalSinceReferenceDate
-                    .truncatingRemainder(dividingBy: 2.4) / 2.4 * 360
-                Circle().trim(from: 0.12, to: 0.9).stroke(style: stroke)
-                    .padding(0.5).rotationEffect(.degrees(angle))
+            let x = reduced || !animate ? 0.6 : AgentGlyphMotion.pageX(at: elapsed) * 0.4
+            let y = reduced || !animate ? 0.5 : AgentGlyphMotion.pageY(at: elapsed) * 0.4
+            ZStack {
+                RoundedRectangle(cornerRadius: 0.6).strokeBorder(Color.primary.opacity(0.9), lineWidth: 0.8)
+                    .frame(width: 3.8, height: 4.5).offset(x: -x, y: -y)
+                RoundedRectangle(cornerRadius: 0.6).fill(AgentText.color(.running))
+                    .frame(width: 3.8, height: 4.5).offset(x: x, y: y)
             }
         case .waiting:
-            HStack(spacing: 1.5) {
-                Capsule().frame(width: 1, height: 4)
-                Capsule().frame(width: 1, height: 4)
-            }.frame(width: Self.size, height: Self.size)
+            AgentSpeechMark().fill(AgentText.color(state))
+                .overlay { AgentSpeechMark().stroke(Color.primary.opacity(0.85), lineWidth: 0.6) }
+                .frame(width: 5.2, height: 5.2)
+                .offset(y: reduced || !animate ? 0 : AgentGlyphMotion.waitingOffset(at: elapsed) * 0.4)
         case .completed:
-            Circle().strokeBorder(lineWidth: 0.85).padding(0.5)
-                .overlay { Circle().frame(width: 1.3, height: 1.3) }
+            RoundedRectangle(cornerRadius: 0.8).fill(AgentText.color(state)).frame(width: 4.3, height: 5.2)
         case .failed:
-            AgentBrokenLinkMark().stroke(style: stroke)
+            AgentCrossMark().stroke(AgentText.color(state), style: StrokeStyle(lineWidth: 1.3, lineCap: .round))
+                .frame(width: 4, height: 4)
         case .interrupted:
-            RoundedRectangle(cornerRadius: 0.6).frame(width: 4, height: 4)
+            RoundedRectangle(cornerRadius: 0.6).fill(AgentText.color(state)).frame(width: 4.5, height: 4.5)
+                .overlay { RoundedRectangle(cornerRadius: 0.6).strokeBorder(Color.primary.opacity(0.75), lineWidth: 0.55).frame(width: 4.5, height: 4.5) }
         case .unknown:
-            Circle().strokeBorder(style: StrokeStyle(lineWidth: 0.85, lineCap: .round, dash: [1, 1.5]))
-                .padding(0.5)
+            RoundedRectangle(cornerRadius: 0.7).strokeBorder(Color.secondary, lineWidth: 0.8).frame(width: 4.3, height: 5.2)
         }
-    }
-}
-
-/// Two open link ends, with a visible break rather than an exclamation or cross.
-private struct AgentBrokenLinkMark: Shape {
-    func path(in rect: CGRect) -> Path {
-        var path = Path()
-        path.move(to: CGPoint(x: 2.6, y: 1.1))
-        path.addLine(to: CGPoint(x: 1.8, y: 1.1))
-        path.addQuadCurve(to: CGPoint(x: 0.6, y: 2.3), control: CGPoint(x: 0.6, y: 1.1))
-        path.addQuadCurve(to: CGPoint(x: 1.8, y: 3.5), control: CGPoint(x: 0.6, y: 3.5))
-        path.addLine(to: CGPoint(x: 2.2, y: 3.5))
-        path.move(to: CGPoint(x: 3.8, y: 2.5))
-        path.addLine(to: CGPoint(x: 4.2, y: 2.5))
-        path.addQuadCurve(to: CGPoint(x: 5.4, y: 3.7), control: CGPoint(x: 5.4, y: 2.5))
-        path.addQuadCurve(to: CGPoint(x: 4.2, y: 4.9), control: CGPoint(x: 5.4, y: 4.9))
-        path.addLine(to: CGPoint(x: 3.4, y: 4.9))
-        return path.applying(CGAffineTransform(scaleX: rect.width / 6, y: rect.height / 6))
-            .applying(CGAffineTransform(translationX: rect.minX, y: rect.minY))
     }
 }
 
@@ -193,7 +232,7 @@ struct AgentCompactDock<Primary: View>: View {
         } else {
             NotchMinimalIcon(metrics: metrics) {
                 // Paper outlines have intrinsic margins; normalize their visible ink to the brand mark.
-                glyph.scaleEffect(metrics.minimalIconSize / 16)
+                AgentPaperGlyph(state: summary.primaryState, minimal: true).scaleEffect(metrics.minimalIconSize / 16)
                     .frame(width: metrics.minimalIconSize, height: metrics.minimalIconSize)
             }
             .auditNotchModule("task", mode: "minimal")
@@ -201,10 +240,9 @@ struct AgentCompactDock<Primary: View>: View {
         }
     }
     private var summaryLabel: String { "\(summary.running) " + AgentText.state(.running) + " · \(summary.waiting) " + AgentText.state(.waiting) + " · \(summary.unread) " + AgentText.t("未读", "unread") }
-    private var countLabel: String { summary.count > 99 ? "99+" : "\(summary.count)" }
+    private var countLabel: String { summary.primaryCount > 99 ? "99+" : "\(summary.primaryCount)" }
     private var glyph: some View {
-        AgentPaperGlyph(kind: summary.kind, running: summary.running > 0,
-                        accent: AgentText.color(summary.waiting > 0 ? .waiting : summary.needsAction ? .failed : summary.running > 0 ? .running : summary.kind == .completed ? .completed : .interrupted))
+        AgentPaperGlyph(state: summary.primaryState)
     }
 }
 
@@ -320,8 +358,7 @@ struct AgentTaskOnlyWings: View {
             Button(action: open) {
                 Group {
                     if let session = emphasis {
-                        AgentPaperGlyph(kind: AgentPaperGlyph.kind(session.state), running: session.state == .running,
-                                        accent: AgentText.color(session.state))
+                        AgentPaperGlyph(state: session.state)
                             .scaleEffect(iconWidth / 16)
                     }
                 }

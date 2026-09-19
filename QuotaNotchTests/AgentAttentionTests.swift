@@ -22,6 +22,51 @@ final class AgentAttentionTests: XCTestCase {
         XCTAssertEqual(summary.running, 1); XCTAssertEqual(summary.waiting, 1); XCTAssertEqual(summary.unread, 2)
         XCTAssertTrue(summary.needsAction)
     }
+    func testPrimaryStateAndBadgeCountShareOneMeaning() {
+        let failed = AgentSession(id: "failure", state: .failed)
+        let working = (0..<3).map { AgentSession(id: "run-\($0)", state: .running) }
+        let summary = AgentAttentionSummary.make(working + [failed], acknowledged: [:])
+        XCTAssertEqual(summary.count, 4)
+        XCTAssertEqual(summary.primaryState, .failed)
+        XCTAssertEqual(summary.primaryCount, 1)
+        let read = AgentAttentionSummary.make(working + [failed], acknowledged: [failed.identity: failed.eventID])
+        XCTAssertEqual(read.primaryState, .running)
+        XCTAssertEqual(read.primaryCount, 3)
+    }
+    func testWaitingKeepsPriorityAfterReadingAndNewFailuresTakeOver() {
+        let waiting = AgentSession(id: "waiting", state: .waiting)
+        let working = AgentSession(id: "running", state: .running)
+        let failed = AgentSession(id: "failure", state: .failed)
+        let read = [waiting.identity: waiting.eventID]
+        let summary = AgentAttentionSummary.make([working, waiting], acknowledged: read)
+        XCTAssertEqual(summary.primaryState, .waiting)
+        XCTAssertEqual(summary.primaryCount, 1)
+        XCTAssertEqual(summary.unread, 0)
+        XCTAssertEqual(AgentAttentionSummary.make([working, waiting, failed], acknowledged: read).primaryState, .failed)
+    }
+    func testLatestRecordWinsAndReadCompletionStopsContributing() {
+        var old = AgentSession(id: "one", state: .failed, updatedAt: Date(timeIntervalSince1970: 1))
+        var latest = old; latest.state = .completed; latest.updatedAt = Date(timeIntervalSince1970: 2)
+        XCTAssertEqual(AgentAttentionSummary.make([old, latest], acknowledged: [:]).primaryState, .completed)
+        XCTAssertEqual(AgentAttentionSummary.make([old, latest], acknowledged: [latest.identity: latest.eventID]).primaryCount, 0)
+        old.id = "two"; old.state = .interrupted; old.updatedAt = Date(timeIntervalSince1970: 3)
+        XCTAssertEqual(AgentAttentionSummary.make([latest, old], acknowledged: [:]).primaryState, .interrupted)
+    }
+    func testMotionHasTwoBouncesAQuietIntervalAndBoundedGeometry() {
+        XCTAssertLessThan(AgentGlyphMotion.waitingOffset(at: 0.11), -1)
+        XCTAssertLessThan(AgentGlyphMotion.waitingOffset(at: 0.43), -0.8)
+        for t in stride(from: 0.6, through: 3.59, by: 0.1) { XCTAssertEqual(AgentGlyphMotion.waitingOffset(at: t), 0) }
+        for t in stride(from: 0.0, through: 7.2, by: 0.01) {
+            XCTAssertLessThanOrEqual(abs(AgentGlyphMotion.pageX(at: t)), 1.6)
+            XCTAssertLessThanOrEqual(abs(AgentGlyphMotion.pageY(at: t)), 1.4)
+            XCTAssertGreaterThanOrEqual(AgentGlyphMotion.waitingOffset(at: t), -1.5)
+            XCTAssertEqual(AgentGlyphMotion.waitingOffset(at: t), AgentGlyphMotion.waitingOffset(at: t + 3.6), accuracy: 0.00001)
+        }
+        XCTAssertEqual(AgentGlyphMotion.pageX(at: 0), AgentGlyphMotion.pageX(at: 1.8), accuracy: 0.00001)
+        XCTAssertEqual(AgentGlyphMotion.pageY(at: 0), AgentGlyphMotion.pageY(at: 1.8), accuracy: 0.00001)
+        XCTAssertGreaterThan(AgentGlyphMotion.completionSpread(at: 0), AgentGlyphMotion.completionSpread(at: 0.2))
+        XCTAssertEqual(AgentGlyphMotion.completionSpread(at: 0.35), AgentGlyphMotion.completionSpread(at: 100))
+    }
     func testProviderIdentityDoesNotCollide() {
         let codex = AgentSession(id: "one", state: .running)
         var claude = codex; claude.provider = .claude
@@ -149,8 +194,8 @@ final class AgentTaskOnlySummaryTests: XCTestCase {
         let waiting = AgentSession(id: "waiting", state: .waiting, updatedAt: Date(timeIntervalSince1970: 3))
         let done = AgentSession(id: "done", state: .completed, updatedAt: Date(timeIntervalSince1970: 4))
         XCTAssertEqual(AgentTaskOnlySummary.emphasis([done, waiting, running, failed]), failed)
-        XCTAssertEqual(AgentTaskOnlySummary.emphasis([done, waiting, running]), running)
-        XCTAssertEqual(AgentTaskOnlySummary.emphasis([waiting, done]), done)
+        XCTAssertEqual(AgentTaskOnlySummary.emphasis([done, waiting, running]), waiting)
+        XCTAssertEqual(AgentTaskOnlySummary.emphasis([waiting, done]), waiting)
         XCTAssertEqual(AgentTaskOnlySummary.recent([failed, running, waiting, done]), [done, waiting])
     }
     func testRecentListHasOnlyCurrentRecordPerConversation() {
