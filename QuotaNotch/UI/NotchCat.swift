@@ -220,12 +220,17 @@ struct CatWingSpacesKey: PreferenceKey {
                 currentCue = cue
                 let steps = requested != nil ? Array(clip.steps.dropFirst()) : clip.steps
                 retreatRequested = false
+                let playbackBegan = ProcessInfo.processInfo.systemUptime
                 var elapsed = 0.0
                 playback: for step in steps {
                     guard !Task.isCancelled, token == generation else { return }
                     if pointerBlocks || retreatRequested || !runtime.selected(id) || runtime.shouldInterrupt(cue, attentionOnly: requested != nil) { break }
                     if let cue, !runtime.valid(cue) { break }
-                    let stepBegan = ProcessInfo.processInfo.systemUptime
+                    let stepBegan = playbackBegan + elapsed
+                    if ProcessInfo.processInfo.systemUptime >= stepBegan + step.duration {
+                        elapsed += step.duration
+                        continue
+                    }
                     let startWidth = pose.reservedWidth
                     let target = step.travel * scale
                     // Pixel-aligned layout ticks avoid an implicit spring outliving the clip.
