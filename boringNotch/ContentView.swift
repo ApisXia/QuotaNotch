@@ -268,7 +268,6 @@ struct ContentView: View {
                         CatEdgeRubRegion(enabled: catCanAppear && catPreviewPose == nil,
                             hover: { cat.edgePointer($0) }, summon: { cat.summon($0) },
                             cancel: { cat.cancelSummon() })
-                            .padding(.horizontal, -20).padding(.vertical, -6)
                     }
                     .offset(x: vm.notchState == .closed ? taskWingOffset + catWingOffset : 0)
                     .animation(reduceMotion ? nil : .smooth(duration: 0.32), value: taskWingOffset)

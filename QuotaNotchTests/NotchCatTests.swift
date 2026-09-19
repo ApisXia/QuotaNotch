@@ -13,7 +13,7 @@ final class NotchCatTests: XCTestCase {
             let limit = widget + NotchModuleMetrics(widgetWidth: widget).additionalWidth
             for occupied in [CGFloat(0), widget, limit, limit + 10] {
                 let space = CatWingSpace(occupied: occupied, limit: limit, height: height)
-                for clip in [CatClips.gentle, CatClips.completed, CatClips.attention, CatClips.body] {
+                for clip in [CatClips.gentle, CatClips.completed, CatClips.attention, CatClips.body, CatClips.watch, CatClips.doze] {
                     let scale = space.scale(body: clip.fullBody, backing: 2)
                     for step in clip.steps {
                         XCTAssertLessThanOrEqual(step.travel * scale, space.room)
@@ -26,7 +26,7 @@ final class NotchCatTests: XCTestCase {
         }
     }
     func testClipsEnterAndExitHiddenAndUseOneStandingPose() {
-        for clip in [CatClips.gentle, CatClips.completed, CatClips.attention, CatClips.body] {
+        for clip in [CatClips.gentle, CatClips.completed, CatClips.attention, CatClips.body, CatClips.watch, CatClips.doze] {
             XCTAssertEqual(clip.steps.first?.travel, 0)
             XCTAssertEqual(clip.steps.last?.travel, 0)
             XCTAssertTrue(clip.steps.allSatisfy { $0.duration > 0 && $0.travel >= 0 })

@@ -2,8 +2,8 @@
 import AppKit
 import SwiftUI
 
-/// A passive observer attached to the painted shell, before its horizontal offset.
-/// Uses only this window's events, leaves clicks/scrolls untouched, and needs no input permission.
+/// Read pointer position without relying on mouseMoved delivery to a transparent background.
+/// Never moves the cursor, intercepts controls, or installs a global input event monitor.
 struct CatEdgeRubRegion: NSViewRepresentable {
     let enabled: Bool
     let hover: (CatSide?) -> Void
@@ -12,7 +12,7 @@ struct CatEdgeRubRegion: NSViewRepresentable {
     func makeNSView(context: Context) -> Region { Region() }
     func updateNSView(_ view: Region, context: Context) {
         view.hover = hover; view.summon = summon; view.cancel = cancel
-        if view.enabled != enabled { view.enabled = enabled; view.clear(); view.updateTrackingAreas() }
+        if view.enabled != enabled { view.enabled = enabled; view.clear(); view.refreshSampling() }
     }
     static func dismantleNSView(_ view: Region, coordinator: ()) { view.detach() }
 
@@ -21,18 +21,23 @@ struct CatEdgeRubRegion: NSViewRepresentable {
         var hover: ((CatSide?) -> Void)?
         var summon: ((CatSide) -> Void)?
         var cancel: (() -> Void)?
+        // Injectable inputs exercise the production timer path in the isolated cloud test app.
+        var pointerLocation: () -> CGPoint = { NSEvent.mouseLocation }
+        var pressedButtons: () -> Int = { NSEvent.pressedMouseButtons }
+        var clock: () -> TimeInterval = { ProcessInfo.processInfo.systemUptime }
         private var recognizer = CatEdgeRub()
         private var monitor: Any?
-        private var tracking: NSTrackingArea?
+        private var timer: Timer?
         private var heldZone: (CatSide, CGRect)?
         private var lastHover: CatSide?
+        private var lastPoint: CGPoint?
         override func hitTest(_ point: NSPoint) -> NSView? { nil }
-        private var screenFrame: CGRect {
+        var shellFrame: CGRect {
             guard let window else { return .zero }
-            return window.convertToScreen(convert(bounds.insetBy(dx: 20, dy: 6), to: nil))
+            return window.convertToScreen(convert(bounds, to: nil))
         }
         func clear() {
-            recognizer.reset(); heldZone = nil
+            recognizer.reset(); heldZone = nil; lastPoint = nil
             setHover(nil)
         }
         private func setHover(_ side: CatSide?) {
@@ -40,6 +45,7 @@ struct CatEdgeRubRegion: NSViewRepresentable {
             lastHover = side; hover?(side)
         }
         func detach() {
+            timer?.invalidate(); timer = nil
             if let monitor { NSEvent.removeMonitor(monitor); self.monitor = nil }
             clear()
         }
@@ -48,41 +54,41 @@ struct CatEdgeRubRegion: NSViewRepresentable {
             guard window != nil else { return }
             monitor = NSEvent.addLocalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown,
                 .otherMouseDown, .leftMouseDragged, .rightMouseDragged, .scrollWheel]) { [weak self] event in
-                self?.observe(event)
+                guard let self, self.enabled, event.window === self.window else { return event }
+                self.clear(); self.cancel?()
                 return event
             }
-            updateTrackingAreas()
+            refreshSampling()
         }
-        override func updateTrackingAreas() {
-            super.updateTrackingAreas()
-            if let tracking { removeTrackingArea(tracking); self.tracking = nil }
-            guard enabled else { return }
-            let area = NSTrackingArea(rect: bounds,
-                options: [.activeAlways, .mouseMoved, .mouseEnteredAndExited], owner: self, userInfo: nil)
-            addTrackingArea(area); tracking = area
+        func refreshSampling() {
+            timer?.invalidate(); timer = nil
+            guard enabled, window != nil else { return }
+            schedule(after: 0.05)
         }
-        override func mouseMoved(with event: NSEvent) { observe(event) }
-        override func mouseExited(with event: NSEvent) {
-            // Geometry-generated enter/exit events never contribute a stroke.
-            if !screenFrame.insetBy(dx: -20, dy: -6).contains(NSEvent.mouseLocation) { clear() }
-        }
-        func observe(_ event: NSEvent) {
-            guard enabled, let window, window === event.window, window.isVisible,
-                  !isHiddenOrHasHiddenAncestor else { clear(); return }
-            guard event.type == .mouseMoved, NSEvent.pressedMouseButtons == 0 else {
-                clear(); cancel?(); return
+        private func schedule(after interval: TimeInterval) {
+            let timer = Timer(timeInterval: interval, repeats: false) { [weak self] _ in
+                MainActor.assumeIsolated { self?.sample() }
             }
-            let point = window.convertPoint(toScreen: event.locationInWindow)
-            let frame = screenFrame
+            self.timer = timer
+            RunLoop.main.add(timer, forMode: .common)
+        }
+        private func sample() {
+            guard enabled, let window else { return }
+            let point = pointerLocation(), frame = shellFrame
+            defer { if enabled && self.window != nil { schedule(after: frame.insetBy(dx: -48, dy: -20).contains(point) ? 1.0 / 30 : 0.2) } }
+            guard window.isVisible, !isHiddenOrHasHiddenAncestor else { clear(); return }
+            guard pressedButtons() == 0 else { clear(); cancel?(); return }
             if let heldZone, !heldZone.1.contains(point) { self.heldZone = nil }
             let side = heldZone?.0 ?? CatEdgeRub.side(at: point, frame: frame)
             setHover(side)
-            if let result = recognizer.consume(point: point, frame: frame, at: event.timestamp) {
-                heldZone = (result, CatEdgeRub.zone(result, frame: frame).union(
-                    CGRect(x: point.x - 12, y: frame.minY - 6, width: 24, height: frame.height + 12)))
+            // Layout moving beneath a stationary pointer must never count as rubbing.
+            guard point != lastPoint else { return }
+            lastPoint = point
+            if let result = recognizer.consume(point: point, frame: frame, at: clock()) {
+                heldZone = (result, CatEdgeRub.zone(result, frame: frame))
                 setHover(result); summon?(result)
             }
         }
-        deinit { if let monitor { NSEvent.removeMonitor(monitor) } }
+        deinit { timer?.invalidate(); if let monitor { NSEvent.removeMonitor(monitor) } }
     }
 }

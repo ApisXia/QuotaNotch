@@ -481,30 +481,54 @@ struct SettingsPreviewRunner {
 
     @MainActor private static func verifyCatRubRegion() throws {
         var calls: [CatSide] = []
-        var cancellations = 0
-        let host = NSHostingView(rootView: CatEdgeRubRegion(enabled: true, hover: { _ in },
-            summon: { calls.append($0) }, cancel: { cancellations += 1 }).frame(width: 240, height: 44))
-        let window = NSWindow(contentRect: NSRect(x: 300, y: 300, width: 240, height: 44),
+        let director = NotchCatDirector()
+        let screen = NSScreen.screens.first { $0.frame.contains(NSEvent.mouseLocation) }?.displayUUID
+        let open = CatWingSpace(occupied: 20, limit: 46, height: 32)
+        var playback = Task { await director.run(spaces: [.left: open, .right: open], screen: screen, previewPlayback: true) }
+        defer { playback.cancel(); director.stop() }
+        let host = NSHostingView(rootView: CatEdgeRubRegion(enabled: true,
+            hover: { director.edgePointer($0) },
+            summon: { calls.append($0); director.summon($0) },
+            cancel: { director.cancelSummon() }).frame(width: 200, height: 32))
+        let window = NSWindow(contentRect: NSRect(x: 300, y: 300, width: 200, height: 32),
             styleMask: [.borderless], backing: .buffered, defer: false)
         window.isReleasedWhenClosed = false; window.contentView = host; window.orderFront(nil)
         settle(); host.layoutSubtreeIfNeeded()
         let region = descendants(host).compactMap { $0 as? CatEdgeRubRegion.Region }.first!
-        let rect = region.convert(region.bounds.insetBy(dx: 20, dy: 6), to: nil)
-        func send(_ type: NSEvent.EventType, x: CGFloat, time: Double) {
-            let event = NSEvent.mouseEvent(with: type, location: NSPoint(x: rect.minX + x, y: rect.midY),
-                modifierFlags: [], timestamp: time, windowNumber: window.windowNumber,
-                context: nil, eventNumber: 1, clickCount: type == .leftMouseDown ? 1 : 0, pressure: 0)!
-            region.observe(event)
+        let rect = region.shellFrame
+        var pointer = CGPoint(x: rect.midX, y: rect.midY)
+        var buttons = 0
+        var time = 0.0
+        region.pointerLocation = { pointer }; region.pressedButtons = { buttons }; region.clock = { time }
+        director.pointer(true) // Production shell-hover gate must permit an accepted edge summon.
+        func rub(_ side: CatSide, at start: Double) {
+            let xs: [CGFloat] = side == .left ? [-5, -15, -2, -15] : [205, 215, 202, 215]
+            for (i, x) in xs.enumerated() {
+                pointer = CGPoint(x: rect.minX + x, y: rect.midY); time = start + Double(i) * 0.2
+                settle() // The production Timer samples input; no direct call into recognition.
+            }
         }
-        for (i, x) in [CGFloat(-5), -15, -2, -15].enumerated() { send(.mouseMoved, x: x, time: Double(i) * 0.2) }
-        verifyPresentation(calls == [.left], "Native edge region did not recognize left rub")
-        send(.leftMouseDown, x: -5, time: 1)
-        verifyPresentation(cancellations == 1, "A click did not cancel edge interaction")
+        rub(.left, at: 0)
+        verifyPresentation(calls == [.left], "Pointer sampling did not recognize left rub")
+        verifyPresentation(director.pose.active && !director.pose.concealed && director.pose.side == .left && director.pose.reservedWidth > 0,
+            "Recognized left rub did not produce a visible cat while the shell was hovered")
+        buttons = 1; settle()
+        verifyPresentation(director.pose.concealed, "Mouse button did not cancel visible interaction")
         verifyPresentation(region.hitTest(.zero) == nil, "Cat region intercepted a widget click")
-        for (i, x) in [CGFloat(205), 215, 202, 215].enumerated() { send(.mouseMoved, x: x, time: 4 + Double(i) * 0.2) }
-        verifyPresentation(calls == [.left, .right], "Native edge region did not recognize right rub")
+        buttons = 0; rub(.right, at: 4)
+        verifyPresentation(calls == [.left, .right], "Pointer sampling did not recognize right rub")
+        verifyPresentation(director.pose.active && !director.pose.concealed && director.pose.side == .right,
+            "Recognized right rub did not produce a visible cat")
+        playback.cancel(); director.stop(); settle()
+        let full = CatWingSpace(occupied: 46, limit: 46, height: 32)
+        playback = Task { await director.run(spaces: [.left: open, .right: full], screen: screen, previewPlayback: true) }
+        settle(); rub(.right, at: 8)
+        verifyPresentation(calls == [.left, .right, .right] && director.pose.active && !director.pose.concealed && director.pose.side == .left,
+            "A full right wing silently discarded summon instead of responding on the left")
+        region.enabled = false; region.refreshSampling(); region.clear()
+        playback.cancel(); director.stop()
         window.orderOut(nil); window.contentView = nil; window.close()
-        print("Verified passive edge rub event routing, both sides, and click cancellation")
+        print("Verified production pointer timer -> recognizer -> director -> visible pose; left/right, shell hover, button cancellation and full-wing fallback (simulated pointer input)")
     }
 
     @MainActor private static func captureCat(output: URL, fixtures: [AgentSession]) throws {

@@ -77,4 +77,19 @@ final class CatEdgeRubTests: XCTestCase {
             }
         }
     }
+    func testRestingAtEdgeDoesNotConsumeGestureDeadline() {
+        var rub = CatEdgeRub()
+        _ = rub.consume(point: CGPoint(x: 95, y: 115), frame: frame, at: 0)
+        XCTAssertNil(rub.consume(point: CGPoint(x: 95, y: 115), frame: frame, at: 10))
+        XCTAssertNil(rub.consume(point: CGPoint(x: 85, y: 115), frame: frame, at: 10.2))
+        XCTAssertNil(rub.consume(point: CGPoint(x: 98, y: 115), frame: frame, at: 10.6))
+        XCTAssertEqual(rub.consume(point: CGPoint(x: 85, y: 115), frame: frame, at: 11.2), .left)
+    }
+    func testVerticalRubAndWiderInnerEdgeAreRecognized() {
+        var rub = CatEdgeRub()
+        for (index, y) in [CGFloat(110), 118, 110, 118].enumerated() {
+            XCTAssertEqual(rub.consume(point: CGPoint(x: 118, y: y), frame: frame, at: Double(index) * 0.25), index == 3 ? .left : nil)
+        }
+    }
+
 }

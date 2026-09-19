@@ -140,6 +140,32 @@ enum CatClips {
         .init(duration: 0.140, asset: "Cat-edge-step-0", travel: 0),
         .init(duration: 1.200, asset: "Cat-edge-step-0", travel: 0),
     ], fullBody: true)
+    // Distinct poses using the approved pixels: watch with open eyes, doze, or rub.
+    static let watch = CatClip(steps: [
+        .init(duration: 0.15, asset: "Cat-cheek-rub-0", travel: 0),
+        .init(duration: 0.25, asset: "Cat-cheek-rub-0", travel: 8),
+        .init(duration: 0.4, asset: "Cat-cheek-rub-1", travel: 16),
+        .init(duration: 1.2, asset: "Cat-cheek-rub-0", travel: 24),
+        .init(duration: 0.7, asset: "Cat-cheek-rub-5", travel: 24),
+        .init(duration: 0.15, asset: "Cat-cheek-rub-3", travel: 24),
+        .init(duration: 0.8, asset: "Cat-cheek-rub-0", travel: 24),
+        .init(duration: 0.2, asset: "Cat-cheek-rub-0", travel: 12),
+        .init(duration: 0.2, asset: "Cat-cheek-rub-0", travel: 0),
+    ], fullBody: false)
+    static let doze = CatClip(steps: [
+        .init(duration: 0.15, asset: "Cat-cheek-rub-0", travel: 0),
+        .init(duration: 0.25, asset: "Cat-cheek-rub-0", travel: 8),
+        .init(duration: 0.3, asset: "Cat-cheek-rub-1", travel: 16),
+        .init(duration: 0.6, asset: "Cat-cheek-rub-0", travel: 24),
+        .init(duration: 1.6, asset: "Cat-cheek-rub-3", travel: 24),
+        .init(duration: 0.3, asset: "Cat-cheek-rub-5", travel: 24),
+        .init(duration: 1.1, asset: "Cat-cheek-rub-3", travel: 24),
+        .init(duration: 0.45, asset: "Cat-cheek-rub-0", travel: 24),
+        .init(duration: 0.2, asset: "Cat-cheek-rub-0", travel: 12),
+        .init(duration: 0.2, asset: "Cat-cheek-rub-0", travel: 0),
+    ], fullBody: false)
+    static let interactions = [gentle, watch, doze]
+    static let idleVariants = [watch, doze, gentle]
     static func head(_ action: CatAction) -> CatClip {
         switch action { case .completed: return completed; case .attention, .rest: return attention; default: return gentle }
     }
