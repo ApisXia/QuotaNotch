@@ -512,23 +512,69 @@ struct SettingsPreviewRunner {
         verifyPresentation(calls == [.left], "Pointer sampling did not recognize left rub")
         verifyPresentation(director.pose.active && !director.pose.concealed && director.pose.side == .left && director.pose.reservedWidth > 0,
             "Recognized left rub did not produce a visible cat while the shell was hovered")
-        buttons = 1; settle()
-        verifyPresentation(director.pose.concealed, "Mouse button did not cancel visible interaction")
+        func sampleFor(_ duration: TimeInterval, _ check: () -> Void = {}) {
+            let end = Date().addingTimeInterval(duration)
+            while Date() < end {
+                RunLoop.main.run(until: Date().addingTimeInterval(0.015))
+                check()
+            }
+        }
+        func verifyRetreat(_ message: String, trigger: () -> Void) {
+            let initial = director.pose.reservedWidth
+            verifyPresentation(initial > 0, "Retreat test had no visible starting pose: " + message)
+            trigger()
+            verifyPresentation(director.pose.reservedWidth == initial, "Trigger instantly cleared geometry: " + message)
+            var previous = initial
+            var intermediate = false
+            sampleFor(0.65) {
+                let width = director.pose.reservedWidth
+                verifyPresentation(width <= previous, "Retreat reversed direction: " + message)
+                verifyPresentation(previous - width <= max(4, initial * 0.4), "Retreat jumped: " + message)
+                if width > 0 && width < initial { intermediate = true }
+                previous = width
+            }
+            verifyPresentation(intermediate && !director.pose.active && director.pose.reservedWidth == 0,
+                "Retreat did not finish continuously: " + message)
+        }
+        verifyRetreat("held mouse button") { buttons = 1; director.cancelSummon() }
         verifyPresentation(region.hitTest(.zero) == nil, "Cat region intercepted a widget click")
         buttons = 0; rub(.right, at: 4)
         verifyPresentation(calls == [.left, .right], "Pointer sampling did not recognize right rub")
         verifyPresentation(director.pose.active && !director.pose.concealed && director.pose.side == .right,
             "Recognized right rub did not produce a visible cat")
+        // Staying over the shell, leaving/re-entering an edge and repeated requests
+        // must not hide, reset or indefinitely extend a committed interaction.
+        director.edgePointer(nil); director.edgePointer(.left)
+        director.summon(.left)
+        verifyPresentation(director.pose.side == .right && !director.pose.concealed, "A repeated gesture moved or hid the cat")
+        sampleFor(7) {
+            verifyPresentation(!director.pose.active || director.pose.side == .right, "A repeated gesture was queued for the opposite side")
+        }
+        verifyPresentation(!director.pose.active && director.pose.reservedWidth == 0, "Hover held the cat spacer open after natural completion")
+        director.summon(.right); sampleFor(0.8)
+        verifyRetreat("physical notch hover") { director.pointer(true, source: "camera") }
+        director.pointer(false, source: "camera")
+        director.summon(.left); sampleFor(0.8)
+        verifyRetreat("layout capacity changed") { director.updateSpaces([.left: CatWingSpace(occupied: 21, limit: 46, height: 32), .right: open]) }
         playback.cancel(); director.stop(); settle()
         let full = CatWingSpace(occupied: 46, limit: 46, height: 32)
         playback = Task { await director.run(spaces: [.left: open, .right: full], screen: screen, previewPlayback: true) }
         settle(); rub(.right, at: 8)
-        verifyPresentation(calls == [.left, .right, .right] && director.pose.active && !director.pose.concealed && director.pose.side == .left,
-            "A full right wing silently discarded summon instead of responding on the left")
+        verifyPresentation(calls == [.left, .right, .right] && director.pose.active && !director.pose.concealed && director.pose.side == .right && director.pose.crowded,
+            "A full right wing did not respond on the requested side")
+        sampleFor(3.5) {
+            verifyPresentation(director.pose.reservedWidth <= 8, "Crowded peek exceeded its eight-point budget")
+            verifyPresentation(!director.pose.active || director.pose.side == .right, "Crowded peek swapped sides")
+        }
+        verifyPresentation(!director.pose.active, "Crowded peek did not withdraw while hovered")
+        director.updateSpaces([.left: full, .right: full])
+        director.summon(.left); sampleFor(0.7)
+        verifyPresentation(director.pose.active && director.pose.side == .left && director.pose.crowded, "Both full wings discarded the requested left peek")
+        verifyRetreat("crowded cancellation") { director.cancelSummon() }
         region.enabled = false; region.refreshSampling(); region.clear()
         playback.cancel(); director.stop()
         window.orderOut(nil); window.contentView = nil; window.close()
-        print("Verified production pointer timer -> recognizer -> director -> visible pose; left/right, shell hover, button cancellation and full-wing fallback (simulated pointer input)")
+        print("Verified production pointer timer -> recognizer -> director -> visible pose; left/right, natural completion while hovered, repeated gestures, continuous cancellation, layout changes and same-side crowded peeks (simulated pointer input)")
     }
 
     @MainActor private static func captureCat(output: URL, fixtures: [AgentSession]) throws {
@@ -556,7 +602,9 @@ struct SettingsPreviewRunner {
                 for side in CatSide.allCases {
                     var baseline: (Int, Int)?
                     for active in [false, true] {
-                        let pose = CatPose(side: side, action: .curious, elapsed: 2, active: active)
+                        let crowded = side == .right && (mask == 7 || mask == 4)
+                        let pose = CatPose(side: side, action: .curious, elapsed: 2, active: active,
+                                           frame: crowded ? "Cat-cheek-rub-2" : nil, width: crowded ? 8 : nil, crowded: crowded)
                         let host = NSHostingView(rootView: ContentView(catPreviewPose: pose).environmentObject(vm)
                             .transaction { $0.animation = nil; $0.disablesAnimations = true }
                             .background(Color(red: 0.25, green: 0.15, blue: 0.35)))

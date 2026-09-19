@@ -28,6 +28,7 @@ struct CatPose: Equatable {
     var frame: String? = nil
     var width: CGFloat? = nil
     var scale: CGFloat = 1
+    var crowded = false
     var concealed = false
     var clip: CatClip { fullBody ? CatClips.body : CatClips.head(action) }
     var asset: String { frame ?? clip.step(at: elapsed).asset }

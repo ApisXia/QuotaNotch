@@ -52,15 +52,11 @@ struct ContentView: View {
     private var displayedCatPose: CatPose { catCanAppear ? (catPreviewPose ?? cat.pose) : CatPose() }
     private var catWingOffset: CGFloat {
         let pose = displayedCatPose
-        guard pose.active, let space = catSpaces[pose.side], space.canPeek else { return 0 }
+        guard pose.active, !pose.crowded, let space = catSpaces[pose.side], space.canPeek else { return 0 }
         return min(space.room, pose.reservedWidth) * (pose.side == .left ? -0.5 : 0.5)
     }
     private var catRunID: String {
-        let wings = CatSide.allCases.map { side in
-            guard let space = catSpaces[side] else { return side.rawValue + ":absent" }
-            return "\(side.rawValue):\(space.occupied):\(space.limit):\(space.height)"
-        }.joined(separator: "|")
-        return "\(catCanAppear)|\(vm.screenUUID ?? "")|\(wings)|\(String(describing: quotaStore.activePin))|\(String(describing: compactPresentation))|\(agentStore.compactExpanded)"
+        "\(catCanAppear)|\(vm.screenUUID ?? "")"
     }
     @ObservedObject private var agentStore = AgentActivityStore.shared
 
@@ -186,7 +182,7 @@ struct ContentView: View {
             }
         }
         .onPreferenceChange(AgentWingOffsetKey.self) { taskWingOffset = $0 }
-        .onPreferenceChange(CatWingSpacesKey.self) { catSpaces = $0 }
+        .onPreferenceChange(CatWingSpacesKey.self) { catSpaces = $0; cat.updateSpaces($0) }
         .onChange(of: catEnabled) { _, enabled in
             if !enabled { cat.stop(); cat.clearCues() }
         }

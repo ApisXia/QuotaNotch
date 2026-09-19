@@ -34,6 +34,14 @@ final class NotchCatTests: XCTestCase {
         }
         XCTAssertFalse(CatClips.body.steps.contains { $0.asset == "Cat-body-sequence-0" })
     }
+    func testCrowdedPeekTriesTwiceAndAlwaysWithdrawsWithinThreeSeconds() {
+        let clip = CatClips.crowded
+        XCTAssertEqual(clip.steps.first?.travel, 0)
+        XCTAssertEqual(clip.steps.last?.travel, 0)
+        XCTAssertLessThan(clip.duration, 3)
+        XCTAssertTrue(clip.steps.allSatisfy { $0.travel <= 8 && $0.travel >= 0 && $0.duration > 0 })
+        XCTAssertEqual(clip.steps.filter { $0.travel == 8 }.count, 2)
+    }
     func testInvalidEventsDoNotPlayAndDuplicateDoesNotExtendLifetime() {
         var queue = CatCueQueue()
         let waiting = cue("a", .attention)

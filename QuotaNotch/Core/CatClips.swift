@@ -164,6 +164,19 @@ enum CatClips {
         .init(duration: 0.2, asset: "Cat-cheek-rub-0", travel: 12),
         .init(duration: 0.2, asset: "Cat-cheek-rub-0", travel: 0),
     ], fullBody: false)
+    // Only the edge of the head fits: try twice, pause, then withdraw.
+    // This occupies existing wing pixels; it never increases the shell width.
+    static let crowded = CatClip(steps: [
+        .init(duration: 0.1, asset: "Cat-cheek-rub-0", travel: 0),
+        .init(duration: 0.3, asset: "Cat-cheek-rub-0", travel: 4),
+        .init(duration: 0.3, asset: "Cat-cheek-rub-1", travel: 7),
+        .init(duration: 0.35, asset: "Cat-cheek-rub-2", travel: 8),
+        .init(duration: 0.25, asset: "Cat-cheek-rub-0", travel: 5),
+        .init(duration: 0.35, asset: "Cat-cheek-rub-2", travel: 8),
+        .init(duration: 0.45, asset: "Cat-cheek-rub-5", travel: 6),
+        .init(duration: 0.25, asset: "Cat-cheek-rub-0", travel: 3),
+        .init(duration: 0.25, asset: "Cat-cheek-rub-0", travel: 0),
+    ], fullBody: false)
     static let interactions = [gentle, watch, doze]
     static let idleVariants = [watch, doze, gentle]
     static func head(_ action: CatAction) -> CatClip {
