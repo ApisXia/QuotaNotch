@@ -97,8 +97,12 @@ struct AgentPaperGlyph: View {
             }
         case .interrupted:
             paper(AgentText.color(.interrupted), rules: false).overlay {
-                RoundedRectangle(cornerRadius: 0.65).fill(AgentText.color(.interrupted))
-                    .frame(width: 4.8, height: 4.8).offset(y: 1.2)
+                HStack(spacing: 1.6) {
+                    ForEach(0..<2) { _ in
+                        RoundedRectangle(cornerRadius: 0.45).fill(AgentText.color(.interrupted))
+                            .frame(width: 1.6, height: 5)
+                    }
+                }.offset(y: 1.2)
             }
         case .unknown:
             paper(ink, opacity: 0.40)
@@ -203,8 +207,12 @@ struct AgentTaskStateMark: View {
             AgentCrossMark().stroke(AgentText.color(state), style: StrokeStyle(lineWidth: 1.3, lineCap: .round))
                 .frame(width: 4, height: 4)
         case .interrupted:
-            RoundedRectangle(cornerRadius: 0.6).fill(AgentText.color(state)).frame(width: 4.5, height: 4.5)
-                .overlay { RoundedRectangle(cornerRadius: 0.6).strokeBorder(Color.primary.opacity(0.75), lineWidth: 0.55).frame(width: 4.5, height: 4.5) }
+            HStack(spacing: 1.2) {
+                ForEach(0..<2) { _ in
+                    RoundedRectangle(cornerRadius: 0.35).fill(AgentText.color(state))
+                        .frame(width: 1.35, height: 4.5)
+                }
+            }
         case .unknown:
             RoundedRectangle(cornerRadius: 0.7).strokeBorder(Color.secondary, lineWidth: 0.8).frame(width: 4.3, height: 5.2)
         }
