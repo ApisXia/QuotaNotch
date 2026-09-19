@@ -17,7 +17,7 @@ struct AgentPaperGlyph: View {
     @Environment(\.colorScheme) private var scheme
     @State private var origin = Date()
     @State private var completionSettled = false
-    private var moving: Bool { state == .running || state == .waiting || (state == .completed && !completionSettled) }
+    private var moving: Bool { state == .running || state == .waiting || state == .failed || (state == .completed && !completionSettled) }
     private var ink: Color { Color.primary }
     private var paperBackground: Color { scheme == .dark ? .black : .white }
 
@@ -88,6 +88,7 @@ struct AgentPaperGlyph: View {
                 paper(AgentText.color(.failed), rules: false, neutralFold: true).overlay {
                     AgentCrossMark().stroke(AgentText.color(.failed), style: StrokeStyle(lineWidth: 1.2, lineCap: .round))
                         .frame(width: 4.2, height: 4.2)
+                        .shadow(color: AgentText.color(.failed).opacity(reduced ? 0 : AgentGlyphMotion.errorGlow(at: elapsed)), radius: 1.4)
                 }
             }
         case .completed:

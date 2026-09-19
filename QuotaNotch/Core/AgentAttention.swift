@@ -103,6 +103,10 @@ enum AgentGlyphMotion {
         if t >= 0.34 && t < 0.52 { return -sin((t - 0.34) / 0.18 * .pi) * 1.1 }
         return 0
     }
+    /// A soft error halo; the cross and page never change size or position.
+    static func errorGlow(at elapsed: Double) -> Double {
+        0.05 + 0.90 * (0.5 - 0.5 * cos(max(0, elapsed) / 3 * 2 * .pi))
+    }
     static func completionSpread(at elapsed: Double) -> Double {
         let u = min(1, max(0, elapsed) / 0.35)
         return 0.65 + 1.4 * (1 - u * u * (3 - 2 * u))
