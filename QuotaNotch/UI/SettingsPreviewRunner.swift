@@ -440,11 +440,14 @@ struct SettingsPreviewRunner {
         guard let destination = CGImageDestinationCreateWithURL(url as CFURL, UTType.gif.identifier as CFString, 54, nil) else { fatalError("Cannot create task motion preview") }
         CGImageDestinationSetProperties(destination, [kCGImagePropertyGIFDictionary: [kCGImagePropertyGIFLoopCount: 0]] as CFDictionary)
         for frame in 0..<54 {
-            host.rootView = board(Double(frame) / 15)
-            RunLoop.main.run(until: Date().addingTimeInterval(0.03))
-            host.layoutSubtreeIfNeeded()
-            let bitmap = host.bitmapImageRepForCachingDisplay(in: host.bounds)!
-            host.cacheDisplay(in: host.bounds, to: bitmap)
+            // A fresh hosting tree forces all static layers to participate in every bitmap.
+            // Reusing the tree can cacheDisplay only changed TimelineView layers on macOS.
+            let frameHost = NSHostingView(rootView: board(Double(frame) / 15))
+            window.contentView = frameHost
+            RunLoop.main.run(until: Date().addingTimeInterval(0.08))
+            frameHost.layoutSubtreeIfNeeded()
+            let bitmap = frameHost.bitmapImageRepForCachingDisplay(in: frameHost.bounds)!
+            frameHost.cacheDisplay(in: frameHost.bounds, to: bitmap)
             CGImageDestinationAddImage(destination, bitmap.cgImage!, [kCGImagePropertyGIFDictionary: [kCGImagePropertyGIFDelayTime: 1.0 / 15]] as CFDictionary)
             if [0, 3, 6, 9, 18, 36].contains(frame) {
                 try bitmap.representation(using: .png, properties: [:])!.write(to: output.appendingPathComponent("Task-status-frame-\(frame).png"))
