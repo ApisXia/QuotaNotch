@@ -12,7 +12,9 @@ struct AgentPaperGlyph: View {
     let state: AgentRunState
     var minimal = false
     var previewElapsed: Double? = nil
-    @Environment(\.accessibilityReduceMotion) private var reduced
+    var previewReducedMotion = false
+    @Environment(\.accessibilityReduceMotion) private var systemReduced
+    private var reduced: Bool { systemReduced || previewReducedMotion }
     @Environment(\.colorScheme) private var scheme
     @State private var origin = Date()
     @State private var completionSettled = false
