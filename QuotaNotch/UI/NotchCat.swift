@@ -225,27 +225,29 @@ struct CatWingSpacesKey: PreferenceKey {
                     guard !Task.isCancelled, token == generation else { return }
                     if pointerBlocks || retreatRequested || !runtime.selected(id) || runtime.shouldInterrupt(cue, attentionOnly: requested != nil) { break }
                     if let cue, !runtime.valid(cue) { break }
+                    let stepBegan = ProcessInfo.processInfo.systemUptime
                     let startWidth = pose.reservedWidth
                     let target = step.travel * scale
                     // Pixel-aligned layout ticks avoid an implicit spring outliving the clip.
                     let transition = !full && startWidth != target ? min(0.18, step.duration) : 0
                     if transition > 0 {
-                        let ticks = max(1, Int(transition * 60))
-                        for tick in 1...ticks {
+                        while true {
                             guard token == generation, !Task.isCancelled else { return }
                             if pointerBlocks || retreatRequested || !runtime.selected(id) { break playback }
-                            let u = Double(tick) / Double(ticks)
+                            let u = min(1, (ProcessInfo.processInfo.systemUptime - stepBegan) / transition)
                             let eased = u * u * (3 - 2 * u)
                             let width = (startWidth + (target - startWidth) * eased) * backing
                             pose = CatPose(side: side, action: action, elapsed: elapsed, active: true,
                                            fullBody: full, frame: step.asset, width: width.rounded() / backing, scale: scale, crowded: crowded)
-                            try await delay(transition / Double(ticks))
+                            if u >= 1 { break }
+                            try await delay(1.0 / 60)
                         }
                     } else {
                         pose = CatPose(side: side, action: action, elapsed: elapsed, active: true,
                                        fullBody: full, frame: step.asset, width: target, scale: scale, crowded: crowded)
                     }
-                    try await delay(step.duration - transition)
+                    let remaining = step.duration - (ProcessInfo.processInfo.systemUptime - stepBegan)
+                    if remaining > 0 { try await delay(remaining) }
                     elapsed += step.duration
                 }
                 guard token == generation, !Task.isCancelled else { return }
@@ -254,13 +256,15 @@ struct CatWingSpacesKey: PreferenceKey {
                 retreatRequested = true
                 let startWidth = pose.reservedWidth
                 if startWidth > 0 {
-                    for tick in 1...10 {
+                    let retreatBegan = ProcessInfo.processInfo.systemUptime
+                    while true {
                         guard token == generation, !Task.isCancelled else { return }
-                        let u = Double(tick) / 10
+                        let u = min(1, (ProcessInfo.processInfo.systemUptime - retreatBegan) / 0.25)
                         var retiring = pose
                         retiring.width = (startWidth * (1 - u * u * (3 - 2 * u)) * backing).rounded() / backing
                         pose = retiring
-                        try await delay(0.025)
+                        if u >= 1 { break }
+                        try await delay(1.0 / 60)
                     }
                 }
                 pose = CatPose(); currentCue = nil; manualSide = nil; retreatRequested = false

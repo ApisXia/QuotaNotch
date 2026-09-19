@@ -525,11 +525,17 @@ struct SettingsPreviewRunner {
             trigger()
             verifyPresentation(director.pose.reservedWidth == initial, "Trigger instantly cleared geometry: " + message)
             var previous = initial
+            var previousTime = ProcessInfo.processInfo.systemUptime
             var intermediate = false
             sampleFor(0.65) {
                 let width = director.pose.reservedWidth
                 verifyPresentation(width <= previous, "Retreat reversed direction: " + message)
-                verifyPresentation(previous - width <= max(4, initial * 0.4), "Retreat jumped: " + message)
+                let now = ProcessInfo.processInfo.systemUptime
+                // Smoothstep's maximum velocity is 1.5 / 0.25 seconds. Account for
+                // actual sampling gaps and one rounded pixel, including a busy runner.
+                verifyPresentation(previous - width <= initial * 6 * (now - previousTime) + 1,
+                    "Retreat jumped faster than its animation: " + message)
+                previousTime = now
                 if width > 0 && width < initial { intermediate = true }
                 previous = width
             }

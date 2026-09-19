@@ -1,4 +1,4 @@
-# Pixel cat preview · build 297
+# Pixel cat preview · build 298
 
 Experimental build on feature/notch-cat, based on 1.03. Not a stable release.
 
@@ -11,6 +11,7 @@ Experimental build on feature/notch-cat, based on 1.03. Not a stable release.
 - Rub near either outer edge with two clear reversals within about 1.6 seconds; horizontal or vertical movement works. The sensing region follows the shell and has wider tolerance. A full wing responds on that same side with a partial head, two small nudges, and withdrawal within three seconds. It borrows at most eight pixels inside the existing wing; the shell never exceeds its width limit. Clicks, drags and scrolling cancel the gesture.
 - Cat heads are vertically centered in a fixed animation stage instead of hugging the bottom edge.
 - Pointer sampling replaces unreliable mouseMoved delivery to transparent views; the sampler slows down away from the notch and stops when unavailable.
+- Entry and retreat use monotonic elapsed time rather than accumulated frame sleeps, so delayed frames cannot stretch a short exit indefinitely.
 - Widget measurement updates no longer restart the director. A changed active wing requests withdrawal.
 - Cloud tests check natural completion, continuous retreat, repeated gestures, layout changes and same-side crowded responses. They exercise the production sampling timer through to visible animation using simulated pointer input; this is not a claim of manual physical-mouse validation.
 - Two settings: cat enabled and task reactions enabled.
