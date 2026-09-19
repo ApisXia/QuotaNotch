@@ -32,9 +32,9 @@ import UniformTypeIdentifiers
         window.isReleasedWhenClosed = false
         defer { window.orderOut(nil); window.contentView = nil; window.close() }
         let output = URL(fileURLWithPath: "build/task-status-output")
-        let destination = CGImageDestinationCreateWithURL(output.appendingPathComponent("Task-status-refined.gif") as CFURL, UTType.gif.identifier as CFString, 54, nil)!
+        let destination = CGImageDestinationCreateWithURL(output.appendingPathComponent("Task-status-refined.gif") as CFURL, UTType.gif.identifier as CFString, 270, nil)!
         CGImageDestinationSetProperties(destination, [kCGImagePropertyGIFDictionary: [kCGImagePropertyGIFLoopCount: 0]] as CFDictionary)
-        for frame in 0..<54 {
+        for frame in 0..<270 {
             let renderer = ImageRenderer(content: board(Double(frame) / 15).environment(\.colorScheme, .dark))
             renderer.scale = 1
             guard let cgImage = renderer.cgImage else { fatalError("Could not render task frame") }
@@ -45,6 +45,6 @@ import UniformTypeIdentifiers
             }
         }
         precondition(CGImageDestinationFinalize(destination))
-        print("Rendered original and refined production glyphs, 54 native frames.")
+        print("Rendered original and refined production glyphs, 270 native frames over a seamless 18-second motion cycle.")
     }
 }
