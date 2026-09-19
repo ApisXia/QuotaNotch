@@ -37,11 +37,21 @@ struct AgentPaperGlyph: View {
         }
     }
 
-    private func paper(_ color: Color, fill: Double = 0, opacity: Double = 1) -> some View {
-        RoundedRectangle(cornerRadius: 1.8).fill(paperBackground)
-            .overlay { RoundedRectangle(cornerRadius: 1.8).fill(color.opacity(fill)) }
-            .overlay { RoundedRectangle(cornerRadius: 1.8).strokeBorder(color, lineWidth: minimal ? 1.55 : 1.3) }
-            .frame(width: 11.5, height: 13.5).opacity(opacity)
+    private func paper(_ accent: Color, coloredEdge: Bool = false, rules: Bool = true, opacity: Double = 1) -> some View {
+        ZStack {
+            AgentFoldedPage().fill(paperBackground)
+            AgentFoldedPage().fill(accent.opacity(0.10))
+            AgentFoldedPage().stroke(coloredEdge ? accent : ink.opacity(0.88),
+                style: StrokeStyle(lineWidth: minimal ? 1.25 : 1.05, lineCap: .round, lineJoin: .round))
+            AgentPageFold().stroke(accent.opacity(0.85),
+                style: StrokeStyle(lineWidth: minimal ? 1 : 0.8, lineCap: .round, lineJoin: .round))
+            if rules && !minimal {
+                VStack(alignment: .leading, spacing: 2) {
+                    Capsule().fill(ink.opacity(0.66)).frame(width: 5.3, height: 0.8)
+                    Capsule().fill(accent.opacity(0.8)).frame(width: 3.3, height: 0.8)
+                }.offset(x: -0.6, y: 1.6)
+            }
+        }.frame(width: 10.8, height: 13).opacity(opacity)
     }
 
     @ViewBuilder private func drawing(at elapsed: Double) -> some View {
@@ -50,41 +60,78 @@ struct AgentPaperGlyph: View {
             let x = reduced ? 1.5 : AgentGlyphMotion.pageX(at: elapsed)
             let y = reduced ? 1.3 : AgentGlyphMotion.pageY(at: elapsed)
             ZStack {
-                paper(ink, opacity: 0.85).offset(x: -x, y: -y).zIndex(-y)
-                paper(AgentText.color(.running), fill: 0.48).overlay {
-                    RoundedRectangle(cornerRadius: 1.8).strokeBorder(ink.opacity(0.85), lineWidth: 0.8)
-                        .frame(width: 11.5, height: 13.5)
-                }.offset(x: x, y: y).zIndex(y)
+                paper(ink, rules: false, opacity: 0.70).offset(x: -x, y: -y).zIndex(-y)
+                paper(AgentText.color(.running), coloredEdge: true)
+                    .offset(x: x, y: y).zIndex(y)
             }
         case .waiting:
             ZStack {
-                if !minimal { paper(ink, opacity: 0.75).offset(x: -1.2, y: -0.3) }
+                if !minimal { paper(ink, rules: false, opacity: 0.48).offset(x: -1.4, y: -0.8) }
                 AgentSpeechMark().fill(paperBackground)
-                    .overlay { AgentSpeechMark().fill(AgentText.color(.waiting).opacity(0.8)) }
-                    .overlay { AgentSpeechMark().stroke(ink.opacity(0.95), style: StrokeStyle(lineWidth: minimal ? 1.4 : 1.15, lineJoin: .round)) }
-                    .frame(width: minimal ? 13 : 12, height: 13)
-                    .offset(x: minimal ? 0 : 1.4, y: 0.5)
+                    .overlay { AgentSpeechMark().fill(AgentText.color(.waiting).opacity(0.14)) }
+                    .overlay { AgentSpeechMark().stroke(AgentText.color(.waiting), style: StrokeStyle(lineWidth: minimal ? 1.3 : 1.05, lineJoin: .round)) }
+                    .overlay {
+                        HStack(spacing: minimal ? 1.6 : 1.7) {
+                            ForEach(0..<3) { _ in Circle().fill(ink.opacity(0.94)).frame(width: 1.25, height: 1.25) }
+                        }.offset(y: -0.7)
+                    }
+                    .frame(width: minimal ? 13 : 12, height: 12)
+                    .offset(x: minimal ? 0 : 1.2, y: 0.5)
             }.offset(y: reduced ? 0 : AgentGlyphMotion.waitingOffset(at: elapsed))
         case .failed:
-            paper(ink).overlay {
-                AgentCrossMark().stroke(AgentText.color(.failed), style: StrokeStyle(lineWidth: minimal ? 2.2 : 1.9, lineCap: .round))
-                    .frame(width: 6.5, height: 6.5)
+            paper(AgentText.color(.failed), rules: false).overlay {
+                AgentCrossMark().stroke(AgentText.color(.failed), style: StrokeStyle(lineWidth: minimal ? 1.75 : 1.5, lineCap: .round))
+                    .frame(width: 5.4, height: 5.4).offset(y: 1)
             }
         case .completed:
             let spread = reduced ? 0.65 : AgentGlyphMotion.completionSpread(at: elapsed)
             ZStack {
-                if !minimal { paper(ink, opacity: 0.8).offset(x: -spread, y: -spread) }
-                paper(AgentText.color(.completed), fill: 0.65)
-                    .offset(x: minimal ? 0 : spread, y: minimal ? 0 : spread)
+                if !minimal { paper(ink, rules: false, opacity: 0.55).offset(x: -spread, y: -spread) }
+                paper(AgentText.color(.completed), coloredEdge: true, rules: false)
+                    .overlay {
+                        VStack(alignment: .leading, spacing: 2) {
+                            if !minimal { Capsule().fill(ink.opacity(0.7)).frame(width: 5, height: 0.8) }
+                            Capsule().fill(AgentText.color(.completed)).frame(width: 5, height: 1.6)
+                        }.offset(y: 2.1)
+                    }.offset(x: minimal ? 0 : spread, y: minimal ? 0 : spread)
             }
         case .interrupted:
-            paper(ink, opacity: 0.85).overlay {
-                RoundedRectangle(cornerRadius: 1).fill(AgentText.color(.interrupted))
-                    .frame(width: 7, height: 7)
+            paper(AgentText.color(.interrupted), rules: false).overlay {
+                RoundedRectangle(cornerRadius: 0.65).fill(AgentText.color(.interrupted))
+                    .frame(width: 4.8, height: 4.8).offset(y: 1.2)
             }
         case .unknown:
-            paper(ink, opacity: 0.45)
+            paper(ink, opacity: 0.40)
         }
+    }
+}
+
+/// The folded corner gives task pages an identity without adding another badge or symbol.
+private struct AgentFoldedPage: Shape {
+    func path(in r: CGRect) -> Path {
+        var p = Path()
+        let fold = r.width * 0.29, radius = r.width * 0.12
+        p.move(to: CGPoint(x: r.minX + radius, y: r.minY))
+        p.addLine(to: CGPoint(x: r.maxX - fold, y: r.minY))
+        p.addLine(to: CGPoint(x: r.maxX, y: r.minY + fold))
+        p.addLine(to: CGPoint(x: r.maxX, y: r.maxY - radius))
+        p.addQuadCurve(to: CGPoint(x: r.maxX - radius, y: r.maxY), control: CGPoint(x: r.maxX, y: r.maxY))
+        p.addLine(to: CGPoint(x: r.minX + radius, y: r.maxY))
+        p.addQuadCurve(to: CGPoint(x: r.minX, y: r.maxY - radius), control: CGPoint(x: r.minX, y: r.maxY))
+        p.addLine(to: CGPoint(x: r.minX, y: r.minY + radius))
+        p.addQuadCurve(to: CGPoint(x: r.minX + radius, y: r.minY), control: CGPoint(x: r.minX, y: r.minY))
+        p.closeSubpath()
+        return p
+    }
+}
+private struct AgentPageFold: Shape {
+    func path(in r: CGRect) -> Path {
+        let fold = r.width * 0.29
+        var p = Path()
+        p.move(to: CGPoint(x: r.maxX - fold, y: r.minY + 0.2))
+        p.addLine(to: CGPoint(x: r.maxX - fold, y: r.minY + fold))
+        p.addLine(to: CGPoint(x: r.maxX - 0.2, y: r.minY + fold))
+        return p
     }
 }
 

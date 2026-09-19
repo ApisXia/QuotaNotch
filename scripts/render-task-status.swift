@@ -1,0 +1,56 @@
+import AppKit
+import SwiftUI
+import ImageIO
+import UniformTypeIdentifiers
+
+@main struct TaskStatusDesignPreview {
+    @MainActor static func main() throws {
+        NSApplication.shared.setActivationPolicy(.accessory)
+        func board(_ elapsed: Double) -> some View {
+            VStack(alignment: .leading, spacing: 18) {
+                HStack {
+                    Text("任务状态").frame(width: 86, alignment: .leading)
+                    Text("之前").frame(width: 140)
+                    Text("精修 · 实际尺寸").frame(width: 140)
+                    Text("细节放大").frame(width: 58)
+                }.font(.system(size: 10)).foregroundStyle(.secondary)
+                ForEach(AgentRunState.allCases, id: \.self) { state in
+                    HStack(spacing: 8) {
+                        Text(AgentText.state(state)).font(.system(size: 11)).foregroundStyle(.white.opacity(0.85)).frame(width: 86, alignment: .leading)
+                        HStack(spacing: 20) {
+                            PreviousAgentPaperGlyph(state: state, previewElapsed: elapsed).scaleEffect(1.25)
+                            PreviousAgentPaperGlyph(state: state, minimal: true, previewElapsed: elapsed).scaleEffect(0.875)
+                            PreviousAgentPaperGlyph(state: state, minimal: true, previewElapsed: elapsed).scaleEffect(0.625)
+                        }.frame(width: 140)
+                        HStack(spacing: 20) {
+                            AgentPaperGlyph(state: state, previewElapsed: elapsed).scaleEffect(1.25)
+                            AgentPaperGlyph(state: state, minimal: true, previewElapsed: elapsed).scaleEffect(0.875)
+                            AgentPaperGlyph(state: state, minimal: true, previewElapsed: elapsed).scaleEffect(0.625)
+                        }.frame(width: 140)
+                        AgentPaperGlyph(state: state, previewElapsed: elapsed).scaleEffect(2.4).frame(width: 58)
+                    }.frame(height: 32)
+                }
+            }.padding(22).frame(width: 510, height: 360).background(.black).preferredColorScheme(.dark)
+        }
+        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 510, height: 360), styleMask: [.borderless], backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false
+        defer { window.orderOut(nil); window.contentView = nil; window.close() }
+        let output = URL(fileURLWithPath: "build/task-status-output")
+        let destination = CGImageDestinationCreateWithURL(output.appendingPathComponent("Task-status-refined.gif") as CFURL, UTType.gif.identifier as CFString, 54, nil)!
+        CGImageDestinationSetProperties(destination, [kCGImagePropertyGIFDictionary: [kCGImagePropertyGIFLoopCount: 0]] as CFDictionary)
+        for frame in 0..<54 {
+            let host = NSHostingView(rootView: board(Double(frame) / 15))
+            window.contentView = host; window.orderFront(nil)
+            RunLoop.main.run(until: Date().addingTimeInterval(0.12))
+            host.layoutSubtreeIfNeeded()
+            let bitmap = host.bitmapImageRepForCachingDisplay(in: host.bounds)!
+            host.cacheDisplay(in: host.bounds, to: bitmap)
+            CGImageDestinationAddImage(destination, bitmap.cgImage!, [kCGImagePropertyGIFDictionary: [kCGImagePropertyGIFDelayTime: 1.0 / 15]] as CFDictionary)
+            if [0, 3, 6, 9, 18, 36].contains(frame) {
+                try bitmap.representation(using: .png, properties: [:])!.write(to: output.appendingPathComponent("Task-status-refined-\(frame).png"))
+            }
+        }
+        precondition(CGImageDestinationFinalize(destination))
+        print("Rendered original and refined production glyphs, 54 native frames.")
+    }
+}
