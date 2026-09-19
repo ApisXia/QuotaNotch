@@ -535,7 +535,7 @@ struct SettingsPreviewRunner {
                 // actual sampling gaps and one rounded pixel, including a busy runner.
                 verifyPresentation(previous - width <= initial * 6 * (now - previousTime) + 1,
                     "Retreat jumped faster than its animation: " + message)
-                previousTime = now
+                if width != previous { previousTime = now }
                 if width > 0 && width < initial { intermediate = true }
                 previous = width
             }
