@@ -3,6 +3,7 @@
 #if SETTINGS_PREVIEW
 import AppKit
 import SwiftUI
+import Combine
 import Defaults
 import EventKit
 
@@ -522,22 +523,22 @@ struct SettingsPreviewRunner {
         func verifyRetreat(_ message: String, trigger: () -> Void) {
             let initial = director.pose.reservedWidth
             verifyPresentation(initial > 0, "Retreat test had no visible starting pose: " + message)
+            // Observe the actual published frames synchronously. Polling timestamps
+            // include an unrelated run-loop delay and cannot measure frame velocity.
+            var frames: [(time: TimeInterval, width: CGFloat)] = []
+            let observation = director.$pose.sink { pose in
+                frames.append((ProcessInfo.processInfo.systemUptime, pose.reservedWidth))
+            }
             trigger()
             verifyPresentation(director.pose.reservedWidth == initial, "Trigger instantly cleared geometry: " + message)
-            var previous = initial
-            var previousTime = ProcessInfo.processInfo.systemUptime
-            var intermediate = false
-            sampleFor(0.65) {
-                let width = director.pose.reservedWidth
-                verifyPresentation(width <= previous, "Retreat reversed direction: " + message)
-                let now = ProcessInfo.processInfo.systemUptime
-                // Smoothstep's maximum velocity is 1.5 / 0.25 seconds. Account for
-                // actual sampling gaps and one rounded pixel, including a busy runner.
-                verifyPresentation(previous - width <= initial * 6 * (now - previousTime) + 1,
-                    "Retreat jumped faster than its animation: " + message)
-                if width != previous { previousTime = now }
-                if width > 0 && width < initial { intermediate = true }
-                previous = width
+            sampleFor(0.65)
+            observation.cancel()
+            let intermediate = frames.contains { $0.width > 0 && $0.width < initial }
+            for (before, after) in zip(frames, frames.dropFirst()) {
+                verifyPresentation(after.width <= before.width, "Retreat reversed direction: " + message)
+                // Maximum smoothstep velocity is 1.5 / 0.25 seconds, plus rounding.
+                verifyPresentation(before.width - after.width <= initial * 6 * (after.time - before.time) + 1.1,
+                    "Retreat exceeded its velocity: \(message), frames=\(frames)")
             }
             verifyPresentation(intermediate && !director.pose.active && director.pose.reservedWidth == 0,
                 "Retreat did not finish continuously: \(message), initial=\(initial), final=\(director.pose.reservedWidth), active=\(director.pose.active), intermediate=\(intermediate)")
