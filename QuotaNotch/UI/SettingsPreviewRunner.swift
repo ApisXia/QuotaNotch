@@ -437,9 +437,9 @@ struct SettingsPreviewRunner {
         defer { window.orderOut(nil); window.contentView = nil; window.close() }
         settle()
         let url = output.appendingPathComponent("Task-status-motion.gif")
-        guard let destination = CGImageDestinationCreateWithURL(url as CFURL, UTType.gif.identifier as CFString, 54, nil) else { fatalError("Cannot create task motion preview") }
+        guard let destination = CGImageDestinationCreateWithURL(url as CFURL, UTType.gif.identifier as CFString, 270, nil) else { fatalError("Cannot create task motion preview") }
         CGImageDestinationSetProperties(destination, [kCGImagePropertyGIFDictionary: [kCGImagePropertyGIFLoopCount: 0]] as CFDictionary)
-        for frame in 0..<54 {
+        for frame in 0..<270 {
             // Render the entire SwiftUI tree, independent of AppKit's cached dirty layers.
             let renderer = ImageRenderer(content: board(Double(frame) / 15).environment(\.colorScheme, .dark))
             renderer.scale = 1
