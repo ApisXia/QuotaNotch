@@ -86,9 +86,15 @@ struct AgentPaperGlyph: View {
         case .failed:
             pageStack {
                 paper(AgentText.color(.failed), rules: false, neutralFold: true).overlay {
-                    AgentCrossMark().stroke(AgentText.color(.failed), style: StrokeStyle(lineWidth: 1.2, lineCap: .round))
-                        .frame(width: 4.2, height: 4.2)
-                        .shadow(color: AgentText.color(.failed).opacity(reduced ? 0 : AgentGlyphMotion.errorGlow(at: elapsed)), radius: 1.4)
+                    let glow = reduced ? 0 : AgentGlyphMotion.errorGlow(at: elapsed)
+                    ZStack {
+                        AgentCrossMark().stroke(AgentText.color(.failed), style: StrokeStyle(lineWidth: 2.8, lineCap: .round))
+                            .blur(radius: 1.4).opacity(glow)
+                        AgentCrossMark().stroke(AgentText.color(.failed), style: StrokeStyle(lineWidth: 1.2, lineCap: .round))
+                            .shadow(color: AgentText.color(.failed).opacity(glow), radius: 0.8)
+                    }
+                    .frame(width: 4.2, height: 4.2)
+                    .offset(x: -0.5)
                 }
             }
         case .completed:
