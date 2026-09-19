@@ -39,12 +39,10 @@ import UniformTypeIdentifiers
         let destination = CGImageDestinationCreateWithURL(output.appendingPathComponent("Task-status-refined.gif") as CFURL, UTType.gif.identifier as CFString, 54, nil)!
         CGImageDestinationSetProperties(destination, [kCGImagePropertyGIFDictionary: [kCGImagePropertyGIFLoopCount: 0]] as CFDictionary)
         for frame in 0..<54 {
-            let host = NSHostingView(rootView: board(Double(frame) / 15))
-            window.contentView = host; window.orderFront(nil)
-            RunLoop.main.run(until: Date().addingTimeInterval(0.12))
-            host.layoutSubtreeIfNeeded()
-            let bitmap = host.bitmapImageRepForCachingDisplay(in: host.bounds)!
-            host.cacheDisplay(in: host.bounds, to: bitmap)
+            let renderer = ImageRenderer(content: board(Double(frame) / 15).environment(\.colorScheme, .dark))
+            renderer.scale = 1
+            guard let cgImage = renderer.cgImage else { fatalError("Could not render task frame") }
+            let bitmap = NSBitmapImageRep(cgImage: cgImage)
             CGImageDestinationAddImage(destination, bitmap.cgImage!, [kCGImagePropertyGIFDictionary: [kCGImagePropertyGIFDelayTime: 1.0 / 15]] as CFDictionary)
             if [0, 3, 6, 9, 18, 36].contains(frame) {
                 try bitmap.representation(using: .png, properties: [:])!.write(to: output.appendingPathComponent("Task-status-refined-\(frame).png"))
