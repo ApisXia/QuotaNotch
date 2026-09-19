@@ -167,7 +167,7 @@ struct SettingsPreviewRunner {
                             MinimalQuotaGlyph(brand: .claude, percent: samples[index], size: metrics.minimalIconSize)
                         }
                         NotchMinimalIcon(metrics: metrics) {
-                            AgentPaperGlyph(state: states[index])
+                            AgentPaperGlyph(state: states[index], minimal: true)
                                 .scaleEffect(metrics.minimalIconSize / 16)
                                 .frame(width: metrics.minimalIconSize, height: metrics.minimalIconSize)
                         }

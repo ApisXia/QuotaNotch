@@ -50,7 +50,10 @@ struct AgentSessionDetails: View {
             VStack(alignment: .leading, spacing: 14) {
                 Text(AgentText.source(session)).font(.system(size: 13, weight: .medium))
                 Text(session.displayTitle).font(.headline)
-                Text(AgentText.state(session.state)).foregroundStyle(AgentText.color(session.state))
+                HStack(spacing: 7) {
+                    AgentPaperGlyph(state: session.state)
+                    Text(AgentText.state(session.state)).foregroundStyle(AgentText.color(session.state))
+                }
                 if !session.userPrompt.isEmpty {
                     Text(AgentText.t("你本轮输入的内容", "Your latest request")).font(.caption).foregroundStyle(.secondary)
                     Text(session.userPrompt).font(.system(size: 12)).textSelection(.enabled)

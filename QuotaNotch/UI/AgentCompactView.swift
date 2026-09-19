@@ -191,18 +191,21 @@ struct AgentTaskStateMark: View {
             let x = reduced || !animate ? 0.6 : AgentGlyphMotion.pageX(at: elapsed) * 0.4
             let y = reduced || !animate ? 0.5 : AgentGlyphMotion.pageY(at: elapsed) * 0.4
             ZStack {
-                RoundedRectangle(cornerRadius: 0.6).strokeBorder(Color.primary.opacity(0.9), lineWidth: 0.8)
+                AgentFoldedPage().stroke(Color.primary.opacity(0.7), lineWidth: 0.7)
                     .frame(width: 3.8, height: 4.5).offset(x: -x, y: -y)
-                RoundedRectangle(cornerRadius: 0.6).fill(AgentText.color(.running))
+                AgentFoldedPage().fill(Color.black)
+                    .overlay { AgentFoldedPage().stroke(AgentText.color(.running), lineWidth: 0.85) }
                     .frame(width: 3.8, height: 4.5).offset(x: x, y: y)
             }
         case .waiting:
-            AgentSpeechMark().fill(AgentText.color(state))
-                .overlay { AgentSpeechMark().stroke(Color.primary.opacity(0.85), lineWidth: 0.6) }
+            AgentSpeechMark().fill(AgentText.color(state).opacity(0.14))
+                .overlay { AgentSpeechMark().stroke(AgentText.color(state), lineWidth: 0.8) }
                 .frame(width: 5.2, height: 5.2)
                 .offset(y: reduced || !animate ? 0 : AgentGlyphMotion.waitingOffset(at: elapsed) * 0.4)
         case .completed:
-            RoundedRectangle(cornerRadius: 0.8).fill(AgentText.color(state)).frame(width: 4.3, height: 5.2)
+            AgentFoldedPage().stroke(AgentText.color(state), lineWidth: 0.8)
+                .frame(width: 4.3, height: 5.2)
+                .overlay { Capsule().fill(AgentText.color(state)).frame(width: 2.1, height: 0.8).offset(y: 1.1) }
         case .failed:
             AgentCrossMark().stroke(AgentText.color(state), style: StrokeStyle(lineWidth: 1.3, lineCap: .round))
                 .frame(width: 4, height: 4)
@@ -214,7 +217,7 @@ struct AgentTaskStateMark: View {
                 }
             }
         case .unknown:
-            RoundedRectangle(cornerRadius: 0.7).strokeBorder(Color.secondary, lineWidth: 0.8).frame(width: 4.3, height: 5.2)
+            AgentFoldedPage().stroke(Color.secondary, lineWidth: 0.7).frame(width: 4.3, height: 5.2)
         }
     }
 }

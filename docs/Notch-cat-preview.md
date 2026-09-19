@@ -1,4 +1,4 @@
-# Pixel cat preview · build 303
+# Pixel cat preview · build 304
 
 Experimental build on feature/notch-cat, based on 1.03. Not a stable release.
 
@@ -21,4 +21,6 @@ Task panels now expose a direct Read all action. The notch covers all current un
 
 The installer is ad-hoc signed, not notarized. Native layout regression checks and core tests run in the build workflow.
 
-Task-state design trial: one primary state controls shape, color, motion and badge count. Unread failures precede waiting, then running; other unread results follow recency. Waiting stays visible after reading. The fixed widget/minimal slots use page exchange, a double-bouncing bubble, a red cross, a closed green page, and purple twin bars for interruption. Cloud artifacts include a real-size animated glyph board.
+Unified task-state presentation: one primary state controls shape, color, motion and badge count. Unread failures precede waiting, then running; other unread results follow recency. Waiting stays visible after reading. The fixed widget/minimal slots use page exchange, a double-bouncing bubble, a red cross, a closed green page, and purple twin bars for interruption. Cloud artifacts include a real-size animated glyph board.
+
+Build 304 applies the approved folded-page design across widgets, minimal slots, task-only summaries, panel rows, the full task window and details. Six-point list marks use optically simplified outlines, and interruption consistently uses purple twin bars. Existing module widths and task-title space remain fixed.
