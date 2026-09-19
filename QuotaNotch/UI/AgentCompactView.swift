@@ -53,6 +53,14 @@ struct AgentPaperGlyph: View {
         }.frame(width: 10.8, height: 13).opacity(opacity)
     }
 
+    /// Every resting document shares the same front/back placement and silhouette.
+    private func pageStack<Front: View>(spread: Double = 0.65, @ViewBuilder front: () -> Front) -> some View {
+        ZStack {
+            paper(ink, rules: false, opacity: 0.55).offset(x: -spread, y: -spread)
+            front().offset(x: spread, y: spread)
+        }
+    }
+
     @ViewBuilder private func drawing(at elapsed: Double) -> some View {
         switch state {
         case .running:
@@ -76,28 +84,25 @@ struct AgentPaperGlyph: View {
                     .offset(x: 1.2, y: 0.5)
             }.offset(y: reduced ? 0 : AgentGlyphMotion.waitingOffset(at: elapsed))
         case .failed:
-            ZStack {
-                paper(ink, rules: false, opacity: 0.55).offset(x: -0.65, y: -0.65)
+            pageStack {
                 paper(AgentText.color(.failed), rules: false, neutralFold: true).overlay {
                     AgentCrossMark().stroke(AgentText.color(.failed), style: StrokeStyle(lineWidth: 1.5, lineCap: .round))
-                        .frame(width: 5.4, height: 5.4).offset(y: 1)
-                }.offset(x: 0.65, y: 0.65)
+                        .frame(width: 5.4, height: 5.4).offset(y: 1.2)
+                }
             }
         case .completed:
             let spread = reduced ? 0.65 : AgentGlyphMotion.completionSpread(at: elapsed)
-            ZStack {
-                paper(ink, rules: false, opacity: 0.55).offset(x: -spread, y: -spread)
+            pageStack(spread: spread) {
                 paper(AgentText.color(.completed), coloredEdge: true, rules: false)
                     .overlay {
                         VStack(alignment: .leading, spacing: 2) {
                             Capsule().fill(ink.opacity(0.7)).frame(width: 5, height: 0.8)
                             Capsule().fill(AgentText.color(.completed)).frame(width: 5, height: 1.6)
                         }.offset(y: 2.1)
-                    }.offset(x: spread, y: spread)
+                    }
             }
         case .interrupted:
-            ZStack {
-                paper(ink, rules: false, opacity: 0.55).offset(x: -0.65, y: -0.65)
+            pageStack {
                 paper(AgentText.color(.interrupted), rules: false, neutralFold: true).overlay {
                     HStack(spacing: 1.6) {
                         ForEach(0..<2) { _ in
@@ -105,10 +110,10 @@ struct AgentPaperGlyph: View {
                                 .frame(width: 1.6, height: 5)
                         }
                     }.offset(y: 1.2)
-                }.offset(x: 0.65, y: 0.65)
+                }
             }
         case .unknown:
-            paper(ink, opacity: 0.40)
+            pageStack { paper(ink) }.opacity(0.40)
         }
     }
 }

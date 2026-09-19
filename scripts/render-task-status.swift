@@ -8,25 +8,21 @@ import UniformTypeIdentifiers
         NSApplication.shared.setActivationPolicy(.accessory)
         func board(_ elapsed: Double) -> some View {
             VStack(alignment: .leading, spacing: 18) {
-                HStack {
+                HStack(spacing: 8) {
                     Text("任务状态").frame(width: 86, alignment: .leading)
-                    Text("之前").frame(width: 140)
-                    Text("精修 · 实际尺寸").frame(width: 140)
+                    Text("widget · 20").frame(width: 65)
+                    Text("minimal · 14").frame(width: 65)
+                    Text("minimal · 10").frame(width: 65)
+                    Text("列表 · 6").frame(width: 65)
                     Text("细节放大").frame(width: 58)
                 }.font(.system(size: 10)).foregroundStyle(.secondary)
                 ForEach(AgentRunState.allCases, id: \.self) { state in
                     HStack(spacing: 8) {
                         Text(AgentText.state(state)).font(.system(size: 11)).foregroundStyle(.white.opacity(0.85)).frame(width: 86, alignment: .leading)
-                        HStack(spacing: 20) {
-                            PreviousAgentPaperGlyph(state: state, previewElapsed: elapsed).scaleEffect(1.25)
-                            PreviousAgentPaperGlyph(state: state, minimal: true, previewElapsed: elapsed).scaleEffect(0.875)
-                            PreviousAgentPaperGlyph(state: state, minimal: true, previewElapsed: elapsed).scaleEffect(0.625)
-                        }.frame(width: 140)
-                        HStack(spacing: 20) {
-                            AgentPaperGlyph(state: state, previewElapsed: elapsed).scaleEffect(1.25)
-                            AgentPaperGlyph(state: state, previewElapsed: elapsed).scaleEffect(0.875)
-                            AgentPaperGlyph(state: state, previewElapsed: elapsed).scaleEffect(0.625)
-                        }.frame(width: 140)
+                        AgentPaperGlyph(state: state, previewElapsed: elapsed).scaleEffect(1.25).frame(width: 65)
+                        AgentPaperGlyph(state: state, previewElapsed: elapsed).scaleEffect(0.875).frame(width: 65)
+                        AgentPaperGlyph(state: state, previewElapsed: elapsed).scaleEffect(0.625).frame(width: 65)
+                        AgentTaskStateMark(state: state, previewElapsed: elapsed).frame(width: 65)
                         AgentPaperGlyph(state: state, previewElapsed: elapsed).scaleEffect(2.4).frame(width: 58)
                     }.frame(height: 32)
                 }
