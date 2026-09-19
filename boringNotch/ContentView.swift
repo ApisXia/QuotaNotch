@@ -34,7 +34,17 @@ struct ContentView: View {
 
 
     @State private var measuredClosedWidth: CGFloat = 0
-    @State private var taskWingOffset: CGFloat = 0
+    // Anchor the physical notch using the same state that chooses the rendered wings.
+    // A late child preference can be reset to zero by surrounding layout containers.
+    private var taskWingOffset: CGFloat {
+        guard vm.notchState == .closed, agentStore.showAccessory,
+              vm.effectiveClosedNotchHeight > 0, !eventPresentation.replacesPrimary,
+              !coordinator.helloAnimationRunning else { return 0 }
+        let asymmetric = compactPresentation == .combined || compactPresentation == .none
+        guard asymmetric else { return 0 }
+        let widget = QuotaCompactMetrics.iconSize(height: vm.effectiveClosedNotchHeight)
+        return NotchModuleMetrics(widgetWidth: widget).additionalWidth / 2
+    }
     @StateObject private var cat = NotchCatDirector()
     @AppStorage("notchCatEnabled") private var catEnabled = true
     @AppStorage("notchCatTaskCues") private var catTaskCues = true
@@ -181,7 +191,6 @@ struct ContentView: View {
                     .onTapGesture { openFromPointer(explicit: true) }
             }
         }
-        .onPreferenceChange(AgentWingOffsetKey.self) { taskWingOffset = $0 }
         .onPreferenceChange(CatWingSpacesKey.self) { catSpaces = $0; cat.updateSpaces($0) }
         .onChange(of: catEnabled) { _, enabled in
             if !enabled { cat.stop(); cat.clearCues() }

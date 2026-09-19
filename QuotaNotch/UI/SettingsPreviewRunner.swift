@@ -305,6 +305,15 @@ struct SettingsPreviewRunner {
         activity.notchReadEnabled = false
         vm.close()
         var compactWidths: [String: Int] = [:]
+        var combinedEdges: [String: (Int, Int)] = [:]
+        func blackEdges(_ bitmap: NSBitmapImageRep) -> (Int, Int) {
+            let row = max(1, Int(5 * CGFloat(bitmap.pixelsHigh) / host.bounds.height))
+            let points = (0..<bitmap.pixelsWide).filter { x in
+                guard let c = bitmap.colorAt(x: x, y: row)?.usingColorSpace(.deviceRGB) else { return false }
+                return max(c.redComponent, max(c.greenComponent, c.blueComponent)) < 0.06
+            }
+            return (points.first ?? 0, points.last ?? 0)
+        }
         func blackWidth(_ bitmap: NSBitmapImageRep) -> Int {
             let row = max(1, Int(5 * CGFloat(bitmap.pixelsHigh) / host.bounds.height))
             let points = (0..<bitmap.pixelsWide).filter { x in
@@ -348,6 +357,9 @@ struct SettingsPreviewRunner {
                 try bitmap.representation(using: .png, properties: [:])!.write(to: output.appendingPathComponent("Notch-closed-\(Int(headerHeight))-\(expanded)\(suffix).png"))
                 let color = bitmap.colorAt(x: bitmap.pixelsWide / 2, y: 2)!.usingColorSpace(.deviceRGB)!
                 precondition(max(color.redComponent, max(color.greenComponent, color.blueComponent)) < 0.06, "Closed notch detached")
+                if layout == "combined" {
+                    combinedEdges["\(Int(headerHeight))-\(expanded)"] = blackEdges(bitmap)
+                }
                 if layout == "tasks" {
                     let scale = CGFloat(bitmap.pixelsWide) / host.bounds.width
                     let budget = NotchModuleMetrics(widgetWidth: QuotaCompactMetrics.iconSize(height: headerHeight)).additionalWidth
@@ -368,6 +380,14 @@ struct SettingsPreviewRunner {
                 host.cacheDisplay(in: host.bounds, to: baseline)
                 let scale = CGFloat(baseline.pixelsWide) / host.bounds.width
                 let budget = NotchModuleMetrics(widgetWidth: QuotaCompactMetrics.iconSize(height: headerHeight)).additionalWidth
+                let baseEdges = blackEdges(baseline)
+                for selection in [false, true] {
+                    let edges = combinedEdges["\(Int(headerHeight))-\(selection)"]!
+                    verifyPresentation(abs(edges.0 - baseEdges.0) <= 1,
+                        "Adding minimal moved the music-side edge at height \(headerHeight): \(edges.0) vs \(baseEdges.0)")
+                    verifyPresentation(abs(CGFloat(edges.1 - baseEdges.1) - budget * scale) <= 2,
+                        "Minimal did not expand only the right side at height \(headerHeight)")
+                }
                 precondition(CGFloat(compactWidths[layout + String(Int(headerHeight))]! - blackWidth(baseline)) <= budget * scale + 2,
                              "Minimal exceeded its fixed additional-width budget")
                 try baseline.representation(using: .png, properties: [:])!.write(to: output.appendingPathComponent("Notch-closed-\(Int(headerHeight))-widget-only.png"))
