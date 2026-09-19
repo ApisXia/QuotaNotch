@@ -300,7 +300,10 @@ private struct CatWingModifier: ViewModifier {
         let nudge = selected && pose.crowded ? min(8, pose.reservedWidth) : 0
         HStack(spacing: 0) {
             if side == .right { Color.clear.frame(width: width) }
-            content.offset(x: side == .left ? -nudge : nudge).clipped().background(GeometryReader { proxy in
+            content.offset(x: side == .left ? -nudge : nudge)
+                // Task state marks extend into the camera-side gap at rest.
+                .clipShape(Rectangle().inset(by: nudge > 0 ? 0 : -16))
+                .background(GeometryReader { proxy in
                 Color.clear.onAppear { measured = proxy.size.width }
                     .onChange(of: proxy.size.width) { _, value in measured = value }
             })

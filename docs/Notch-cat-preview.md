@@ -1,4 +1,4 @@
-# Pixel cat preview · build 299
+# Pixel cat preview · build 300
 
 Experimental build on feature/notch-cat, based on 1.03. Not a stable release.
 
@@ -12,6 +12,7 @@ Experimental build on feature/notch-cat, based on 1.03. Not a stable release.
 - Cat heads are vertically centered in a fixed animation stage instead of hugging the bottom edge.
 - Pointer sampling replaces unreliable mouseMoved delivery to transparent views; the sampler slows down away from the notch and stops when unavailable.
 - Entry and retreat use monotonic elapsed time rather than accumulated frame sleeps, so delayed frames cannot stretch a short exit indefinitely.
+- Task-only summaries register their right wing too. Crowded screenshot checks require visible cream cat pixels, not just unchanged shell bounds. Task status marks retain their camera-side overflow at rest.
 - Widget measurement updates no longer restart the director. A changed active wing requests withdrawal.
 - Cloud tests check natural completion, continuous retreat, repeated gestures, layout changes and same-side crowded responses. They exercise the production sampling timer through to visible animation using simulated pointer input; this is not a claim of manual physical-mouse validation.
 - Two settings: cat enabled and task reactions enabled.

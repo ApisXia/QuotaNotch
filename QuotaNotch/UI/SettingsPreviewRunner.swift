@@ -616,6 +616,7 @@ struct SettingsPreviewRunner {
                 vm.close(); vm.closedNotchSize.height = height; vm.hideOnClosed = false
                 for side in CatSide.allCases {
                     var baseline: (Int, Int)?
+                    var baselineCream = 0
                     for active in [false, true] {
                         let crowded = side == .right && (mask == 7 || mask == 4)
                         let pose = CatPose(side: side, action: .curious, elapsed: 2, active: active,
@@ -634,6 +635,19 @@ struct SettingsPreviewRunner {
                             return max(c.redComponent, max(c.greenComponent, c.blueComponent)) < 0.06
                         }
                         let edges = (pixels.first!, pixels.last!)
+                        // A stable shell alone does not prove the crowded cat was drawn.
+                        // Count its warm cream pixels, excluding white text and state colors.
+                        var cream = 0
+                        if crowded {
+                            for y in 0..<min(bitmap.pixelsHigh, Int(height * scale)) {
+                                for x in 0..<bitmap.pixelsWide {
+                                    let c = bitmap.colorAt(x: x, y: y)!.usingColorSpace(.deviceRGB)!
+                                    if c.redComponent > 0.85 && c.greenComponent > 0.8 && c.blueComponent > 0.45
+                                        && c.greenComponent - c.blueComponent > 0.04
+                                        && c.redComponent - c.greenComponent < 0.15 { cream += 1 }
+                                }
+                            }
+                        }
                         // Save evidence before checking: failures must still provide a screenshot.
                         try bitmap.representation(using: .png, properties: [:])!.write(to: output.appendingPathComponent("Cat-check-\(mask)-\(Int(height))-\(side.rawValue)-\(active).png"))
                         verifyPresentation(vm.effectiveClosedNotchHeight == height, "Cat fixture height was reset")
@@ -643,9 +657,10 @@ struct SettingsPreviewRunner {
                             verifyPresentation(stationary <= 2, "Cat moved the opposite wing: mask \(mask), \(side), height \(height)")
                             verifyPresentation(change >= -2 && CGFloat(change) <= 32 * scale + 2, "Cat exceeded wing budget")
                             let full = side == .right && (mask == 7 || mask == 4)
+                            if full { verifyPresentation(cream > baselineCream + 2, "Crowded cat missing from rendered pixels: mask \(mask), height \(height), baseline=\(baselineCream), active=\(cream)") }
                             verifyPresentation(full ? abs(change) <= 2 : change > 0, "Wrong cat availability: mask \(mask), \(side), height \(height), delta \(change)")
                             records.append(["modules": mask, "height": height, "side": side.rawValue, "addedPixels": change])
-                        } else { baseline = edges }
+                        } else { baseline = edges; baselineCream = cream }
                         if active && height == 32 {
                             try bitmap.representation(using: .png, properties: [:])!.write(to: output.appendingPathComponent("Cat-layout-\(mask)-\(side.rawValue).png"))
                         }

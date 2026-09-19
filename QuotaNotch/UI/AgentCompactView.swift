@@ -349,6 +349,7 @@ struct AgentTaskOnlyWings: View {
                 .contentShape(Rectangle()).auditNotchModule("task-summary")
             }.buttonStyle(.plain)
                 .accessibilityLabel(recent.map { $0.displayTitle + " · " + AgentText.state($0.state) }.joined(separator: "; "))
+                .catWing(.right, occupied: textWidth, height: height)
         }
         .frame(height: height)
         .preference(key: AgentWingOffsetKey.self, value: (textWidth - iconWidth) / 2)
