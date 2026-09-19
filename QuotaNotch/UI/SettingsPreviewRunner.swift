@@ -571,6 +571,12 @@ struct SettingsPreviewRunner {
         director.summon(.left); sampleFor(0.7)
         verifyPresentation(director.pose.active && director.pose.side == .left && director.pose.crowded, "Both full wings discarded the requested left peek")
         verifyRetreat("crowded cancellation") { director.cancelSummon() }
+        director.summon(.right); director.cancelSummon()
+        sampleFor(0.4)
+        verifyPresentation(!director.pose.active, "Cancelled pending summon still appeared")
+        director.summon(.left); sampleFor(0.7)
+        verifyPresentation(director.pose.active && director.pose.side == .left, "Pending cancellation blocked the next gesture")
+        verifyRetreat("next gesture after pending cancellation") { director.cancelSummon() }
         region.enabled = false; region.refreshSampling(); region.clear()
         playback.cancel(); director.stop()
         window.orderOut(nil); window.contentView = nil; window.close()

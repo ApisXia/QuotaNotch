@@ -123,6 +123,7 @@ struct CatWingSpacesKey: PreferenceKey {
     }
     func cancelSummon() {
         pendingSummon = nil
+        if !pose.active { manualSide = nil }
         requestRetreat()
     }
     func summon(_ side: CatSide) {
