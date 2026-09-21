@@ -592,7 +592,7 @@ private final class BubbleInteractionView: NSView, NSDraggingSource {
         // delta and deliver the useful movement in `.changed`. Accumulate a
         // dominant vertical axis until it reaches the gesture threshold, then
         // claim that gesture once. Momentum is deliberately ignored.
-        guard event.momentumPhase == .none,
+        guard event.momentumPhase.isEmpty,
               BubbleScrollPolicy.isDominantVertical(deltaX: event.scrollingDeltaX, deltaY: vertical) else {
             super.scrollWheel(with: event)
             return
@@ -604,7 +604,7 @@ private final class BubbleInteractionView: NSView, NSDraggingSource {
         else if event.phase.contains(.ended) || event.phase.contains(.cancelled) { phase = .ended }
         else { phase = .changed }
         if let upward = verticalGesture.update(deltaX: event.scrollingDeltaX, deltaY: vertical,
-                                               phase: phase, isMomentum: event.momentumPhase != .none,
+                                               phase: phase, isMomentum: false,
                                                timestamp: event.timestamp, lastClaimTimestamp: lastVerticalToggle) {
             lastVerticalToggle = event.timestamp
             swipe?(upward)
