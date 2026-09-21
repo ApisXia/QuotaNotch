@@ -57,6 +57,13 @@ struct BubbleShelfView: View {
                     .buttonStyle(.bordered)
                     .controlSize(.small)
                 }
+                if store.isReceiving && collector.finderAutomationState != .enabled {
+                    Button(AgentText.t("检查 Finder", "Check Finder")) {
+                        collector.requestFinderAutomationFromUserAction()
+                    }
+                    .buttonStyle(.borderless)
+                    .font(.system(size: 9, weight: .medium))
+                }
             }
             .frame(height: 16)
 
@@ -203,6 +210,23 @@ struct BubbleShelfSettingsView: View {
                         .foregroundStyle(.secondary)
                     Button(AgentText.t("打开访问设置", "Allow Access")) {
                         collector.requestAccessibilityFromUserAction()
+                    }
+                }
+                if store.isReceiving {
+                    HStack(spacing: 8) {
+                        Text(AgentText.t("Finder 文件选择", "Finder file selection"))
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                        Spacer()
+                        if collector.finderAutomationState == .enabled {
+                            Label(AgentText.t("已允许", "Allowed"), systemImage: "checkmark.circle")
+                                .font(.footnote)
+                                .foregroundStyle(.secondary)
+                        } else {
+                            Button(AgentText.t("检查 Finder", "Check Finder")) {
+                                collector.requestFinderAutomationFromUserAction()
+                            }
+                        }
                     }
                 }
                 LabeledContent(AgentText.t("已保存", "Saved")) {
