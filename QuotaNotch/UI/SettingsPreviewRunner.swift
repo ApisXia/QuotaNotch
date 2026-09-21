@@ -18,6 +18,7 @@ struct SettingsPreviewRunner {
         let output = URL(fileURLWithPath: "build/Settings-previews/\(language)")
         try FileManager.default.createDirectory(at: output, withIntermediateDirectories: true)
         try BubbleShelfVerification.run()
+        try BubbleCollectorVerification.run()
         BubbleShelfStore.shared.resetPreviewConfiguration()
         let shelfPreviewFile = output.appendingPathComponent("shelf-preview.txt")
         let shelfPreviewNote = output.appendingPathComponent("shelf-preview-note.md")
