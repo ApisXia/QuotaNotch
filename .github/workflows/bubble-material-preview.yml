@@ -1,0 +1,38 @@
+name: Native bubble material preview
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [feature/bubble-native-material]
+    paths:
+      - artifacts/bubble-material-native/**
+      - .github/workflows/bubble-material-preview.yml
+
+permissions:
+  contents: read
+
+concurrency:
+  group: bubble-material-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  native-preview:
+    runs-on: macos-15
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: '26.0'
+      - name: Build SwiftUI app and render material evidence
+        run: bash artifacts/bubble-material-native/scripts/build-and-capture.sh "$RUNNER_TEMP/bubble-material-preview"
+      - name: Upload installable app and native render evidence
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: Native-bubble-material-${{ github.sha }}
+          path: ${{ runner.temp }}/bubble-material-preview/**
+          if-no-files-found: warn
+          retention-days: 30
