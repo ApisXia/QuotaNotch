@@ -30,7 +30,10 @@ struct BubblePreviewPlacement: Identifiable, Equatable {
 enum BubbleItemLayout {
     static let sampleCounts = [0, 1, 2, 3, 6]
     static let maximumVisiblePreviews = 3
-    static let contentCycleDuration: TimeInterval = 12
+    static let contentCycleDuration: TimeInterval = 24
+    static let contentInitialDwell: TimeInterval = 1.5
+    static let contentTransitionDuration: TimeInterval = 0.8
+    static let contentStaggerInterval: TimeInterval = 4
 
     static func visiblePreviewCount(for totalCount: Int) -> Int {
         min(max(totalCount, 0), maximumVisiblePreviews)
@@ -67,10 +70,10 @@ enum BubbleItemLayout {
         default:
             [
                 // Three unequal planes: a photo lead, with document and
-                // diagram edges readable at upper and lower right.
+                // diagram faces separated around the lower-right edge.
                 BubblePreviewPlacement(
                     slot: 0, content: .stillLife,
-                    width: 0.40, height: 0.49, x: -0.11, y: 0.02,
+                    width: 0.37, height: 0.46, x: -0.14, y: -0.02,
                     rotation: -5, opacity: 0.98, depth: 2, drift: 0.006
                 ),
                 BubblePreviewPlacement(
@@ -80,7 +83,7 @@ enum BubbleItemLayout {
                 ),
                 BubblePreviewPlacement(
                     slot: 2, content: .diagram,
-                    width: 0.22, height: 0.30, x: 0.11, y: 0.20,
+                    width: 0.27, height: 0.34, x: 0.09, y: 0.18,
                     rotation: 8, opacity: 0.94, depth: 0, drift: 0.006
                 )
             ]
@@ -95,9 +98,21 @@ enum BubbleItemLayout {
         return (samples[placement.slot], samples[placement.slot + maximumVisiblePreviews])
     }
 
-    static func crossfade(at time: TimeInterval) -> Double {
-        let phase = (time.truncatingRemainder(dividingBy: contentCycleDuration)) / contentCycleDuration
-        return 0.5 - 0.5 * cos(phase * 2 * .pi)
+    static func crossfade(at time: TimeInterval, forSlot slot: Int) -> Double {
+        let remainder = time.truncatingRemainder(dividingBy: contentCycleDuration)
+        let phase = (remainder + contentCycleDuration).truncatingRemainder(dividingBy: contentCycleDuration)
+        let reverseStart = contentCycleDuration * 0.5
+        if phase < reverseStart {
+            let local = phase - contentInitialDwell - Double(slot) * contentStaggerInterval
+            return smoothstep(local / contentTransitionDuration)
+        }
+        let local = phase - reverseStart - contentInitialDwell - Double(slot) * contentStaggerInterval
+        return 1 - smoothstep(local / contentTransitionDuration)
+    }
+
+    private static func smoothstep(_ value: TimeInterval) -> Double {
+        let t = min(1, max(0, value))
+        return t * t * (3 - 2 * t)
     }
 
     static func maximumVisualRadius(for placement: BubblePreviewPlacement, diameter: CGFloat) -> CGFloat {
@@ -153,7 +168,9 @@ struct BubbleContentPreviews: View {
                     DemoContentCard(
                         front: contentPair.front,
                         back: contentPair.back,
-                        crossfade: totalCount > BubbleItemLayout.maximumVisiblePreviews ? BubbleItemLayout.crossfade(at: time) : 0,
+                        crossfade: totalCount > BubbleItemLayout.maximumVisiblePreviews
+                            ? BubbleItemLayout.crossfade(at: time, forSlot: placement.slot)
+                            : 0,
                         shellDiameter: bubbleDiameter
                     )
                     .frame(width: diameter * placement.width, height: diameter * placement.height)
@@ -449,18 +466,18 @@ private struct RearStackEdge: View {
     let height: CGFloat
     let shellDiameter: CGFloat
 
-    private var step: CGFloat { max(1.7, shellDiameter * 0.016) }
+    private var step: CGFloat { max(2.8, shellDiameter * 0.019) }
     private var radius: CGFloat { max(3, shellDiameter * 0.035) }
 
     var body: some View {
         ZStack {
             RoundedRectangle(cornerRadius: radius, style: .continuous)
-                .fill(Color(red: 0.84, green: 0.87, blue: 0.85).opacity(0.84))
-                .overlay { RoundedRectangle(cornerRadius: radius, style: .continuous).strokeBorder(.white.opacity(0.72), lineWidth: 0.65) }
+                .fill(Color(red: 0.60, green: 0.70, blue: 0.72).opacity(0.94))
+                .overlay { RoundedRectangle(cornerRadius: radius, style: .continuous).strokeBorder(.white.opacity(0.78), lineWidth: 0.7) }
                 .offset(x: -step * 1.8, y: step * 1.8)
             RoundedRectangle(cornerRadius: radius, style: .continuous)
-                .fill(Color(red: 0.78, green: 0.82, blue: 0.82).opacity(0.88))
-                .overlay { RoundedRectangle(cornerRadius: radius, style: .continuous).strokeBorder(.white.opacity(0.74), lineWidth: 0.65) }
+                .fill(Color(red: 0.71, green: 0.79, blue: 0.78).opacity(0.96))
+                .overlay { RoundedRectangle(cornerRadius: radius, style: .continuous).strokeBorder(.white.opacity(0.84), lineWidth: 0.7) }
                 .offset(x: -step * 0.9, y: step * 0.9)
         }
         .frame(width: width, height: height)

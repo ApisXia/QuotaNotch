@@ -117,6 +117,12 @@ enum NativeCapture {
         }
         guard difference(countThree, countSix) > 0.002,
               localizedDifference(
+                smallThree,
+                smallSix,
+                center: CGPoint(x: 160, y: 160),
+                insideRadius: 58
+              ) > 0.00015,
+              localizedDifference(
                 countThreeStart,
                 countSixStart,
                 center: CGPoint(x: 512, y: 512),
@@ -386,7 +392,7 @@ enum NativeCapture {
         case .lightSweep:
             duration = 8.0
         case .counts:
-            duration = BubbleItemLayout.contentCycleDuration
+            duration = 12.0
         }
         let frameCount = Int(duration * Double(fps))
         let writer = try AVAssetWriter(outputURL: url, fileType: .mp4)

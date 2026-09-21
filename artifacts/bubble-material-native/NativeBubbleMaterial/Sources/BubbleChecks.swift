@@ -23,15 +23,24 @@ enum BubbleChecks {
         }
         let sixPlacements = BubbleItemLayout.placements(for: 6)
         let sixContentPairs = sixPlacements.map { BubbleItemLayout.contentPair(for: $0, totalCount: 6) }
+        let staggerFront = sixPlacements.map { BubbleItemLayout.crossfade(at: 0, forSlot: $0.slot) }
+        let staggerBack = sixPlacements.map { BubbleItemLayout.crossfade(at: 12, forSlot: $0.slot) }
+        let staggerReset = sixPlacements.map { BubbleItemLayout.crossfade(at: 24, forSlot: $0.slot) }
+        let activeTransitions = [1.9, 5.9, 9.9].map { time in
+            sixPlacements.map { BubbleItemLayout.crossfade(at: time, forSlot: $0.slot) }
+                .filter { (0.05..<0.95).contains($0) }
+                .count
+        }
         guard BubbleItemLayout.placements(for: 3) == sixPlacements,
               BubbleItemLayout.visiblePreviewCount(for: 4) == 3,
               BubbleItemLayout.showsOverflowHint(for: 4),
               BubbleItemLayout.placements(for: 4) == sixPlacements,
               sixContentPairs.allSatisfy({ $0.front != $0.back }),
-              abs(BubbleItemLayout.crossfade(at: 0)) < 0.0001,
-              abs(BubbleItemLayout.crossfade(at: BubbleItemLayout.contentCycleDuration / 2) - 1) < 0.0001,
-              abs(BubbleItemLayout.crossfade(at: BubbleItemLayout.contentCycleDuration) - 0) < 0.0001 else {
-            throw BubbleLabError.capture("the six-item state must reuse stable three-card slots with a smooth content crossfade")
+              staggerFront.allSatisfy({ abs($0) < 0.0001 }),
+              staggerBack.allSatisfy({ abs($0 - 1) < 0.0001 }),
+              staggerReset.allSatisfy({ abs($0) < 0.0001 }),
+              activeTransitions == [1, 1, 1] else {
+            throw BubbleLabError.capture("the six-item state must reuse stable slots and stagger short smooth content fades")
         }
 
         guard BubbleMotion.arrival(at: -0.01) == .resting else {
