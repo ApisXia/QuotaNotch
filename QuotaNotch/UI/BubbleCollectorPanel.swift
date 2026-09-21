@@ -320,6 +320,7 @@ private struct BubbleCollectorDropTarget: NSViewRepresentable {
 
     func makeNSView(context: Context) -> BubbleCollectorDropView {
         let view = BubbleCollectorDropView()
+        view.onClick = { controller.captureCurrentCandidate() }
         view.onDrop = { info in
             let sourcePID = BubbleCollectorDropView.sourceProcessID(for: info)
             return controller.receiveDrop(info.draggingPasteboard, sourceProcessID: sourcePID)
@@ -329,6 +330,7 @@ private struct BubbleCollectorDropTarget: NSViewRepresentable {
 
     func updateNSView(_ nsView: BubbleCollectorDropView, context: Context) {
         nsView.isReceiving = BubbleShelfStore.shared.isReceiving
+        nsView.onClick = { controller.captureCurrentCandidate() }
         nsView.onDrop = { info in
             let sourcePID = BubbleCollectorDropView.sourceProcessID(for: info)
             return controller.receiveDrop(info.draggingPasteboard, sourceProcessID: sourcePID)
@@ -338,7 +340,10 @@ private struct BubbleCollectorDropTarget: NSViewRepresentable {
 
 private final class BubbleCollectorDropView: NSView {
     var isReceiving = false
+    var onClick: (() -> Void)?
     var onDrop: ((NSDraggingInfo) -> Bool)?
+    private var trackingClick = false
+    private var sawDrag = false
     private let accepted = [
         NSPasteboard.PasteboardType.fileURL,
         NSPasteboard.PasteboardType.URL,
@@ -353,11 +358,26 @@ private final class BubbleCollectorDropView: NSView {
         registerForDraggedTypes(accepted)
     }
 
+    override func mouseDown(with event: NSEvent) {
+        trackingClick = isReceiving
+        sawDrag = false
+        super.mouseDown(with: event)
+    }
+
+    override func mouseUp(with event: NSEvent) {
+        if trackingClick && !sawDrag { onClick?() }
+        trackingClick = false
+        sawDrag = false
+        super.mouseUp(with: event)
+    }
+
     override func draggingEntered(_ sender: NSDraggingInfo) -> NSDragOperation {
+        sawDrag = true
         accepts(sender) ? .copy : []
     }
 
     override func draggingUpdated(_ sender: NSDraggingInfo) -> NSDragOperation {
+        sawDrag = true
         accepts(sender) ? .copy : []
     }
 
@@ -366,6 +386,7 @@ private final class BubbleCollectorDropView: NSView {
     }
 
     override func performDragOperation(_ sender: NSDraggingInfo) -> Bool {
+        sawDrag = true
         guard accepts(sender) else { return false }
         return onDrop?(sender) ?? false
     }

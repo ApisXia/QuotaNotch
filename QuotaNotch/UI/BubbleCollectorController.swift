@@ -156,8 +156,9 @@ final class BubbleCollectorController: ObservableObject {
     }
 
     func captureCurrentCandidate() {
-        guard store.isReceiving, case .selection(let selection) = presentation,
-              selection.generation == generation,
+        guard store.isReceiving else { return }
+        guard case .selection(let selection) = presentation else { return }
+        guard selection.generation == generation,
               Date().timeIntervalSince(selection.observedAt) < 18 else {
             hideCandidate()
             return
