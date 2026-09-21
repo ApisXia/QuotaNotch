@@ -227,7 +227,14 @@ enum NativeCapture {
         writer.startSession(atSourceTime: .zero)
 
         for frameIndex in 0..<frameCount {
+            let readinessWaitBegan = Date()
             while !input.isReadyForMoreMediaData {
+                guard writer.status == .writing else {
+                    throw BubbleLabError.capture("AVFoundation stopped while waiting for frame \(frameIndex): \(writer.error?.localizedDescription ?? writer.status.rawValue.description)")
+                }
+                guard Date().timeIntervalSince(readinessWaitBegan) < 10 else {
+                    throw BubbleLabError.capture("AVFoundation timed out while waiting for frame \(frameIndex)")
+                }
                 try await Task.sleep(nanoseconds: 2_000_000)
             }
             let time = Double(frameIndex) / Double(fps)

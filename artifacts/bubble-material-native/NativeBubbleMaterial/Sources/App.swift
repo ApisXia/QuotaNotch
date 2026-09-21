@@ -55,7 +55,7 @@ struct InteractiveBubbleLab: View {
             TimelineView(.animation(minimumInterval: 1.0 / 60.0, paused: false)) { context in
                 let time = context.date.timeIntervalSince(startTime)
                 let elapsed = arrivalStartedAt.map { context.date.timeIntervalSince($0) }
-                let arrival = elapsed.map { $0 <= BubbleMotion.totalDuration ? BubbleMotion.arrival(at: $0) : .resting } ?? .resting
+                let arrival = elapsed.map { BubbleMotion.arrival(at: $0) } ?? .resting
 
                 BubbleScene(time: time, light: pointer, populated: populated, arrival: arrival)
                     .contentShape(Rectangle())
@@ -77,6 +77,7 @@ struct InteractiveBubbleLab: View {
             HStack(spacing: 14) {
                 Toggle("Flakes", isOn: $populated)
                     .toggleStyle(.switch)
+                    .onChange(of: populated) { _ in arrivalStartedAt = nil }
                 Button("Play arrival") {
                     populated = true
                     arrivalStartedAt = .now

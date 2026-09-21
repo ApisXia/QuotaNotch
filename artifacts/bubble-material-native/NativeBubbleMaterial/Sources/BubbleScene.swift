@@ -120,7 +120,7 @@ private struct Flake: View {
 
     var body: some View {
         let angle = angles[index] + sin(time * 0.31 + phases[index]) * 0.12
-        let radius = 52 * (1 - gather) + 12 * gather + sin(time * 0.52 + phases[index]) * 3
+        let radius = 52 * (1 - gather) + 12 * gather + CGFloat(sin(time * 0.52 + phases[index]) * 3)
         let opacity = 0.54 + 0.23 * (0.5 + 0.5 * sin(time * 0.78 + phases[index]))
 
         Capsule()
