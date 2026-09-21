@@ -373,12 +373,12 @@ private final class BubbleCollectorDropView: NSView {
 
     override func draggingEntered(_ sender: NSDraggingInfo) -> NSDragOperation {
         sawDrag = true
-        accepts(sender) ? NSDragOperation.copy : NSDragOperation()
+        return accepts(sender) ? NSDragOperation.copy : NSDragOperation()
     }
 
     override func draggingUpdated(_ sender: NSDraggingInfo) -> NSDragOperation {
         sawDrag = true
-        accepts(sender) ? NSDragOperation.copy : NSDragOperation()
+        return accepts(sender) ? NSDragOperation.copy : NSDragOperation()
     }
 
     override func prepareForDragOperation(_ sender: NSDraggingInfo) -> Bool {
