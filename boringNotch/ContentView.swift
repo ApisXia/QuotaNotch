@@ -516,6 +516,7 @@ struct ContentView: View {
                         .matchedGeometryEffect(id: "albumArt", in: albumArtNamespace)
                         .frame(width: max(0, vm.effectiveClosedNotchHeight - 12),
                                height: max(0, vm.effectiveClosedNotchHeight - 12))
+                        .auditNotchModule("music")
                         .auditNotchFrame("album")
                 }
                 .buttonStyle(.plain)
@@ -605,7 +606,6 @@ struct ContentView: View {
             height: vm.effectiveClosedNotchHeight,
             alignment: .center
         )
-        .auditNotchModule("music")
     }
 
     private func openTasks() {
