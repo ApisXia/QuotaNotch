@@ -78,7 +78,7 @@ struct BubbleCollectorPreview: View {
             let time = timeline.date.timeIntervalSince(timelineStart)
             let payloads = displayedPayloads
             let phase = capturePhase(at: timeline.date)
-            let breathing = 0.5 + 0.5 * sin(time * 0.68)
+            let breathing = (0.5 + 0.5 * sin(time * 0.68)) * (payloads.isEmpty ? 1 : 1.45)
             let shell = CollectorSphereShape(time: time, breathing: breathing)
             let shader = ShaderLibrary.default.pearlFilm(
                 .boundingRect,
