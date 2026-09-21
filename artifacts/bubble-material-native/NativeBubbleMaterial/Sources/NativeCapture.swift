@@ -342,7 +342,7 @@ enum NativeCapture {
         return count > 0 ? total / Double(count) : 0
     }
 
-    /// Compares only the lower peek area below the bottom-most sharp preview.
+    /// Compares only the narrow lower sliver just beyond the sharp stack.
     /// This checks that the fourth layer contributes its actual blurred card
     /// face there, instead of passing on a global tint or a generic outline.
     private static func lowerPeekingDifference(
@@ -356,8 +356,8 @@ enum NativeCapture {
         let pixelsPerPoint = renderScale
         let xRadius = Int(bubbleDiameter * 0.22 * pixelsPerPoint)
         func bandDifference(direction: CGFloat) -> Double {
-            let yStart = Int(center.y + direction * bubbleDiameter * 0.31 * pixelsPerPoint)
-            let yEnd = Int(center.y + direction * bubbleDiameter * 0.405 * pixelsPerPoint)
+            let yStart = Int(center.y + direction * bubbleDiameter * 0.245 * pixelsPerPoint)
+            let yEnd = Int(center.y + direction * bubbleDiameter * 0.310 * pixelsPerPoint)
             var total = 0.0
             var count = 0
             for y in stride(from: max(0, min(yStart, yEnd)), to: min(image.height, max(yStart, yEnd)), by: 2) {

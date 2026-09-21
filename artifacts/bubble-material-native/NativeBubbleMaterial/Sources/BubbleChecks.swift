@@ -40,6 +40,7 @@ enum BubbleChecks {
             .map { BubbleItemLayout.bottomEdgeUnit(for: $0) }
             .max() ?? 0
         let fourthCard = settledFour.placements[3]
+        let fourthPeek = BubbleItemLayout.bottomEdgeUnit(for: fourthCard) - sharpBottomFour
         guard contentsThree == [.stillLife, .document, .diagram],
               contentsFour == [.report, .stillLife, .document, .diagram],
               contentsFive == [.fieldNotes, .report, .stillLife, .document],
@@ -47,7 +48,7 @@ enum BubbleChecks {
               settledFour.placements.filter({ $0.blur > 0 }).count == 1,
               fourthCard.blur > 0,
               fourthCard.depth < (settledFour.placements.prefix(3).map(\.depth).min() ?? 0),
-              BubbleItemLayout.bottomEdgeUnit(for: fourthCard) > sharpBottomFour + 0.06,
+              (0.045...0.070).contains(fourthPeek),
               settledFive.placements.prefix(3).allSatisfy({ $0.blur == 0 }),
               settledFive.placements.filter({ $0.blur > 0 }).count == 1,
               settledFive.placements[3].blur > 0,

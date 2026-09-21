@@ -75,7 +75,7 @@ enum BubbleItemLayout {
                 (0.28, 0.35, 0.070, 0.045, 8),
                 // The complete fourth preview sits behind the group and peeks
                 // below its lowest sharp card. Its artwork is blurred as well.
-                (0.26, 0.32, -0.015, 0.225, 2)
+                (0.26, 0.32, -0.015, 0.110, 2)
             ]
             let layout = layouts[slot]
             return BubblePreviewPlacement(
