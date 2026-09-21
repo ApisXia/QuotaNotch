@@ -33,6 +33,20 @@ enum BubbleCollectorPolicy {
         return !types.isDisjoint(with: supportedDragTypes)
     }
 
+    static func shouldAttemptFinderAutomation(
+        receiving: Bool,
+        frontmostBundleID: String?,
+        explicitRequest: Bool,
+        permissionGranted: Bool
+    ) -> Bool {
+        guard receiving else { return false }
+        // The visible Shelf button is an explicit request and may be pressed
+        // while Settings/Shelf is frontmost; the target is resolved by the
+        // permission helper rather than by the current frontmost app.
+        if explicitRequest { return true }
+        return frontmostBundleID == "com.apple.finder" && permissionGranted
+    }
+
     static let supportedDragTypes: Set<String> = [
         "public.file-url", "public.url", "public.utf8-plain-text", "public.plain-text",
         "public.png", "public.jpeg", "public.tiff"

@@ -2,6 +2,7 @@
 import AppKit
 import ApplicationServices
 import Combine
+import CoreServices
 import Foundation
 import UniformTypeIdentifiers
 
@@ -12,6 +13,15 @@ enum BubbleCollectorAvailability: Equatable {
     case selectionUnavailable
     case captured
     case error
+}
+
+/// Finder automation is deliberately opt-in in addition to Accessibility. A
+/// denied request stays cached for the current receive session so selection
+/// events never cause repeated Apple Events prompts.
+enum BubbleFinderAutomationState: Equatable {
+    case notRequested
+    case enabled
+    case denied
 }
 
 enum BubbleCollectorPayload: Equatable, Identifiable {
@@ -70,6 +80,7 @@ final class BubbleCollectorController: ObservableObject {
     static let shared = BubbleCollectorController()
 
     @Published private(set) var availability: BubbleCollectorAvailability = .disabled
+    @Published private(set) var finderAutomationState: BubbleFinderAutomationState = .notRequested
     @Published private(set) var statusMessage: String?
     @Published private(set) var presentation: BubbleCollectorPresentation?
 
@@ -140,6 +151,7 @@ final class BubbleCollectorController: ObservableObject {
         store.isReceiving = false
         generation &+= 1
         stopMonitors(clearPresentation: true)
+        finderAutomationState = .notRequested
         availability = .disabled
         statusMessage = nil
     }
@@ -153,6 +165,51 @@ final class BubbleCollectorController: ObservableObject {
             return
         }
         beginMonitoring()
+    }
+
+    /// Explicitly tests Finder automation after the user asks for it. Passive
+    /// selection events never call this method and therefore never trigger an
+    /// Automation consent prompt.
+    func requestFinderAutomationFromUserAction() {
+        guard store.isReceiving else { return }
+        guard NSWorkspace.shared.runningApplications.contains(where: {
+            $0.bundleIdentifier == "com.apple.finder"
+        }) else {
+            statusMessage = "Finder is not running. Open Finder, then choose Allow Finder again."
+            return
+        }
+        guard BubbleCollectorPolicy.shouldAttemptFinderAutomation(
+            receiving: store.isReceiving,
+            frontmostBundleID: nil,
+            explicitRequest: true,
+            permissionGranted: false
+        ) else { return }
+
+        let expectedGeneration = generation
+        selectionReadRevision &+= 1
+        let revision = selectionReadRevision
+        finderAutomationState = .notRequested
+        statusMessage = "Requesting Finder access…"
+        axQueue.async { [weak self] in
+            let result = FinderAppleEventReader.determinePermission(askUserIfNeeded: true)
+            DispatchQueue.main.async { [weak self] in
+                guard let self, self.isRunning, self.store.isReceiving,
+                      self.generation == expectedGeneration,
+                      self.selectionReadRevision == revision else { return }
+                switch result {
+                case .succeeded:
+                    self.finderAutomationState = .enabled
+                    self.availability = .ready
+                    self.statusMessage = "Finder access is enabled. Select files in Finder or drag them into the bubble."
+                case .failed(let message):
+                    self.finderAutomationState = .denied
+                    self.availability = .selectionUnavailable
+                    self.statusMessage = message
+                case .notAttempted:
+                    self.statusMessage = "Finder selection access could not be checked."
+                }
+            }
+        }
     }
 
     func captureCurrentCandidate() {
@@ -225,6 +282,7 @@ final class BubbleCollectorController: ObservableObject {
     func shutdown() {
         generation &+= 1
         stopMonitors(clearPresentation: true)
+        finderAutomationState = .notRequested
         availability = .disabled
     }
 
@@ -316,17 +374,34 @@ final class BubbleCollectorController: ObservableObject {
         let revision = selectionReadRevision
         let expectedGeneration = generation
         let anchor = NSEvent.mouseLocation
+        let finderAutomation: FinderAutomationReadMode = finderAutomationState == .enabled ? .enabled : .disabled
         axQueue.async { [weak self] in
-            let sample = AXSelectionReader.read(processID: processID, bundleID: bundleID, fallbackAnchor: anchor)
+            let result = AXSelectionReader.read(
+                processID: processID, bundleID: bundleID, fallbackAnchor: anchor,
+                finderAutomation: finderAutomation
+            )
             DispatchQueue.main.async { [weak self] in
                 guard let self, self.isRunning, self.store.isReceiving,
                       self.generation == expectedGeneration,
+                      self.selectionReadRevision == revision,
                       NSWorkspace.shared.frontmostApplication?.processIdentifier == processID else { return }
+                var finderFailureMessage: String?
+                switch result.finderAutomation {
+                case .notAttempted:
+                    break
+                case .succeeded:
+                    self.finderAutomationState = .enabled
+                case .failed(let message):
+                    self.finderAutomationState = .denied
+                    finderFailureMessage = message
+                }
                 if baseline {
-                    guard self.selectionReadRevision == revision else { return }
-                    self.previousFingerprint = sample?.fingerprint
+                    self.previousFingerprint = result.sample?.fingerprint
                 } else {
-                    self.applySelectionSample(sample, from: processID)
+                    self.applySelectionSample(result.sample, from: processID)
+                }
+                if let finderFailureMessage {
+                    self.statusMessage = finderFailureMessage
                 }
             }
         }
@@ -493,17 +568,93 @@ private struct AXSelectionSample {
     let isSecureField: Bool
 }
 
-/// Reads only the frontmost app's current selection. No clipboard polling or AppleEvents.
+private enum FinderAutomationReadMode {
+    case disabled
+    case enabled
+    case explicit
+}
+
+private enum FinderAutomationReadOutcome {
+    case notAttempted
+    case succeeded
+    case failed(String)
+}
+
+private struct AXSelectionReadResult {
+    let sample: AXSelectionSample?
+    let finderAutomation: FinderAutomationReadOutcome
+}
+
+private struct FinderAppleEventReadResult {
+    let urls: [URL]
+    let omittedCount: Int
+    let failureMessage: String?
+
+    var succeeded: Bool { failureMessage == nil }
+}
+
+/// Reads the frontmost app's current selection. Finder automation is only
+/// attempted after the user explicitly enables it from the Shelf UI.
 private enum AXSelectionReader {
-    static func read(processID: pid_t, bundleID: String?, fallbackAnchor: CGPoint) -> AXSelectionSample? {
-        guard AXIsProcessTrusted(), processID != ProcessInfo.processInfo.processIdentifier else { return nil }
+    private static let finderBundleID = "com.apple.finder"
+    private static let selectionAttributes = [
+        kAXSelectedChildrenAttribute,
+        kAXSelectedRowsAttribute,
+        kAXSelectedColumnsAttribute,
+        kAXSelectedCellsAttribute
+    ]
+    private static let maximumTraversalElements = 96
+    private static let maximumChildElements = 24
+    private static let maximumSelectionDepth = 8
+    private static let traversalBudgetSeconds = 0.20
+
+    static func read(
+        processID: pid_t,
+        bundleID: String?,
+        fallbackAnchor: CGPoint,
+        finderAutomation: FinderAutomationReadMode
+    ) -> AXSelectionReadResult {
+        guard AXIsProcessTrusted(), processID != ProcessInfo.processInfo.processIdentifier else {
+            return AXSelectionReadResult(sample: nil, finderAutomation: .notAttempted)
+        }
         let application = AXUIElementCreateApplication(processID)
         if let focused = axElement(from: attribute(application, kAXFocusedUIElementAttribute)),
            let sample = selectedText(from: focused, anchor: fallbackAnchor) {
-            return sample
+            return AXSelectionReadResult(sample: sample, finderAutomation: .notAttempted)
         }
-        guard bundleID == "com.apple.finder" else { return nil }
-        return selectedFiles(in: application, anchor: fallbackAnchor)
+        guard bundleID == finderBundleID else {
+            return AXSelectionReadResult(sample: nil, finderAutomation: .notAttempted)
+        }
+
+        if finderAutomation == .explicit {
+            return readFinderAutomation(processID: processID, anchor: fallbackAnchor)
+        }
+        if let sample = selectedFiles(in: application, anchor: fallbackAnchor) {
+            return AXSelectionReadResult(sample: sample, finderAutomation: .notAttempted)
+        }
+        guard finderAutomation == .enabled else {
+            return AXSelectionReadResult(sample: nil, finderAutomation: .notAttempted)
+        }
+        return readFinderAutomation(processID: processID, anchor: fallbackAnchor)
+    }
+
+    private static func readFinderAutomation(processID: pid_t, anchor: CGPoint) -> AXSelectionReadResult {
+        guard NSWorkspace.shared.frontmostApplication?.processIdentifier == processID else {
+            return AXSelectionReadResult(sample: nil, finderAutomation: .notAttempted)
+        }
+        let result = FinderAppleEventReader.read()
+        guard result.succeeded else {
+            return AXSelectionReadResult(
+                sample: nil,
+                finderAutomation: .failed(result.failureMessage ?? "Finder selection access failed.")
+            )
+        }
+        let sample = sample(
+            from: result.urls,
+            omittedCount: result.omittedCount,
+            anchor: anchor
+        )
+        return AXSelectionReadResult(sample: sample, finderAutomation: .succeeded)
     }
 
     private static func selectedText(from element: AXUIElement, anchor: CGPoint) -> AXSelectionSample? {
@@ -521,39 +672,84 @@ private enum AXSelectionReader {
     private static func selectedFiles(in application: AXUIElement, anchor: CGPoint) -> AXSelectionSample? {
         var queue: [(AXUIElement, Int)] = [(application, 0)]
         var cursor = 0
-        var visited = 0
+        var remainingBudget = maximumTraversalElements
         var selected: [URL] = []
         var omittedCount = 0
-        let deadline = Date().addingTimeInterval(0.55)
-        while cursor < queue.count, visited < 32, Date() < deadline {
+        let deadline = Date().addingTimeInterval(traversalBudgetSeconds)
+
+        while cursor < queue.count, remainingBudget > 0, Date() < deadline {
             let (element, depth) = queue[cursor]
             cursor += 1
-            visited += 1
-            if let children = attribute(element, kAXSelectedChildrenAttribute) as? [AXUIElement] {
-                for (index, child) in children.enumerated() {
-                    guard index < 80, Date() < deadline else {
-                        omittedCount += children.count - index
-                        break
-                    }
-                    if let url = fileURL(from: attribute(child, kAXURLAttribute)) { selected.append(url) }
-                    else if let nested = attribute(child, kAXChildrenAttribute) as? [AXUIElement] {
-                        if let url = nested.prefix(1).compactMap({ fileURL(from: attribute($0, kAXURLAttribute)) }).first {
-                            selected.append(url)
-                        } else {
-                            omittedCount += 1
-                        }
-                    } else {
-                        omittedCount += 1
-                    }
+            remainingBudget -= 1
+
+            for attributeName in selectionAttributes {
+                let selectedChildren = axElements(from: attribute(element, attributeName))
+                guard !selectedChildren.isEmpty else { continue }
+                if selectedChildren.count > BubbleShelfRules.maximumItemCount {
+                    omittedCount += selectedChildren.count - BubbleShelfRules.maximumItemCount
                 }
+                let limited = selectedChildren.prefix(BubbleShelfRules.maximumItemCount)
+                selected.append(contentsOf: fileURLs(
+                    from: Array(limited), deadline: deadline,
+                    remainingBudget: &remainingBudget, omittedCount: &omittedCount
+                ))
                 if !selected.isEmpty { break }
             }
-            guard depth < 8, let children = attribute(element, kAXChildrenAttribute) as? [AXUIElement] else { continue }
-            queue.append(contentsOf: children.prefix(16).map { ($0, depth + 1) })
+            if !selected.isEmpty { break }
+
+            guard depth < maximumSelectionDepth else { continue }
+            let children = axElements(from: attribute(element, kAXChildrenAttribute))
+            if children.count > maximumChildElements {
+                omittedCount += children.count - maximumChildElements
+            }
+            queue.append(contentsOf: children.prefix(maximumChildElements).map { ($0, depth + 1) })
         }
+        if cursor < queue.count { omittedCount += queue.count - cursor }
+        return sample(from: selected, omittedCount: omittedCount, anchor: anchor)
+    }
+
+    private static func fileURLs(
+        from roots: [AXUIElement],
+        deadline: Date,
+        remainingBudget: inout Int,
+        omittedCount: inout Int
+    ) -> [URL] {
+        var queue = roots.map { ($0, 0) }
+        var cursor = 0
+        var urls: [URL] = []
+        while cursor < queue.count, remainingBudget > 0, Date() < deadline {
+            let (element, depth) = queue[cursor]
+            cursor += 1
+            remainingBudget -= 1
+            if let url = fileURL(from: attribute(element, kAXURLAttribute)) {
+                urls.append(url)
+                continue
+            }
+            guard depth < maximumSelectionDepth else {
+                omittedCount += 1
+                continue
+            }
+            let children = axElements(from: attribute(element, kAXChildrenAttribute))
+            guard !children.isEmpty else {
+                omittedCount += 1
+                continue
+            }
+            if children.count > maximumChildElements {
+                omittedCount += children.count - maximumChildElements
+            }
+            queue.append(contentsOf: children.prefix(maximumChildElements).map { ($0, depth + 1) })
+        }
+        if cursor < queue.count { omittedCount += queue.count - cursor }
+        return urls
+    }
+
+    private static func sample(from urls: [URL], omittedCount: Int, anchor: CGPoint) -> AXSelectionSample? {
         var unique: [URL] = []
         var seen = Set<String>()
-        for url in selected where seen.insert(url.standardizedFileURL.path).inserted { unique.append(url) }
+        for url in urls where seen.insert(url.standardizedFileURL.path).inserted {
+            unique.append(url)
+            if unique.count == BubbleShelfRules.maximumItemCount { break }
+        }
         guard !unique.isEmpty else { return nil }
         let payloads = unique.map(BubbleCollectorPayload.file)
         let fingerprint = "files:" + unique.map(\.standardizedFileURL.path).joined(separator: "\u{1f}")
@@ -563,6 +759,7 @@ private enum AXSelectionReader {
 
     private static func fileURL(from value: Any?) -> URL? {
         if let url = value as? URL, url.isFileURL { return url }
+        if let url = value as? NSURL, url.isFileURL { return url as URL }
         if let string = value as? String {
             if let url = URL(string: string), url.isFileURL { return url }
             let path = string.hasPrefix("file://") ? String(string.dropFirst("file://".count)) : string
@@ -578,10 +775,87 @@ private enum AXSelectionReader {
         return result
     }
 
+    private static func axElements(from value: Any?) -> [AXUIElement] {
+        guard let array = value as? NSArray else { return [] }
+        return array.compactMap { axElement(from: $0) }
+    }
+
     private static func axElement(from value: Any?) -> AXUIElement? {
         guard let value else { return nil }
         let object = value as AnyObject
         guard CFGetTypeID(object) == AXUIElementGetTypeID() else { return nil }
         return object as! AXUIElement
+    }
+}
+
+private enum FinderAppleEventReader {
+    private static let source = """
+    with timeout of 3 seconds
+        tell application id "com.apple.finder"
+            set selectedItems to (get selection)
+            set output to {}
+            repeat with selectedItem in selectedItems
+                try
+                    set end of output to POSIX path of (selectedItem as alias)
+                end try
+            end repeat
+            return output
+        end tell
+    end timeout
+    """
+
+    static func determinePermission(askUserIfNeeded: Bool) -> FinderAutomationReadOutcome {
+        let bundleID = "com.apple.finder"
+        var target = AEAddressDesc()
+        let createStatus = bundleID.withCString { pointer in
+            AECreateDesc(typeApplicationBundleID, pointer, bundleID.utf8.count, &target)
+        }
+        guard createStatus == noErr else {
+            return .failed("Finder selection access could not be checked.")
+        }
+        defer { AEDisposeDesc(&target) }
+        let status = AEDeterminePermissionToAutomateTarget(
+            &target, typeWildCard, typeWildCard, askUserIfNeeded
+        )
+        guard status == noErr else { return .failed(failureMessage(for: status)) }
+        return .succeeded
+    }
+
+    static func read() -> FinderAppleEventReadResult {
+        var error: NSDictionary?
+        guard let script = NSAppleScript(source: source),
+              let descriptor = script.executeAndReturnError(&error) else {
+            return FinderAppleEventReadResult(urls: [], omittedCount: 0,
+                                              failureMessage: failureMessage(from: error))
+        }
+        let count = descriptor.numberOfItems
+        guard count > 0 else {
+            return FinderAppleEventReadResult(urls: [], omittedCount: 0, failureMessage: nil)
+        }
+        let limit = min(count, BubbleShelfRules.maximumItemCount)
+        var urls: [URL] = []
+        var omittedCount = max(0, count - limit)
+        for index in 1...limit {
+            guard let item = descriptor.atIndex(index),
+                  let path = item.stringValue,
+                  path.hasPrefix("/") else {
+                omittedCount += 1
+                continue
+            }
+            urls.append(URL(fileURLWithPath: path))
+        }
+        return FinderAppleEventReadResult(urls: urls, omittedCount: omittedCount, failureMessage: nil)
+    }
+
+    private static func failureMessage(from error: NSDictionary?) -> String {
+        let errorNumber = (error?["NSAppleScriptErrorNumber"] as? NSNumber)?.intValue
+        return failureMessage(for: OSStatus(errorNumber ?? 0))
+    }
+
+    private static func failureMessage(for status: OSStatus) -> String {
+        if status == errAEEventNotPermitted || status == errAEEventWouldRequireUserConsent {
+            return "Finder automation access is denied. Enable QuotaNotch under System Settings → Privacy & Security → Automation, then choose Allow Finder again."
+        }
+        return "Finder did not provide its selected items. Choose Allow Finder again or drag the file into the bubble."
     }
 }

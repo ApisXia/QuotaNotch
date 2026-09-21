@@ -49,6 +49,33 @@ final class BubbleCollectorPolicyTests: XCTestCase {
         ))
     }
 
+    func testFinderAutomationRequiresExplicitOrPreviouslyGrantedConsent() {
+        XCTAssertTrue(BubbleCollectorPolicy.shouldAttemptFinderAutomation(
+            receiving: true, frontmostBundleID: "com.apple.finder",
+            explicitRequest: true, permissionGranted: false
+        ))
+        XCTAssertTrue(BubbleCollectorPolicy.shouldAttemptFinderAutomation(
+            receiving: true, frontmostBundleID: nil,
+            explicitRequest: true, permissionGranted: false
+        ))
+        XCTAssertTrue(BubbleCollectorPolicy.shouldAttemptFinderAutomation(
+            receiving: true, frontmostBundleID: "com.apple.finder",
+            explicitRequest: false, permissionGranted: true
+        ))
+        XCTAssertFalse(BubbleCollectorPolicy.shouldAttemptFinderAutomation(
+            receiving: true, frontmostBundleID: "com.apple.finder",
+            explicitRequest: false, permissionGranted: false
+        ))
+        XCTAssertFalse(BubbleCollectorPolicy.shouldAttemptFinderAutomation(
+            receiving: false, frontmostBundleID: "com.apple.finder",
+            explicitRequest: true, permissionGranted: false
+        ))
+        XCTAssertFalse(BubbleCollectorPolicy.shouldAttemptFinderAutomation(
+            receiving: true, frontmostBundleID: "com.apple.Safari",
+            explicitRequest: false, permissionGranted: true
+        ))
+    }
+
     func testPanelFrameStaysOnNearestVisibleDisplayAndAwayFromAnchor() {
         let left = CGRect(x: -1000, y: 0, width: 1000, height: 800)
         let right = CGRect(x: 0, y: 0, width: 1200, height: 900)
