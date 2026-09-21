@@ -66,13 +66,14 @@ enum NativeCapture {
         var images: [String: CGImage] = [:]
         for snapshot in snapshots {
             let image = try render(snapshot.scene)
-            try validate(image: image, named: snapshot.name)
+            try validate(image: image, named: snapshot.name, expectedSize: snapshot.scene.canvasSize)
             try writePNG(image, to: outputDirectory.appendingPathComponent("\(snapshot.name).png"))
             images[snapshot.name] = image
         }
 
         guard let empty = images["empty"], let populated = images["populated"],
-              let lightNear = images["light-near"], let lightFar = images["light-far"] else {
+              let lightNear = images["light-near"], let lightFar = images["light-far"],
+              let lightEmpty = images["light-empty"] else {
             throw BubbleLabError.capture("snapshot plan omitted a required comparison state")
         }
         guard difference(empty, populated) > 0.004 else {
@@ -80,6 +81,9 @@ enum NativeCapture {
         }
         guard difference(lightNear, lightFar) > 0.002 else {
             throw BubbleLabError.capture("pointer positions did not change the captured reflected environment")
+        }
+        guard centerDifference(empty, lightEmpty) > 0.20 else {
+            throw BubbleLabError.capture("the shell center does not show enough of the light and dark environments through its translucent body")
         }
 
         try writeReport(CaptureReport(
@@ -117,6 +121,17 @@ enum NativeCapture {
         ("populated", BubbleScene(time: 1.4, light: SIMD2<Float>(0.34, 0.28), populated: true, arrival: .resting)),
         ("light-near", BubbleScene(time: 2.1, light: SIMD2<Float>(0.16, 0.25), populated: true, arrival: .resting)),
         ("light-far", BubbleScene(time: 2.1, light: SIMD2<Float>(0.84, 0.69), populated: true, arrival: .resting)),
+        ("light-empty", BubbleScene(time: 1.4, light: SIMD2<Float>(0.34, 0.28), populated: false, arrival: .resting, backdropStyle: .pearl)),
+        ("light-populated", BubbleScene(time: 1.4, light: SIMD2<Float>(0.34, 0.28), populated: true, arrival: .resting, backdropStyle: .pearl)),
+        ("small-widget-light", BubbleScene(
+            time: 1.4,
+            light: SIMD2<Float>(0.34, 0.28),
+            populated: false,
+            arrival: .resting,
+            canvasSize: CGSize(width: 160, height: 160),
+            bubbleDiameter: 64,
+            backdropStyle: .pearl
+        )),
         ("arrival-gather", BubbleScene(time: 2.6, light: SIMD2<Float>(0.35, 0.24), populated: true, arrival: BubbleMotion.arrival(at: 0.34))),
         ("arrival-hold", BubbleScene(time: 2.9, light: SIMD2<Float>(0.35, 0.24), populated: true, arrival: BubbleMotion.arrival(at: 0.45 + 0.45))),
         ("arrival-collapse", BubbleScene(time: 3.2, light: SIMD2<Float>(0.35, 0.24), populated: true, arrival: BubbleMotion.arrival(at: 0.45 + 0.90 + 0.55)))
@@ -124,7 +139,7 @@ enum NativeCapture {
 
     private static func render(_ scene: BubbleScene) throws -> CGImage {
         let renderer = ImageRenderer(content: scene)
-        renderer.proposedSize = ProposedViewSize(width: canvasSize.width, height: canvasSize.height)
+        renderer.proposedSize = ProposedViewSize(width: scene.canvasSize.width, height: scene.canvasSize.height)
         renderer.scale = renderScale
         renderer.isOpaque = true
         guard let image = renderer.cgImage else {
@@ -133,18 +148,20 @@ enum NativeCapture {
         return image
     }
 
-    private static func validate(image: CGImage, named name: String) throws {
-        let expected = Int(canvasSize.width * renderScale)
-        guard image.width == expected, image.height == expected else {
+    private static func validate(image: CGImage, named name: String, expectedSize: CGSize) throws {
+        let expectedWidth = Int(expectedSize.width * renderScale)
+        let expectedHeight = Int(expectedSize.height * renderScale)
+        guard image.width == expectedWidth, image.height == expectedHeight else {
             throw BubbleLabError.capture("\(name) frame has unexpected dimensions \(image.width)×\(image.height)")
         }
         let bitmap = NSBitmapImageRep(cgImage: image)
-        guard let center = rgb(bitmap, x: expected / 2, y: expected / 2),
-              let background = rgb(bitmap, x: expected / 8, y: expected / 8) else {
+        guard let center = rgb(bitmap, x: expectedWidth / 2, y: expectedHeight / 2),
+              let background = rgb(bitmap, x: expectedWidth / 8, y: expectedHeight / 8) else {
             throw BubbleLabError.capture("\(name) frame could not be sampled")
         }
         let delta = zip(center, background).reduce(0.0) { $0 + abs($1.0 - $1.1) }
-        guard delta > 0.12 else {
+        let minimumContrast = name.contains("light") ? 0.025 : 0.12
+        guard delta > minimumContrast else {
             throw BubbleLabError.capture("\(name) frame is present but the center shell has no visible material contrast")
         }
     }
@@ -162,6 +179,16 @@ enum NativeCapture {
             }
         }
         return count > 0 ? total / Double(count) : 0
+    }
+
+    private static func centerDifference(_ first: CGImage, _ second: CGImage) -> Double {
+        let centerX = first.width / 2
+        let centerY = first.height / 2
+        let firstBitmap = NSBitmapImageRep(cgImage: first)
+        let secondBitmap = NSBitmapImageRep(cgImage: second)
+        guard let a = rgb(firstBitmap, x: centerX, y: centerY),
+              let b = rgb(secondBitmap, x: centerX, y: centerY) else { return 0 }
+        return zip(a, b).reduce(0.0) { $0 + abs($1.0 - $1.1) }
     }
 
     private static func rgb(_ bitmap: NSBitmapImageRep, x: Int, y: Int) -> [Double]? {

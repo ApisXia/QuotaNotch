@@ -5,13 +5,32 @@ struct BubbleScene: View {
     let light: SIMD2<Float>
     let populated: Bool
     let arrival: ArrivalFrame
+    let canvasSize: CGSize
+    let bubbleDiameter: CGFloat
+    let backdropStyle: BubbleBackdropStyle
 
-    private let bubbleDiameter: CGFloat = 226
+    init(
+        time: TimeInterval,
+        light: SIMD2<Float>,
+        populated: Bool,
+        arrival: ArrivalFrame,
+        canvasSize: CGSize = CGSize(width: 512, height: 512),
+        bubbleDiameter: CGFloat = 226,
+        backdropStyle: BubbleBackdropStyle = .night
+    ) {
+        self.time = time
+        self.light = light
+        self.populated = populated
+        self.arrival = arrival
+        self.canvasSize = canvasSize
+        self.bubbleDiameter = bubbleDiameter
+        self.backdropStyle = backdropStyle
+    }
 
     var body: some View {
         GeometryReader { geometry in
             ZStack {
-                Backdrop()
+                Backdrop(style: backdropStyle)
 
                 bubble
                     .frame(width: bubbleDiameter, height: bubbleDiameter)
@@ -21,8 +40,8 @@ struct BubbleScene: View {
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
-        .frame(width: 512, height: 512)
-        .environment(\.colorScheme, .dark)
+        .frame(width: canvasSize.width, height: canvasSize.height)
+        .environment(\.colorScheme, backdropStyle == .night ? .dark : .light)
     }
 
     private var bubble: some View {
@@ -42,7 +61,11 @@ struct BubbleScene: View {
                     PearlyBubbleShape(time: time, breathing: breathing)
                         .stroke(.white.opacity(0.20), lineWidth: 0.7)
                 }
-                .shadow(color: Color(red: 0.40, green: 0.67, blue: 0.84).opacity(0.18), radius: 23, y: 9)
+                .shadow(
+                    color: Color(red: 0.40, green: 0.67, blue: 0.84).opacity(0.18),
+                    radius: max(6, bubbleDiameter * 0.10),
+                    y: bubbleDiameter * 0.04
+                )
 
             if populated {
                 ForEach(0..<3, id: \.self) { index in
@@ -55,22 +78,45 @@ struct BubbleScene: View {
     }
 }
 
+enum BubbleBackdropStyle: Equatable {
+    case night
+    case pearl
+}
+
 private struct Backdrop: View {
+    let style: BubbleBackdropStyle
+
     var body: some View {
         ZStack {
-            Color(red: 0.035, green: 0.043, blue: 0.070)
-            RadialGradient(
-                colors: [Color(red: 0.24, green: 0.31, blue: 0.43).opacity(0.38), .clear],
-                center: UnitPoint(x: 0.33, y: 0.29),
-                startRadius: 0,
-                endRadius: 330
-            )
-            RadialGradient(
-                colors: [Color(red: 0.28, green: 0.29, blue: 0.39).opacity(0.20), .clear],
-                center: UnitPoint(x: 0.74, y: 0.71),
-                startRadius: 0,
-                endRadius: 300
-            )
+            if style == .night {
+                Color(red: 0.035, green: 0.043, blue: 0.070)
+                RadialGradient(
+                    colors: [Color(red: 0.24, green: 0.31, blue: 0.43).opacity(0.38), .clear],
+                    center: UnitPoint(x: 0.33, y: 0.29),
+                    startRadius: 0,
+                    endRadius: 330
+                )
+                RadialGradient(
+                    colors: [Color(red: 0.28, green: 0.29, blue: 0.39).opacity(0.20), .clear],
+                    center: UnitPoint(x: 0.74, y: 0.71),
+                    startRadius: 0,
+                    endRadius: 300
+                )
+            } else {
+                Color(red: 0.91, green: 0.91, blue: 0.94)
+                RadialGradient(
+                    colors: [Color(red: 1.00, green: 0.96, blue: 0.93).opacity(0.90), .clear],
+                    center: UnitPoint(x: 0.31, y: 0.25),
+                    startRadius: 0,
+                    endRadius: 285
+                )
+                RadialGradient(
+                    colors: [Color(red: 0.77, green: 0.84, blue: 0.91).opacity(0.33), .clear],
+                    center: UnitPoint(x: 0.77, y: 0.72),
+                    startRadius: 0,
+                    endRadius: 310
+                )
+            }
         }
         .ignoresSafeArea()
     }
