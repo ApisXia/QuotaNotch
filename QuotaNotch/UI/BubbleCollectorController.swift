@@ -419,7 +419,7 @@ final class BubbleCollectorController: ObservableObject {
                                  startedAt: Date(), generation: generation)
         stationaryAnchor = anchor
         ensurePanelController().present(anchor: anchor)
-        scheduleExpiration(for: generation, after: 1.65)
+        scheduleExpiration(for: generation, after: BubbleCollectorMotion.totalDuration + 0.05)
     }
 
     private func hideCandidate() {

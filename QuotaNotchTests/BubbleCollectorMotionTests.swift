@@ -3,6 +3,7 @@ import XCTest
 
 final class BubbleCollectorMotionTests: XCTestCase {
     func testGatherHoldCollapseAndEnd() {
+        XCTAssertGreaterThan(BubbleCollectorMotion.totalDuration, BubbleCollectorMotion.gatherDuration + BubbleCollectorMotion.holdDuration)
         XCTAssertEqual(BubbleCollectorMotion.frame(at: -0.1), .resting)
         let gather = BubbleCollectorMotion.frame(at: BubbleCollectorMotion.gatherDuration * 0.5)
         XCTAssertGreaterThan(gather.shellScale, 1)
