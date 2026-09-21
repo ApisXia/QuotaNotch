@@ -1,29 +1,27 @@
 # QuotaNotch 1.04
 
-新增可选像素猫猫，统一任务状态图标，并修复右侧增加 minimal 时左侧音频跟着外移的问题。
+新增可选的刘海猫猫，改善任务状态提示和已读管理，并修正音乐与任务共存时的布局。
 
-- **猫猫默认关闭。** 在设置中手动开启后，可在刘海左右边缘来回摩擦鼠标唤出。猫猫会从对应一侧出现；空间不足时只探头轻顶，并自动收回。支持可选的任务提示动作。
-- **统一任务状态。** widget、minimal 和列表图标使用同一母版等比缩放。运行中为翻动纸张，等待处理为有节奏跳动的气泡，完成为绿色收尾，中断为紫色双竖线，出错为带呼吸光晕的红叉。遵循系统“减少动态效果”。
-- **更明确的任务管理。** 新增一键已读；任务窗口可按当前项目处理。保留运行和等待状态、有限历史，以及后续新事件的未读提醒。主状态优先级为未读失败、等待处理、进行中、其他最新状态，角标只统计当前主状态。
-- **独立的左右布局。** 右侧增加 minimal 只向右扩展，音频和物理刘海保持原位。任务单独显示、模块切换和不同显示密度也使用一致的定位规则。
-- **猫猫交互修复。** 改善左右边缘触发、拥挤时同侧探头、重复手势、自动退出和中途收回的连续性。
+- **刘海猫猫：** 在设置中开启后，可在刘海左右边缘来回移动鼠标唤出猫猫，也可让它在任务完成或需要处理时出现。默认关闭。
+- **更清楚的任务状态：** 更新任务图标，以不同颜色、符号和动效区分进行中、等待处理、完成、中断和出错。等待处理会有节奏地跳动，出错带呼吸光晕，方便及时留意。
+- **一键已读：** 可一次清除所有项目或当前项目的未读标记。正在进行和等待处理的任务仍会保留，后续有新进展时会再次提醒。
+- **布局修复：** 修复右侧增加任务时，左侧音乐跟着外移的问题。改善音乐、额度和任务切换时的位置与对齐。
 
-**安装：** 退出 QuotaNotch，下载 `QuotaNotch-1.04.dmg`，拖入「应用程序」替换。版本 **1.04（307）**，支持 **macOS 15+、Apple Silicon 和 Intel**。默认关闭猫猫；已手动保存的开关选择会保留。
+**安装：** 先退出 QuotaNotch，下载 `QuotaNotch-1.04.dmg`，将应用拖入「应用程序」替换。支持 Apple Silicon 与 Intel，要求 macOS 15 或更新版本。应用版本为 **1.04（307）**。
 
-云端验证覆盖核心逻辑、中英文布局、模块组合、播放切换、刘海定位和模拟鼠标交互。安装包沿用临时签名，尚未 Apple 公证；更新仍需手动安装。任务监控范围与 1.03 一致，依赖本机活动记录。
+现有登录和设置会保留；此前已手动设置的猫猫开关选择也会保留。安装包沿用临时签名，尚未进行 Apple 公证。
 
 ---
 
 ## English
 
-QuotaNotch 1.04 adds an optional pixel cat, unifies task status artwork, and fixes music shifting when a minimal module appears on the right.
+QuotaNotch 1.04 adds an optional notch cat, improves task status cues and read management, and fixes the layout when music and tasks appear together.
 
-- **Cat off by default.** Enable it in settings, then rub either outer notch edge to summon it on that side. Crowded wings show a small peek and nudge before retreating. Optional task reactions are available.
-- **Consistent task icons.** Widgets, minimal slots and list marks scale the same artwork. Running pages, a bouncing waiting bubble, a green completion mark, purple interruption bars and a breathing red error halo distinguish states. Reduce Motion is respected.
-- **Read all.** Mark current unread tasks across projects or within the selected project, preserving history, active/waiting states and later unread events. The status badge counts only the displayed primary state.
-- **Independent wings.** Adding a right-side minimal module keeps music and the physical notch anchored. Task-only layouts, module swaps and display density changes follow the same positioning rules.
-- **Cat interaction fixes.** More reliable edge gestures, same-side crowded peeks, repeated-gesture handling and continuous automatic/interrupted retreat.
+- **Notch cat:** Enable it in settings, then move the pointer back and forth near either notch edge to invite it out. Optional reactions can accompany completed tasks or tasks that need attention. Off by default.
+- **Clearer task states:** Updated icons use distinct colors, symbols and animations for working, waiting, completed, interrupted and failed tasks. Waiting tasks gently bounce, while errors have a breathing glow.
+- **Read all:** Clear unread markers across all projects or within the selected project. Working and waiting tasks remain visible, and later updates can notify you again.
+- **Layout fixes:** Adding tasks on the right no longer shifts music on the left. Switching between music, quota and tasks keeps their positions and alignment consistent.
 
-**Install:** Quit QuotaNotch, download `QuotaNotch-1.04.dmg`, and replace the app in Applications. Version **1.04 (307)**; **macOS 15+**, Apple Silicon and Intel. The cat starts disabled; explicitly saved preferences are retained.
+**Install:** Quit QuotaNotch, download `QuotaNotch-1.04.dmg`, and replace the app in Applications. macOS 15+, Apple Silicon and Intel. App version: **1.04 (307)**.
 
-Cloud validation covers core logic, English/Chinese layouts, module combinations, playback transitions, notch anchoring and simulated pointer input. The app remains ad-hoc signed and not Apple-notarized; updates install manually. Task monitoring retains the local-record scope of 1.03.
+Existing logins and preferences are retained, including a previously saved cat toggle. The app remains ad-hoc signed and is not Apple-notarized.
