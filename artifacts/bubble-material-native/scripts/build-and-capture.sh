@@ -28,6 +28,7 @@ SWIFT_SOURCES=(
   "$SOURCE_DIR/BubbleChecks.swift"
   "$SOURCE_DIR/BubbleMotion.swift"
   "$SOURCE_DIR/BubbleScene.swift"
+  "$SOURCE_DIR/NotchAppearanceDemo.swift"
   "$SOURCE_DIR/NativeCapture.swift"
 )
 

@@ -48,10 +48,36 @@ struct InteractiveBubbleLab: View {
     @State private var pointer = SIMD2<Float>(0.34, 0.28)
     @State private var arrivalStartedAt: Date?
     @State private var insertionStartedAt: Date?
+    @State private var showsNotchMatrix = false
 
     private let startTime = Date()
 
     var body: some View {
+        Group {
+            if showsNotchMatrix {
+                notchMatrixView
+            } else {
+                bubbleMaterialView
+            }
+        }
+    }
+
+    private var notchMatrixView: some View {
+        VStack(spacing: 10) {
+            TimelineView(.animation(minimumInterval: 1.0 / 30.0, paused: false)) { context in
+                NotchAppearanceBoard(time: context.date.timeIntervalSinceReferenceDate)
+            }
+            .frame(width: NotchAppearanceBoard.size.width, height: NotchAppearanceBoard.size.height)
+
+            Button("返回泡泡材质样例") { showsNotchMatrix = false }
+                .font(.system(size: 12, weight: .medium, design: .rounded))
+        }
+        .padding(20)
+        .background(Color(red: 0.025, green: 0.030, blue: 0.050))
+        .preferredColorScheme(.dark)
+    }
+
+    private var bubbleMaterialView: some View {
         VStack(spacing: 18) {
             Text("内置示例预览 · 数量仅用于演示")
                 .font(.system(size: 12, weight: .medium, design: .rounded))
@@ -102,6 +128,9 @@ struct InteractiveBubbleLab: View {
                 Button("播放连续加入（0→5）") {
                     arrivalStartedAt = nil
                     insertionStartedAt = .now
+                }
+                Button("查看 notch 状态矩阵") {
+                    showsNotchMatrix = true
                 }
             }
             .font(.system(size: 13, weight: .medium))

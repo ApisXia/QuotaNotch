@@ -22,6 +22,7 @@ private struct CaptureReport: Encodable {
 enum NativeCapture {
     private static let renderScale: CGFloat = 2
     private static let canvasSize = CGSize(width: 512, height: 512)
+    private static let notchProofSize = CGSize(width: 256, height: 256)
 
     static func run(outputDirectory: URL) async throws {
         try FileManager.default.createDirectory(at: outputDirectory, withIntermediateDirectories: true)
@@ -79,6 +80,8 @@ enum NativeCapture {
             try writePNG(image, to: outputDirectory.appendingPathComponent("\(snapshot.name).png"))
             images[snapshot.name] = image
         }
+
+        let notchSnapshots = try captureNotchSnapshots(to: outputDirectory)
 
         guard let empty = images["count-0"], let countOne = images["count-1"],
               let countTwo = images["count-2"], let countThree = images["count-3"],
@@ -171,7 +174,7 @@ enum NativeCapture {
             metalAvailable: true,
             shaderAvailable: true,
             renderer: "SwiftUI ImageRenderer with the app's compiled Metal library",
-            snapshots: snapshots.map { "\($0.name).png" } + ["count-comparison.png", "insertion-comparison.png"],
+            snapshots: snapshots.map { "\($0.name).png" } + ["count-comparison.png", "insertion-comparison.png"] + notchSnapshots,
             movies: [],
             result: "native count and lighting snapshots passed; movie encoding pending",
             limitation: nil
@@ -183,6 +186,8 @@ enum NativeCapture {
         try await writeMovie(to: arrivalURL, kind: .arrival)
         let insertionURL = outputDirectory.appendingPathComponent("bubble-file-insertion.mp4")
         try await writeMovie(to: insertionURL, kind: .insertion)
+        let notchSignalURL = outputDirectory.appendingPathComponent("notch-receive-signal.mp4")
+        try await writeMovie(to: notchSignalURL, kind: .notchSignal)
 
         try writeReport(CaptureReport(
             host: ProcessInfo.processInfo.operatingSystemVersionString,
@@ -190,11 +195,71 @@ enum NativeCapture {
             metalAvailable: true,
             shaderAvailable: true,
             renderer: "SwiftUI ImageRenderer with the app's compiled Metal library",
-            snapshots: snapshots.map { "\($0.name).png" } + ["count-comparison.png", "insertion-comparison.png"],
-            movies: [lightSweepURL.lastPathComponent, arrivalURL.lastPathComponent, insertionURL.lastPathComponent],
+            snapshots: snapshots.map { "\($0.name).png" } + ["count-comparison.png", "insertion-comparison.png"] + notchSnapshots,
+            movies: [lightSweepURL.lastPathComponent, arrivalURL.lastPathComponent, insertionURL.lastPathComponent, notchSignalURL.lastPathComponent],
             result: "passed",
             limitation: nil
         ), to: reportURL)
+    }
+
+    private static func captureNotchSnapshots(to outputDirectory: URL) throws -> [String] {
+        let populatedArmed = try render(NotchSignalProof(armed: true, itemCount: 3, time: 2), size: notchProofSize)
+        let populatedPaused = try render(NotchSignalProof(armed: false, itemCount: 3, time: 2), size: notchProofSize)
+        let emptyArmed = try render(NotchSignalProof(armed: true, itemCount: 0, time: 2), size: notchProofSize)
+        let emptyPaused = try render(NotchSignalProof(armed: false, itemCount: 0, time: 2), size: notchProofSize)
+
+        let proofCenter = CGPoint(x: notchProofSize.width * renderScale / 2, y: notchProofSize.height * renderScale / 2)
+        guard localizedDifference(populatedArmed, populatedPaused, center: proofCenter, insideRadius: 120) > 0.0002,
+              localizedDifference(emptyArmed, emptyPaused, center: proofCenter, insideRadius: 120) > 0.0002 else {
+            throw BubbleLabError.capture("the armed proof must show its localized receive glint for both empty and populated shells")
+        }
+
+        let snapshots: [(name: String, image: CGImage, size: CGSize)] = [
+            (
+                "notch-state-matrix",
+                try render(NotchAppearanceBoard(time: 2), size: NotchAppearanceBoard.size),
+                NotchAppearanceBoard.size
+            ),
+            (
+                "notch-content-counts",
+                try render(NotchContentCountBoard(time: 2), size: NotchContentCountBoard.size),
+                NotchContentCountBoard.size
+            ),
+            (
+                "notch-signal-armed",
+                populatedArmed,
+                notchProofSize
+            ),
+            (
+                "notch-signal-paused",
+                populatedPaused,
+                notchProofSize
+            ),
+            (
+                "notch-empty-armed",
+                emptyArmed,
+                notchProofSize
+            ),
+            (
+                "notch-empty-paused",
+                emptyPaused,
+                notchProofSize
+            )
+        ]
+
+        for snapshot in snapshots {
+            try validateDimensions(snapshot.image, named: snapshot.name, expectedSize: snapshot.size)
+            try writePNG(snapshot.image, to: outputDirectory.appendingPathComponent("\(snapshot.name).png"))
+        }
+        return snapshots.map { "\($0.name).png" }
+    }
+
+    private static func validateDimensions(_ image: CGImage, named name: String, expectedSize: CGSize) throws {
+        let expectedWidth = Int(expectedSize.width * renderScale)
+        let expectedHeight = Int(expectedSize.height * renderScale)
+        guard image.width == expectedWidth, image.height == expectedHeight else {
+            throw BubbleLabError.capture("\(name) frame has unexpected dimensions \(image.width)×\(image.height)")
+        }
     }
 
     private static let snapshotPlan: [(name: String, scene: BubbleScene)] = {
@@ -448,6 +513,7 @@ enum NativeCapture {
         case lightSweep
         case arrival
         case insertion
+        case notchSignal
     }
 
     private static func writeMovie(to url: URL, kind: MovieKind) async throws {
@@ -456,9 +522,14 @@ enum NativeCapture {
         switch kind {
         case .lightSweep, .arrival, .insertion:
             outputSize = canvasSize
+        case .notchSignal:
+            outputSize = NotchAppearanceBoard.movieSize
         }
-        let width = Int(outputSize.width * renderScale)
-        let height = Int(outputSize.height * renderScale)
+        // H.264 requires even frame dimensions. The scaled notch board has
+        // fractional point dimensions, so round its pixel canvas up by at most
+        // one pixel and let the renderer image fill that canvas.
+        let width = evenPixelDimension(outputSize.width)
+        let height = evenPixelDimension(outputSize.height)
         let fps: Int32 = 30
         let duration: Double
         switch kind {
@@ -468,6 +539,8 @@ enum NativeCapture {
             duration = 8.0
         case .insertion:
             duration = BubbleInsertionTimeline.duration
+        case .notchSignal:
+            duration = NotchSignalMotion.cycleDuration
         }
         let frameCount = Int(duration * Double(fps))
         let writer = try AVAssetWriter(outputURL: url, fileType: .mp4)
@@ -518,9 +591,17 @@ enum NativeCapture {
             case .insertion:
                 pointer = SIMD2<Float>(0.34, 0.28)
                 arrival = .resting
+            case .notchSignal:
+                pointer = SIMD2<Float>(0.5, 0.5)
+                arrival = .resting
             }
             let image: CGImage
-            if case .insertion = kind {
+            if case .notchSignal = kind {
+                image = try render(
+                    NotchAppearanceBoard(time: time, presentationScale: NotchAppearanceBoard.movieScale),
+                    size: NotchAppearanceBoard.movieSize
+                )
+            } else if case .insertion = kind {
                 let frame = BubbleInsertionTimeline.frame(at: time)
                 image = try render(BubbleScene(
                     time: 1.4,
@@ -562,6 +643,11 @@ enum NativeCapture {
         guard writer.status == .completed else {
             throw BubbleLabError.capture("AVFoundation could not finish the movie: \(writer.error?.localizedDescription ?? "unknown error")")
         }
+    }
+
+    private static func evenPixelDimension(_ points: CGFloat) -> Int {
+        let pixels = Int((points * renderScale).rounded(.up))
+        return pixels + pixels % 2
     }
 
     private static func makePixelBuffer(from image: CGImage, width: Int, height: Int, pool: CVPixelBufferPool?) -> CVPixelBuffer? {

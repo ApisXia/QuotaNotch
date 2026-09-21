@@ -199,22 +199,27 @@ private struct PearlyBubbleShape: Shape {
 /// A quiet two-layer notch mark: the rear loop disappears under the softly
 /// filled front loop, so the outlines never read as crossing wire circles.
 struct DoubleBubbleMark: View {
+    var size: CGFloat = 28
+
+    private var unit: CGFloat { size / 28 }
+
     var body: some View {
         ZStack {
             RearBubbleArc()
-                .stroke(.white.opacity(0.30), lineWidth: 0.9)
-                .frame(width: 24, height: 24)
-                .offset(x: 5, y: -4)
+                .stroke(.white.opacity(0.30), lineWidth: max(0.42, 0.9 * unit))
+                .frame(width: 24 * unit, height: 24 * unit)
+                .offset(x: 2 * unit, y: -1.5 * unit)
 
             Circle()
                 .fill(Color(red: 0.70, green: 0.82, blue: 0.90).opacity(0.58))
                 .overlay {
-                    Circle().stroke(.white.opacity(0.58), lineWidth: 0.9)
+                    Circle().stroke(.white.opacity(0.58), lineWidth: max(0.42, 0.9 * unit))
                 }
-                .frame(width: 25, height: 25)
-                .offset(x: -4, y: 3)
+                .frame(width: 24 * unit, height: 24 * unit)
+                .offset(x: -1.5 * unit, y: 1.5 * unit)
         }
-        .shadow(color: .white.opacity(0.14), radius: 4)
+        .frame(width: size, height: size)
+        .shadow(color: .white.opacity(0.14), radius: size < 24 ? size * 0.035 : 4 * unit)
     }
 }
 
