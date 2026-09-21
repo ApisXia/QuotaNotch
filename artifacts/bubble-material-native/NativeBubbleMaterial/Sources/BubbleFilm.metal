@@ -50,15 +50,15 @@ static float studioLobe(float3 ray, float3 center, float angularWidth) {
         yawedDirection.z * cos(pitch) - yawedDirection.y * sin(pitch)
     ));
 
-    float sky = smoothstep(-0.62, 0.74, rotatedDirection.z);
+    float sky = smoothstep(-0.42, 0.70, rotatedDirection.y);
     float coolBox = studioLobe(rotatedDirection, float3(-0.70, 0.56, 0.45), 0.42);
     float warmBox = studioLobe(rotatedDirection, float3(0.63, -0.46, 0.62), 0.45);
-    float illuminated = saturate(coolBox * 0.95 + warmBox * 0.78);
+    float coolCore = studioLobe(rotatedDirection, float3(-0.70, 0.56, 0.45), 0.17);
+    float warmCore = studioLobe(rotatedDirection, float3(0.63, -0.46, 0.62), 0.19);
+    float illuminated = saturate(coolBox * 0.72 + warmBox * 0.64 + coolCore + warmCore);
     float3 environment = mix(float3(0.40, 0.49, 0.61), float3(0.82, 0.77, 0.75), sky);
-    // These HDR softboxes carry enough energy to register through normal-angle
-    // dielectric Fresnel reflection, while the broad lobe keeps the gloss soft.
-    environment += float3(0.94, 1.02, 1.10) * coolBox * 4.8;
-    environment += float3(1.10, 0.88, 0.78) * warmBox * 3.8;
+    environment += float3(0.94, 1.02, 1.10) * coolBox * 2.2;
+    environment += float3(1.10, 0.88, 0.78) * warmBox * 1.8;
 
     float3 lightDirection = normalize(float3((pointer.x - 0.5) * 1.10, (0.5 - pointer.y) * 0.82, 0.86));
     float diffuse = max(dot(normal, lightDirection), 0.0);
@@ -78,9 +78,25 @@ static float studioLobe(float3 ray, float3 center, float angularWidth) {
     // so the interior stays airy while edge reflections retain their own light.
     float bodyAlpha = 0.17 + diffuse * 0.025 + breathing * 0.006;
     float reflectionAlpha = fresnel * 0.88;
-    float alpha = reflectionAlpha + bodyAlpha * (1.0 - reflectionAlpha);
-    float3 premultiplied = pearl * bodyAlpha * (1.0 - reflectionAlpha)
+    float baseAlpha = reflectionAlpha + bodyAlpha * (1.0 - reflectionAlpha);
+    float3 basePremultiplied = pearl * bodyAlpha * (1.0 - reflectionAlpha)
         + reflectedColor * reflectionAlpha;
+
+    // Art-directed area-light energy keeps studio reflections legible at the
+    // 4% normal-incidence Fresnel level. Broad lobes carry the curved sheen;
+    // their narrower cores give the surface a polished highlight. Both remain
+    // attached to reflected rays, so cursor motion turns the environment.
+    float coolCoverage = coolBox * 0.16 + coolCore * 0.28;
+    float warmCoverage = warmBox * 0.14 + warmCore * 0.26;
+    float softboxCoverage = saturate(coolCoverage + warmCoverage);
+    float3 softboxColor = (
+        float3(0.78, 0.90, 1.00) * coolCoverage
+        + float3(1.00, 0.86, 0.78) * warmCoverage
+    ) / max(coolCoverage + warmCoverage, 0.001);
+    softboxColor = mix(softboxColor, spectrum, softboxCoverage * 0.14);
+    float3 premultiplied = basePremultiplied * (1.0 - softboxCoverage)
+        + softboxColor * softboxCoverage;
+    float alpha = baseAlpha + softboxCoverage * (1.0 - baseAlpha);
 
     // The SwiftUI Shape clips the fill to its outline; this feather softens
     // only the final antialiased edge of the pearly shell.

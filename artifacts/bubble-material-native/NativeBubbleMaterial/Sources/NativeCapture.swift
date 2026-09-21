@@ -66,7 +66,13 @@ enum NativeCapture {
         var images: [String: CGImage] = [:]
         for snapshot in snapshots {
             let image = try render(snapshot.scene)
-            try validate(image: image, named: snapshot.name, expectedSize: snapshot.scene.canvasSize)
+            try validate(
+                image: image,
+                named: snapshot.name,
+                backdropStyle: snapshot.scene.backdropStyle,
+                showsBubble: snapshot.scene.showsBubble,
+                expectedSize: snapshot.scene.canvasSize
+            )
             try writePNG(image, to: outputDirectory.appendingPathComponent("\(snapshot.name).png"))
             images[snapshot.name] = image
         }
@@ -182,20 +188,26 @@ enum NativeCapture {
         return image
     }
 
-    private static func validate(image: CGImage, named name: String, expectedSize: CGSize) throws {
+    private static func validate(
+        image: CGImage,
+        named name: String,
+        backdropStyle: BubbleBackdropStyle,
+        showsBubble: Bool,
+        expectedSize: CGSize
+    ) throws {
         let expectedWidth = Int(expectedSize.width * renderScale)
         let expectedHeight = Int(expectedSize.height * renderScale)
         guard image.width == expectedWidth, image.height == expectedHeight else {
             throw BubbleLabError.capture("\(name) frame has unexpected dimensions \(image.width)×\(image.height)")
         }
-        if name == "transmission-background" { return }
+        guard showsBubble else { return }
         let bitmap = NSBitmapImageRep(cgImage: image)
         guard let center = rgb(bitmap, x: expectedWidth / 2, y: expectedHeight / 2),
               let background = rgb(bitmap, x: expectedWidth / 8, y: expectedHeight / 8) else {
             throw BubbleLabError.capture("\(name) frame could not be sampled")
         }
         let delta = zip(center, background).reduce(0.0) { $0 + abs($1.0 - $1.1) }
-        let minimumContrast = name.contains("light") || name.contains("small-widget") ? 0.025 : 0.12
+        let minimumContrast = backdropStyle == .night ? 0.12 : 0.025
         guard delta > minimumContrast else {
             throw BubbleLabError.capture("\(name) frame is present but the center shell has no visible material contrast")
         }
@@ -214,16 +226,6 @@ enum NativeCapture {
             }
         }
         return count > 0 ? total / Double(count) : 0
-    }
-
-    private static func centerDifference(_ first: CGImage, _ second: CGImage) -> Double {
-        let centerX = first.width / 2
-        let centerY = first.height / 2
-        let firstBitmap = NSBitmapImageRep(cgImage: first)
-        let secondBitmap = NSBitmapImageRep(cgImage: second)
-        guard let a = rgb(firstBitmap, x: centerX, y: centerY),
-              let b = rgb(secondBitmap, x: centerX, y: centerY) else { return 0 }
-        return zip(a, b).reduce(0.0) { $0 + abs($1.0 - $1.1) }
     }
 
     private static func localizedDifference(
