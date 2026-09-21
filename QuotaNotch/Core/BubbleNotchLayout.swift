@@ -126,3 +126,17 @@ enum BubbleReceiveMotion {
         min(1, max(0, (speed(at: time) - minimumSpeed) / (maximumSpeed - minimumSpeed)))
     }
 }
+
+/// Axis-lock and threshold rules shared by the native glyph event handler and
+/// its deterministic preview checks. A trackpad may start with a zero delta;
+/// the caller accumulates subsequent dominant-axis samples before claiming it.
+enum BubbleScrollPolicy {
+    static let axisRatio: CGFloat = 1.2
+    static let minimumDelta: CGFloat = 5
+
+    static func isDominantVertical(deltaX: CGFloat, deltaY: CGFloat) -> Bool {
+        abs(deltaY) > abs(deltaX) * axisRatio
+    }
+
+    static func isUpward(_ accumulatedDeltaY: CGFloat) -> Bool { accumulatedDeltaY > 0 }
+}

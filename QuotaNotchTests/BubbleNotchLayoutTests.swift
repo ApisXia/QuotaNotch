@@ -70,4 +70,14 @@ final class BubbleNotchLayoutTests: XCTestCase {
             XCTAssertGreaterThan(BubbleReceiveMotion.speed(at: t), 0)
         }
     }
+
+    func testScrollPolicyLocksToVerticalAxisAndUsesAccumulatedDirection() {
+        XCTAssertTrue(BubbleScrollPolicy.isDominantVertical(deltaX: 0, deltaY: 1))
+        XCTAssertTrue(BubbleScrollPolicy.isDominantVertical(deltaX: 2, deltaY: 3))
+        XCTAssertFalse(BubbleScrollPolicy.isDominantVertical(deltaX: 4, deltaY: 3))
+        XCTAssertFalse(BubbleScrollPolicy.isDominantVertical(deltaX: 0, deltaY: 0))
+        XCTAssertTrue(BubbleScrollPolicy.isUpward(6))
+        XCTAssertFalse(BubbleScrollPolicy.isUpward(-6))
+        XCTAssertEqual(BubbleScrollPolicy.minimumDelta, 5)
+    }
 }

@@ -540,6 +540,8 @@ private final class BubbleInteractionView: NSView, NSDraggingSource {
     private var downPoint: NSPoint?
     private var state: Interaction = .idle
     private var lastVerticalToggle: TimeInterval = 0
+    private var verticalAccumulator: CGFloat = 0
+    private var verticalGestureClaimed = false
 
     private enum Interaction { case idle, tracking, dragging }
 
@@ -573,19 +575,33 @@ private final class BubbleInteractionView: NSView, NSDraggingSource {
 
     override func scrollWheel(with event: NSEvent) {
         let vertical = event.scrollingDeltaY
-        // A wheel usually reports phase `.none`; a trackpad reports began/changed.
-        // Both use the same axis lock, while momentum is deliberately ignored so a
-        // single gesture cannot toggle receiving twice.
+        // A wheel usually reports phase `.none`; a trackpad can begin with a zero
+        // delta and deliver the useful movement in `.changed`. Accumulate a
+        // dominant vertical axis until it reaches the gesture threshold, then
+        // claim that gesture once. Momentum is deliberately ignored.
         guard event.momentumPhase == .none,
-              abs(vertical) >= 5, abs(vertical) > abs(event.scrollingDeltaX) * 1.2,
+              BubbleScrollPolicy.isDominantVertical(deltaX: event.scrollingDeltaX, deltaY: vertical),
               event.phase == .none || event.phase == .began || event.phase == .changed || event.phase == .ended else {
             super.scrollWheel(with: event)
             return
         }
-        let firstWheelSample = event.phase == .none || event.phase == .began
-        if firstWheelSample && event.timestamp - lastVerticalToggle >= 0.45 {
+
+        if event.phase == .began || (event.phase == .none && event.timestamp - lastVerticalToggle >= 0.45) {
+            verticalAccumulator = 0
+            verticalGestureClaimed = false
+        }
+        verticalAccumulator += vertical
+        if !verticalGestureClaimed,
+           abs(verticalAccumulator) >= BubbleScrollPolicy.minimumDelta,
+           event.timestamp - lastVerticalToggle >= 0.45 {
             lastVerticalToggle = event.timestamp
-            swipe?(vertical > 0)
+            verticalGestureClaimed = true
+            swipe?(BubbleScrollPolicy.isUpward(verticalAccumulator))
+            verticalAccumulator = 0
+        }
+        if event.phase == .ended {
+            verticalAccumulator = 0
+            verticalGestureClaimed = false
         }
     }
 
