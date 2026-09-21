@@ -18,29 +18,38 @@ struct BubbleShelfView: View {
     @State private var importSummary: String?
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            HStack(alignment: .center) {
-                VStack(alignment: .leading, spacing: 3) {
-                    Text(AgentText.t("收纳", "Shelf"))
-                        .font(.system(size: 20, weight: .semibold, design: .rounded))
-                        .foregroundStyle(.white)
-                    Text(AgentText.t("新内容放在最前；暂停不会清除已保存内容。", "New items appear first. Pausing keeps saved items."))
-                        .font(.system(size: 11))
-                        .foregroundStyle(.white.opacity(0.62))
-                }
-                Spacer()
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(alignment: .center, spacing: 8) {
+                Text(AgentText.t("收纳", "Shelf"))
+                    .font(.system(size: 16, weight: .semibold, design: .rounded))
+                    .foregroundStyle(.white)
+                Text("\(store.items.count)")
+                    .font(.system(size: 10, weight: .medium, design: .monospaced))
+                    .foregroundStyle(.white.opacity(0.48))
+                Spacer(minLength: 8)
                 BubbleReceivingToggle()
-                    .frame(width: 190)
+                    .frame(width: 150)
+                if !store.items.isEmpty {
+                    Button { store.clear() } label: {
+                        Image(systemName: "trash")
+                            .font(.system(size: 10, weight: .medium))
+                            .foregroundStyle(.white.opacity(0.62))
+                            .frame(width: 22, height: 22)
+                    }
+                    .buttonStyle(.plain)
+                    .help(AgentText.t("清空收纳", "Clear Shelf"))
+                }
             }
+            .frame(height: 24)
 
-            HStack(spacing: 8) {
+            HStack(spacing: 7) {
                 Circle()
                     .fill(collector.availability == .ready && store.isReceiving ? Color.green.opacity(0.9) : Color.white.opacity(0.32))
-                    .frame(width: 6, height: 6)
+                    .frame(width: 5, height: 5)
                 Text(statusText)
-                    .font(.system(size: 11))
+                    .font(.system(size: 10))
                     .foregroundStyle(.white.opacity(0.70))
-                    .lineLimit(2)
+                    .lineLimit(1)
                 Spacer(minLength: 8)
                 if collector.availability == .accessibilityRequired {
                     Button(AgentText.t("允许访问", "Allow Access")) {
@@ -49,59 +58,43 @@ struct BubbleShelfView: View {
                     .buttonStyle(.bordered)
                     .controlSize(.small)
                 }
-                if !store.items.isEmpty {
-                    Button(AgentText.t("清空", "Clear"), role: .destructive) { store.clear() }
-                        .buttonStyle(.borderless)
-                        .font(.system(size: 11))
-                }
             }
+            .frame(height: 16)
 
             Rectangle().fill(.white.opacity(0.10)).frame(height: 1)
 
             if store.items.isEmpty {
-                VStack(spacing: 7) {
+                HStack(spacing: 8) {
                     Image(systemName: "tray")
-                        .font(.system(size: 19, weight: .light))
+                        .font(.system(size: 15, weight: .light))
                         .foregroundStyle(.white.opacity(0.55))
-                    Text(AgentText.t("暂无内容", "Nothing saved yet"))
-                        .font(.system(size: 12, weight: .medium))
-                        .foregroundStyle(.white.opacity(0.82))
-                    Text(AgentText.t("拖入文件，或开启接收后点击附近的气泡预览。", "Drop files here, or turn on receiving and capture a nearby preview."))
-                        .font(.system(size: 10))
-                        .foregroundStyle(.white.opacity(0.55))
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(AgentText.t("暂无内容", "Nothing saved yet"))
+                            .font(.system(size: 11, weight: .medium))
+                            .foregroundStyle(.white.opacity(0.82))
+                        Text(AgentText.t("拖入文件，或开启接收后点击附近的气泡预览。", "Drop files here, or enable receiving and click a nearby preview."))
+                            .font(.system(size: 9))
+                            .foregroundStyle(.white.opacity(0.55))
+                            .lineLimit(1)
+                    }
+                    Spacer(minLength: 0)
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .background(.white.opacity(0.025), in: RoundedRectangle(cornerRadius: 12))
+                .padding(.horizontal, 10)
+                .background(.white.opacity(0.025), in: RoundedRectangle(cornerRadius: 9))
             } else {
                 ScrollView {
-                    LazyVStack(spacing: 7) {
+                    LazyVStack(spacing: 4) {
                         ForEach(store.items) { item in
                             BubbleShelfItemRow(item: item, store: store)
                         }
                     }
-                    .padding(.vertical, 2)
                 }
-                .frame(maxHeight: .infinity)
+                .frame(minHeight: 56, maxHeight: .infinity)
             }
-
-            HStack {
-                if let importSummary {
-                    Text(importSummary)
-                        .lineLimit(1)
-                        .foregroundStyle(.white.opacity(0.68))
-                } else {
-                    Text(AgentText.t("可保存最多 80 项", "Up to 80 saved items"))
-                        .foregroundStyle(.white.opacity(0.48))
-                }
-                Spacer()
-                Text(AgentText.t("可从气泡拖出单项或整组", "Drag one item or the whole shelf from the bubble"))
-                    .foregroundStyle(.white.opacity(0.44))
-            }
-            .font(.system(size: 10))
         }
         .padding(.horizontal, 22)
-        .padding(.top, 12)
-        .padding(.bottom, 16)
+        .padding(.vertical, 8)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .background {
             BubbleShelfDropTarget { result in
@@ -232,14 +225,14 @@ private struct BubbleShelfItemRow: View {
 
     var body: some View {
         HStack(spacing: 11) {
-            BubbleShelfDragHandle(writers: { store.exportItems([item.id]) }, preview: { store.thumbnail(for: item) ?? NSImage(systemSymbolName: "doc", accessibilityDescription: nil) ?? NSImage(size: NSSize(width: 32, height: 32)) })
-                .frame(width: 42, height: 42)
-                .overlay { BubbleShelfArtwork(item: item, store: store, size: 34).allowsHitTesting(false) }
+            BubbleShelfDragHandle(writers: { store.exportItems([item.id]) }, preview: { store.thumbnail(for: item) ?? NSImage(systemSymbolName: "doc", accessibilityDescription: nil) ?? NSImage(size: NSSize(width: 24, height: 24)) })
+                .frame(width: 28, height: 28)
+                .overlay { BubbleShelfArtwork(item: item, store: store, size: 22).allowsHitTesting(false) }
                 .accessibilityLabel(AgentText.t("拖动 \(item.title)", "Drag \(item.title)"))
 
-            VStack(alignment: .leading, spacing: 4) {
+            VStack(alignment: .leading, spacing: 2) {
                 Text(item.title)
-                    .font(.system(size: 12, weight: .medium))
+                    .font(.system(size: 11, weight: .medium))
                     .foregroundStyle(.white.opacity(0.94))
                     .lineLimit(1)
                 HStack(spacing: 7) {
@@ -250,7 +243,7 @@ private struct BubbleShelfItemRow: View {
                     }
                     Text(item.addedAt, style: .relative)
                 }
-                .font(.system(size: 10))
+                .font(.system(size: 9))
                 .foregroundStyle(.white.opacity(0.48))
                 .lineLimit(1)
             }
@@ -259,15 +252,15 @@ private struct BubbleShelfItemRow: View {
                 Image(systemName: "xmark")
                     .font(.system(size: 10, weight: .semibold))
                     .foregroundStyle(.white.opacity(0.56))
-                    .frame(width: 26, height: 26)
+                    .frame(width: 22, height: 22)
                     .background(.white.opacity(0.07), in: Circle())
             }
             .buttonStyle(.plain)
             .help(AgentText.t("从收纳中移除", "Remove from shelf"))
             .accessibilityLabel(AgentText.t("移除 \(item.title)", "Remove \(item.title)"))
         }
-        .padding(.horizontal, 9)
-        .padding(.vertical, 5)
+        .padding(.horizontal, 7)
+        .padding(.vertical, 3)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(.white.opacity(0.035), in: RoundedRectangle(cornerRadius: 10))
     }

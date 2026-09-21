@@ -124,6 +124,7 @@ struct SettingsPreviewRunner {
         try captureCat(output: output, fixtures: fixtures)
         try captureNotchSwitching(output: output)
         try captureBubbleShelfPreview(output: output)
+        try captureBubbleShelfOpenLayouts(output: output)
         try captureBubbleClosedLayouts(output: output, fixtures: fixtures)
         try captureTaskPanel(output: output, fixtures: fixtures)
         for dark in [true, false] {
@@ -685,6 +686,85 @@ struct SettingsPreviewRunner {
             try capture(BubbleCollectorFixtureView(payloads: payloads)
                 .background(Color.black).preferredColorScheme(.dark), width: 220,
                 name: "Shelf-collector-count-\(count)", output: output, height: 190)
+        }
+    }
+
+    /// Render Shelf through the production ContentView at the real 640×190 open-notch size.
+    /// The standalone panel previews are intentionally larger; these fixtures catch title,
+    /// status, list and error rows overflowing the actual notch body.
+    @MainActor private static func captureBubbleShelfOpenLayouts(output: URL) throws {
+        let shelf = BubbleShelfStore.shared
+        let fixtureURL = output.appendingPathComponent("shelf-open-fixture.txt")
+        try Data("Shelf open-notch fixture".utf8).write(to: fixtureURL)
+        let noteURL = output.appendingPathComponent("shelf-open-note.md")
+        try Data("# Shelf open-notch fixture\n\nA second compact row.".utf8).write(to: noteURL)
+
+        let vm = BoringViewModel()
+        vm.hideOnClosed = false
+        let coordinator = BoringViewCoordinator.shared
+        coordinator.helloAnimationRunning = false
+        coordinator.currentView = .bubbleShelf
+        QuotaNotchStore.shared.menuOpen = true
+        let window = NSWindow(contentRect: NSRect(origin: .zero, size: windowSize),
+                              styleMask: [.borderless], backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false
+        let host = NSHostingView(rootView: ContentView().environmentObject(vm)
+            .transaction { $0.animation = nil; $0.disablesAnimations = true }
+            .background(Color(red: 0.25, green: 0.15, blue: 0.35)))
+        window.contentView = host
+        window.orderFront(nil)
+        vm.open()
+
+        let baseItems: [BubbleShelfItem] = [
+            BubbleShelfItem(kind: .file, title: "shelf-open-fixture.txt", resourceURL: fixtureURL),
+            BubbleShelfItem(kind: .text, title: AgentText.t("选中的文本", "Selected text"),
+                            text: AgentText.t("一段可拖出的示例文本", "A sample text item that can be dragged out")),
+            BubbleShelfItem(kind: .url, title: "example.com", resourceURL: URL(string: "https://example.com/preview")!),
+            BubbleShelfItem(kind: .file, title: "shelf-open-note.md", resourceURL: noteURL)
+        ]
+        let scenarios: [(name: String, items: [BubbleShelfItem], receiving: Bool, result: BubbleShelfImportResult?)] = [
+            ("empty-paused", [], false, nil),
+            ("populated-receiving", baseItems, true, nil),
+            ("long-error", baseItems.enumerated().map { index, item in
+                var copy = item
+                copy.title = index == 0
+                    ? AgentText.t("一个很长的文件标题用于验证英文和中文收纳布局不会溢出", "A deliberately long file title checks that Shelf rows stay inside the open notch")
+                    : item.title
+                return copy
+            }, false, BubbleShelfImportResult(skippedCount: 1, errors: ["The shelf could not be saved."]))
+        ]
+        defer {
+            shelf.resetPreviewConfiguration()
+            QuotaNotchStore.shared.menuOpen = false
+            window.orderOut(nil); window.contentView = nil; window.close(); vm.destroy()
+        }
+
+        for scenario in scenarios {
+            shelf.configurePreview(items: scenario.items)
+            shelf.isReceiving = scenario.receiving
+            if let result = scenario.result { shelf.recordImportResult(result) }
+            settle(); host.layoutSubtreeIfNeeded(); settle()
+            verifyPresentation(vm.notchSize == openNotchSize,
+                               "Shelf open fixture changed the fixed notch size in \(scenario.name): \(vm.notchSize)")
+            let scroll = descendants(host).compactMap { $0 as? NSScrollView }.max { $0.frame.width < $1.frame.width }
+            if scenario.items.isEmpty {
+                verifyPresentation(scroll == nil || (scroll?.frame.height ?? 0) <= 1,
+                                   "Empty Shelf unexpectedly reserved a large list scroll region")
+            } else {
+                guard let scroll, let document = scroll.documentView else {
+                    fatalError("Populated Shelf has no scrollable list in \(scenario.name)")
+                }
+                verifyPresentation(scroll.frame.minY >= -1 && scroll.frame.maxY <= host.bounds.height + 1,
+                                   "Shelf list escaped the open-notch bounds in \(scenario.name): \(scroll.frame)")
+                verifyPresentation(document.bounds.height >= scroll.contentView.bounds.height - 1,
+                                   "Shelf list content was not available to scroll in \(scenario.name)")
+            }
+            guard let bitmap = host.bitmapImageRepForCachingDisplay(in: host.bounds) else {
+                fatalError("Missing open Shelf bitmap for \(scenario.name)")
+            }
+            host.cacheDisplay(in: host.bounds, to: bitmap)
+            try bitmap.representation(using: .png, properties: [:])!.write(to: output.appendingPathComponent(
+                "Notch-shelf-open-\(scenario.name).png"))
         }
     }
 
