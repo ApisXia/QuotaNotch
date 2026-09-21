@@ -170,7 +170,7 @@ final class BubbleShelfStore: ObservableObject {
     @discardableResult
     func importPasteboardManually(_ pasteboard: NSPasteboard) -> BubbleShelfImportResult {
         beginImportAction()
-        importPasteboardContents(pasteboard)
+        return importPasteboardContents(pasteboard)
     }
 
     private func importPasteboardContents(_ pasteboard: NSPasteboard) -> BubbleShelfImportResult {
