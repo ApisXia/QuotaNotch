@@ -58,7 +58,7 @@ struct BubbleShelfView: View {
                     .controlSize(.small)
                 }
                 if store.isReceiving && collector.finderAutomationState != .enabled {
-                    Button(AgentText.t("检查 Finder", "Check Finder")) {
+                    Button(AgentText.t("允许 Finder", "Allow Finder")) {
                         collector.requestFinderAutomationFromUserAction()
                     }
                     .buttonStyle(.borderless)
@@ -118,6 +118,10 @@ struct BubbleShelfView: View {
         if let result = store.lastImportResult,
            result.succeeded || result.skippedCount > 0 || !result.errors.isEmpty {
             return Self.summary(for: result)
+        }
+        if store.isReceiving && collector.finderAutomationState == .denied {
+            return AgentText.t("Finder 访问未开启，请在系统设置的自动化中允许后重试。",
+                               "Finder access is off. Allow QuotaNotch in Automation settings, then retry.")
         }
         switch collector.availability {
         case .disabled:
@@ -223,10 +227,16 @@ struct BubbleShelfSettingsView: View {
                                 .font(.footnote)
                                 .foregroundStyle(.secondary)
                         } else {
-                            Button(AgentText.t("检查 Finder", "Check Finder")) {
+                            Button(AgentText.t("允许读取 Finder", "Allow Finder Access")) {
                                 collector.requestFinderAutomationFromUserAction()
                             }
                         }
+                    }
+                    if collector.finderAutomationState == .denied {
+                        Text(AgentText.t("Finder 自动化访问未开启，请允许后重试。",
+                                         "Finder Automation access is off. Allow it, then retry."))
+                            .font(.footnote)
+                            .foregroundStyle(.orange)
                     }
                 }
                 LabeledContent(AgentText.t("已保存", "Saved")) {
