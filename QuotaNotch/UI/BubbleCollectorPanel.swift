@@ -343,7 +343,7 @@ private struct BubbleCollectorDropTarget: NSViewRepresentable {
     }
 }
 
-private final class BubbleCollectorDropView: NSView, NSDraggingDestination {
+private final class BubbleCollectorDropView: NSView {
     var isReceiving = false
     var onDrop: ((NSDraggingInfo) -> Bool)?
     private let accepted = [
@@ -360,19 +360,19 @@ private final class BubbleCollectorDropView: NSView, NSDraggingDestination {
         registerForDraggedTypes(accepted)
     }
 
-    func draggingEntered(_ sender: NSDraggingInfo) -> NSDragOperation {
+    override func draggingEntered(_ sender: NSDraggingInfo) -> NSDragOperation {
         accepts(sender) ? .copy : []
     }
 
-    func draggingUpdated(_ sender: NSDraggingInfo) -> NSDragOperation {
+    override func draggingUpdated(_ sender: NSDraggingInfo) -> NSDragOperation {
         accepts(sender) ? .copy : []
     }
 
-    func prepareForDragOperation(_ sender: NSDraggingInfo) -> Bool {
+    override func prepareForDragOperation(_ sender: NSDraggingInfo) -> Bool {
         accepts(sender)
     }
 
-    func performDragOperation(_ sender: NSDraggingInfo) -> Bool {
+    override func performDragOperation(_ sender: NSDraggingInfo) -> Bool {
         guard accepts(sender) else { return false }
         return onDrop?(sender) ?? false
     }
