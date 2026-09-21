@@ -18,18 +18,11 @@ struct SettingsPreviewRunner {
         let output = URL(fileURLWithPath: "build/Settings-previews/\(language)")
         try FileManager.default.createDirectory(at: output, withIntermediateDirectories: true)
         try BubbleShelfVerification.run()
+        BubbleShelfStore.shared.resetPreviewConfiguration()
         let shelfPreviewFile = output.appendingPathComponent("shelf-preview.txt")
         let shelfPreviewNote = output.appendingPathComponent("shelf-preview-note.md")
         try Data(AgentText.t("内置预览文件\n用于收纳面板截图", "Built-in preview file\nfor Shelf panel screenshots").utf8).write(to: shelfPreviewFile)
         try Data("# Preview note\n\nA second built-in document for the shelf fixture.".utf8).write(to: shelfPreviewNote)
-        let shelfPreviewItems = [
-            BubbleShelfItem(kind: .file, title: "shelf-preview.txt", resourceURL: shelfPreviewFile),
-            BubbleShelfItem(kind: .text, title: AgentText.t("选中的文本", "Selected text"), text: AgentText.t("一段可拖出的示例文本", "A sample text item that can be dragged out")),
-            BubbleShelfItem(kind: .url, title: "example.com", resourceURL: URL(string: "https://example.com/preview")!),
-            BubbleShelfItem(kind: .file, title: "shelf-preview-note.md", resourceURL: shelfPreviewNote)
-        ]
-        BubbleShelfStore.shared.configurePreview(items: shelfPreviewItems)
-        BubbleShelfStore.shared.isReceiving = false
         // Old manual sizing preferences must no longer affect the actual screen layout.
         UserDefaults.standard.set(15, forKey: "notchHeight")
         UserDefaults.standard.set(10, forKey: "nonNotchHeight")
@@ -638,10 +631,19 @@ struct SettingsPreviewRunner {
     /// The fixture uses ordinary text, URL, and file items; it never reads the user's shelf.
     @MainActor private static func captureBubbleShelfPreview(output: URL) throws {
         let shelf = BubbleShelfStore.shared
+        let shelfPreviewFile = output.appendingPathComponent("shelf-preview.txt")
+        let shelfPreviewNote = output.appendingPathComponent("shelf-preview-note.md")
+        shelf.configurePreview(items: [
+            BubbleShelfItem(kind: .file, title: "shelf-preview.txt", resourceURL: shelfPreviewFile),
+            BubbleShelfItem(kind: .text, title: AgentText.t("选中的文本", "Selected text"), text: AgentText.t("一段可拖出的示例文本", "A sample text item that can be dragged out")),
+            BubbleShelfItem(kind: .url, title: "example.com", resourceURL: URL(string: "https://example.com/preview")!),
+            BubbleShelfItem(kind: .file, title: "shelf-preview-note.md", resourceURL: shelfPreviewNote)
+        ])
+        shelf.isReceiving = false
         let originalReceiving = shelf.isReceiving
         defer {
             shelf.isReceiving = originalReceiving
-            shelf.resetPreview()
+            shelf.resetPreviewConfiguration()
         }
 
         for receiving in [false, true] {
