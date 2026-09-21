@@ -75,7 +75,7 @@ struct BubbleContentPreviews: View {
                 ForEach(composition.placements) { placement in
                     let focus = placement.content == .photo ? crossfade : 1 - crossfade
                     let driftPhase = time * 0.24 + (placement.content == .photo ? 0.4 : 2.2)
-                    let gatherScale = 1 - Double(gather) * 0.76
+                    let gatherScale: CGFloat = 1 - gather * 0.76
                     let x = diameter * placement.x * gatherScale
                         + CGFloat(sin(driftPhase)) * diameter * placement.drift
                     let y = diameter * placement.y * gatherScale
