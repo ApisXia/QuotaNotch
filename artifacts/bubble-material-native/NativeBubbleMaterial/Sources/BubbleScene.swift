@@ -30,7 +30,7 @@ struct BubbleScene: View {
         let shader = ShaderLibrary.default.pearlFilm(
             .boundingRect,
             .float(Float(time)),
-            .float2(light),
+            .float2(CGPoint(x: CGFloat(light.x), y: CGFloat(light.y))),
             .float(populated ? 1 : 0),
             .float(Float(breathing))
         )
