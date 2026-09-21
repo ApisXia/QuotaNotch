@@ -99,7 +99,7 @@ struct InteractiveBubbleLab: View {
                     arrivalStartedAt = .now
                 }
                 .keyboardShortcut(.defaultAction)
-                Button("播放新文件加入") {
+                Button("播放连续加入（0→5）") {
                     arrivalStartedAt = nil
                     insertionStartedAt = .now
                 }

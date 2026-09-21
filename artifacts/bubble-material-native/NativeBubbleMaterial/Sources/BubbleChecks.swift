@@ -4,14 +4,24 @@ enum BubbleChecks {
     static func run() throws {
         guard BubbleDemoContent.allCases.count == 6,
               BubbleItemLayout.sampleCounts == [0, 1, 2, 3, 6],
-              Set(BubbleItemLayout.insertionHistory).count == 6 else {
-            throw BubbleLabError.capture("the sample catalog and 0/1/2/3/6 states must stay available")
+              BubbleItemLayout.insertionHistory.count == 6,
+              Set(BubbleItemLayout.insertionHistory).count == 6,
+              BubbleInsertionTimeline.insertionStartTimes.count == 5,
+              BubbleInsertionTimeline.insertionStartTimes.first! > 0,
+              BubbleInsertionTimeline.insertionStartTimes.last! + BubbleInsertionTimeline.transitionDuration < BubbleInsertionTimeline.duration,
+              zip(BubbleInsertionTimeline.insertionStartTimes, BubbleInsertionTimeline.insertionStartTimes.dropFirst())
+                  .allSatisfy({ pair in pair.1 - pair.0 > BubbleInsertionTimeline.transitionDuration }),
+              BubbleInsertionTimeline.duration >= 18,
+              BubbleInsertionTimeline.duration <= 22 else {
+            throw BubbleLabError.capture("the sample catalog and complete 0→5 insertion timeline must stay available")
         }
-        for count in BubbleItemLayout.sampleCounts {
+        for count in 0...6 {
             let placements = BubbleItemLayout.placements(for: count)
             let expectedRendered = min(count, BubbleItemLayout.maximumRenderedPreviews)
+            let expectedContents = Array(BubbleItemLayout.insertionHistory.prefix(count).reversed().prefix(expectedRendered))
             guard placements.count == expectedRendered,
                   placements.map(\.slot) == Array(0..<expectedRendered),
+                  placements.map(\.content) == expectedContents,
                   BubbleItemLayout.showsOverflowHint(for: count) == (count > 3),
                   Set(placements.map(\.content)).count == placements.count,
                   placements.prefix(BubbleItemLayout.maximumVisiblePreviews).allSatisfy({ $0.blur == 0 }),
@@ -30,9 +40,21 @@ enum BubbleChecks {
                 }
             }
         }
-        let settledThree = BubbleInsertionTimeline.frame(at: 0)
-        let settledFour = BubbleInsertionTimeline.frame(at: BubbleInsertionTimeline.settledFourTime)
-        let settledFive = BubbleInsertionTimeline.frame(at: BubbleInsertionTimeline.settledFiveTime)
+
+        let settledFrames = Dictionary(uniqueKeysWithValues: (0...5).map { count in
+            (count, BubbleInsertionTimeline.frame(at: BubbleInsertionTimeline.settledTime(for: count)))
+        })
+        guard (0...5).allSatisfy({ count in
+            guard let frame = settledFrames[count] else { return false }
+            let expected = Array(BubbleItemLayout.insertionHistory.prefix(count).reversed().prefix(4))
+            return frame.count == count && frame.placements.map(\.content) == expected
+        }),
+        let settledTwo = settledFrames[2],
+        let settledThree = settledFrames[3],
+        let settledFour = settledFrames[4],
+        let settledFive = settledFrames[5] else {
+            throw BubbleLabError.capture("settled 0→5 steps must use one chronological latest-first content identity order")
+        }
         let contentsThree = settledThree.placements.map(\.content)
         let contentsFour = settledFour.placements.map(\.content)
         let contentsFive = settledFive.placements.map(\.content)
@@ -46,9 +68,13 @@ enum BubbleChecks {
             / sharpAreaFour
         let fourthCard = settledFour.placements[3]
         let fourthPeek = BubbleItemLayout.bottomEdgeUnit(for: fourthCard) - sharpBottomFour
-        guard contentsThree == [.stillLife, .document, .diagram],
-              contentsFour == [.report, .stillLife, .document, .diagram],
-              contentsFive == [.fieldNotes, .report, .stillLife, .document],
+        guard settledFrames[0]?.placements.isEmpty == true,
+              settledFrames[1]?.placements.map(\.content) == [.stillLife],
+              settledTwo.placements.map(\.content) == [.document, .stillLife],
+              contentsThree == [.diagram, .document, .stillLife],
+              contentsFour == [.report, .diagram, .document, .stillLife],
+              contentsFive == [.fieldNotes, .report, .diagram, .document],
+              settledTwo.placements[0].depth > settledTwo.placements[1].depth,
               settledFour.placements.prefix(3).allSatisfy({ $0.blur == 0 }),
               settledFour.placements.filter({ $0.blur > 0 }).count == 1,
               fourthCard.blur > 0,
@@ -56,44 +82,57 @@ enum BubbleChecks {
               (0.045...0.070).contains(fourthPeek),
               (-0.060 ... -0.010).contains(sharpCenterYFour),
               abs(settledFour.placements[0].y - settledFour.placements[1].y) > 0.050,
+              settledFive.placements[3].content == .document,
               settledFive.placements.prefix(3).allSatisfy({ $0.blur == 0 }),
               settledFive.placements.filter({ $0.blur > 0 }).count == 1,
-              settledFive.placements[3].blur > 0,
-              reflows([.stillLife, .document, .diagram], from: settledThree.placements, to: settledFour.placements),
-              reflows([.report, .stillLife, .document], from: settledFour.placements, to: settledFive.placements) else {
-            throw BubbleLabError.capture("new files must lead; the prior third file becomes the blurred fourth")
+              settledFive.placements[3].blur > 0 else {
+            throw BubbleLabError.capture("new files must lead and the prior third file must become the compact blurred fourth")
         }
 
-        let enteringFour = BubbleInsertionTimeline.frame(
-            at: BubbleInsertionTimeline.firstInsertStart + BubbleInsertionTimeline.transitionDuration * 0.5
-        )
-        let enteringFive = BubbleInsertionTimeline.frame(
-            at: BubbleInsertionTimeline.secondInsertStart + BubbleInsertionTimeline.transitionDuration * 0.5
-        )
-        let enteringFourByID = Dictionary(uniqueKeysWithValues: enteringFour.placements.map { ($0.content, $0) })
-        let enteringFiveByID = Dictionary(uniqueKeysWithValues: enteringFive.placements.map { ($0.content, $0) })
-        guard enteringFour.count == 4,
-              Set(enteringFourByID.keys).count == 4,
-              let incomingFour = enteringFourByID[.report],
-              let oldThird = enteringFourByID[.diagram],
-              incomingFour.opacity > 0 && incomingFour.opacity < 0.97,
-              oldThird.blur > 0 && oldThird.blur < settledFour.placements[3].blur,
-              enteringFourByID[.stillLife]?.x != settledThree.placements[0].x,
-              enteringFive.count == 5,
-              Set(enteringFiveByID.keys).count == 5,
-              let incomingFive = enteringFiveByID[.fieldNotes],
-              let movedFourth = enteringFiveByID[.document],
-              let outgoingFourth = enteringFiveByID[.diagram],
-              incomingFive.opacity > 0 && incomingFive.opacity < 0.97,
-              movedFourth.blur > 0 && movedFourth.blur < settledFive.placements[3].blur,
-              outgoingFourth.opacity > 0 && outgoingFourth.opacity < 0.88 else {
-            throw BubbleLabError.capture("insert transitions must preserve identity while smoothly reflowing and blurring old previews")
+        for newCount in 1...5 {
+            let start = BubbleInsertionTimeline.insertionStartTimes[newCount - 1]
+            let oldFrame = settledFrames[newCount - 1]!
+            let newFrame = settledFrames[newCount]!
+            let before = BubbleInsertionTimeline.frame(at: start - 0.01)
+            let beginning = BubbleInsertionTimeline.frame(at: start)
+            let middle = BubbleInsertionTimeline.frame(at: start + BubbleInsertionTimeline.transitionDuration * 0.5)
+            let ending = BubbleInsertionTimeline.frame(at: start + BubbleInsertionTimeline.transitionDuration)
+            let middleIDs = Set(middle.placements.map(\.content))
+            let expectedTransitionIDs = Set(oldFrame.placements.map(\.content))
+                .union(Set(newFrame.placements.map(\.content)))
+            let newest = BubbleItemLayout.insertionHistory[newCount - 1]
+            let middleByID = Dictionary(uniqueKeysWithValues: middle.placements.map { ($0.content, $0) })
+            let sharedOlderIDs = Array(Set(oldFrame.placements.map(\.content))
+                .intersection(Set(newFrame.placements.map(\.content))))
+            let moveCheck = oldFrame.placements.isEmpty || reflows(sharedOlderIDs, from: oldFrame.placements, to: newFrame.placements)
+            guard let incoming = middleByID[newest], let settledIncoming = newFrame.placements.first else {
+                throw BubbleLabError.capture("the \(newCount - 1)→\(newCount) insertion lost its newest preview identity")
+            }
+            let olderDepth = middle.placements.filter({ $0.content != newest }).map(\.depth).max() ?? -Double.infinity
+            let outgoingThird = newCount == 4 ? middleByID[.stillLife] : nil
+            let outgoingFourth = newCount == 5 ? middleByID[.stillLife] : nil
+            guard before.count == newCount - 1,
+                  beginning.count == newCount,
+                  ending.count == newCount,
+                  middle.count == expectedTransitionIDs.count,
+                  middleIDs == expectedTransitionIDs,
+                  middle.placements.first?.content == newest,
+                  incoming.opacity > 0,
+                  incoming.opacity < settledIncoming.opacity,
+                  incoming.depth > olderDepth,
+                  newCount != 4 || (outgoingThird?.blur ?? 0) > 0,
+                  newCount != 5 || ((outgoingFourth?.opacity ?? 0) > 0 && (outgoingFourth?.opacity ?? 1) < 0.88),
+                  moveCheck else {
+                throw BubbleLabError.capture("the \(newCount - 1)→\(newCount) insert must add one newest identity and smoothly reflow older previews")
+            }
         }
 
-        for sample in 0...480 {
-            let time = BubbleInsertionTimeline.duration * Double(sample) / 480
-            let placements = BubbleInsertionTimeline.frame(at: time).placements
+        for sample in 0...800 {
+            let time = BubbleInsertionTimeline.duration * Double(sample) / 800
+            let frame = BubbleInsertionTimeline.frame(at: time)
+            let placements = frame.placements
             guard Set(placements.map(\.content)).count == placements.count,
+                  (0...5).contains(frame.count),
                   placements.allSatisfy({
                       $0.width > 0 && $0.height > 0 && $0.x.isFinite && $0.y.isFinite
                           && $0.rotation.isFinite && $0.opacity.isFinite && (0...1).contains($0.opacity)

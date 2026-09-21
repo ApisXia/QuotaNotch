@@ -91,10 +91,16 @@ enum NativeCapture {
               let smallTwo = images["small-count-2"],
               let smallThree = images["small-count-3"],
               let smallSix = images["small-count-6"],
+              let historyZero = images["history-0"],
+              let historyOne = images["history-1"],
+              let historyTwo = images["history-2"],
               let historyThree = images["history-3"],
               let historyFour = images["history-4"],
               let historyFive = images["history-5"],
               let historySix = images["history-6"],
+              let smallHistoryZero = images["small-history-0"],
+              let smallHistoryOne = images["small-history-1"],
+              let smallHistoryTwo = images["small-history-2"],
               let smallHistoryThree = images["small-history-3"],
               let smallHistoryFour = images["small-history-4"],
               let smallHistoryFive = images["small-history-5"],
@@ -123,13 +129,14 @@ enum NativeCapture {
                 throw BubbleLabError.capture("the \(count)-item previews are missing or escape the 64-point shell")
             }
         }
+        let insertionSnapshots = [historyZero, historyOne, historyTwo, historyThree, historyFour, historyFive]
+        let smallInsertionSnapshots = [smallHistoryZero, smallHistoryOne, smallHistoryTwo, smallHistoryThree, smallHistoryFour, smallHistoryFive]
         guard difference(countThree, countSix) > 0.002,
-              difference(historyThree, historyFour) > 0.002,
-              difference(historyFour, historyFive) > 0.002,
-              difference(historyFive, historySix) > 0.002,
+              zip(insertionSnapshots, insertionSnapshots.dropFirst()).allSatisfy({ pair in difference(pair.0, pair.1) > 0.002 }),
+              zip(smallInsertionSnapshots, smallInsertionSnapshots.dropFirst()).allSatisfy({ pair in
+                  localizedDifference(pair.0, pair.1, center: CGPoint(x: 160, y: 160), insideRadius: 58) > 0.00015
+              }),
               localizedDifference(smallThree, smallSix, center: CGPoint(x: 160, y: 160), insideRadius: 58) > 0.00015,
-              localizedDifference(smallHistoryThree, smallHistoryFour, center: CGPoint(x: 160, y: 160), insideRadius: 58) > 0.00015,
-              localizedDifference(smallHistoryFour, smallHistoryFive, center: CGPoint(x: 160, y: 160), insideRadius: 58) > 0.00015,
               localizedDifference(smallHistoryFive, smallHistorySix, center: CGPoint(x: 160, y: 160), insideRadius: 58) > 0.00015,
               lowerPeekingDifference(
                 historySix,
@@ -143,7 +150,7 @@ enum NativeCapture {
                 center: CGPoint(x: 160, y: 160),
                 bubbleDiameter: 64
               ) > 0.0005 else {
-            throw BubbleLabError.capture("the 3→4→5 history must reflow and show a blurred fourth preview peeking below the group")
+            throw BubbleLabError.capture("the 0→5 insertion history must change each stage and retain its compact blurred fourth preview")
         }
 
         let comparison = try render(BubbleCountComparisonScene(
@@ -193,14 +200,9 @@ enum NativeCapture {
     private static let snapshotPlan: [(name: String, scene: BubbleScene)] = {
         let light = SIMD2<Float>(0.34, 0.28)
         func historyScene(_ count: Int, small: Bool = false, showsFourthPreview: Bool = true) -> BubbleScene {
-            let moment: TimeInterval = switch count {
-            case 3: 0
-            case 4: BubbleInsertionTimeline.settledFourTime
-            default: BubbleInsertionTimeline.settledFiveTime
-            }
             let frame = count == 6
                 ? BubbleInsertionFrame(count: 6, placements: BubbleItemLayout.placements(for: 6))
-                : BubbleInsertionTimeline.frame(at: moment)
+                : BubbleInsertionTimeline.frame(at: BubbleInsertionTimeline.settledTime(for: count))
             return BubbleScene(
                 time: 1.4,
                 light: light,
@@ -227,15 +229,11 @@ enum NativeCapture {
                 backdropStyle: .pearl
             ))
         }
+        scenes += (0...5).map { count in ("history-\(count)", historyScene(count)) }
+        scenes += (0...5).map { count in ("small-history-\(count)", historyScene(count, small: true)) }
         scenes += [
-            ("history-3", historyScene(3)),
-            ("history-4", historyScene(4)),
-            ("history-5", historyScene(5)),
             ("history-6", historyScene(6)),
             ("history-6-no-fourth", historyScene(6, showsFourthPreview: false)),
-            ("small-history-3", historyScene(3, small: true)),
-            ("small-history-4", historyScene(4, small: true)),
-            ("small-history-5", historyScene(5, small: true)),
             ("small-history-6", historyScene(6, small: true)),
             ("small-history-6-no-fourth", historyScene(6, small: true, showsFourthPreview: false)),
             ("light-near", BubbleScene(time: 1.4, light: SIMD2<Float>(0.18, 0.22), itemCount: 0, arrival: .resting)),

@@ -35,10 +35,10 @@ enum BubbleItemLayout {
     static let maximumVisiblePreviews = 3
     static let maximumRenderedPreviews = 4
 
-    /// The array is oldest to newest. The first three entries form the initial
-    /// 3-item stack; later inserts naturally push earlier identities rearward.
+    /// The array is oldest to newest. Each timeline step adds its next entry,
+    /// which becomes the front preview and pushes earlier identities rearward.
     static let insertionHistory: [BubbleDemoContent] = [
-        .diagram, .document, .stillLife, .report, .fieldNotes, .stillLifeDetail
+        .stillLife, .document, .diagram, .report, .fieldNotes, .stillLifeDetail
     ]
 
     static func visiblePreviewCount(for totalCount: Int) -> Int {
@@ -53,14 +53,7 @@ enum BubbleItemLayout {
         let count = min(max(totalCount, 0), insertionHistory.count)
         guard count > 0 else { return [] }
 
-        let newestFirst: [BubbleDemoContent]
-        if count == 1 {
-            newestFirst = [.stillLife]
-        } else if count == 2 {
-            newestFirst = [.stillLife, .document]
-        } else {
-            newestFirst = Array(insertionHistory.prefix(count).reversed().prefix(maximumRenderedPreviews))
-        }
+        let newestFirst = Array(insertionHistory.prefix(count).reversed().prefix(maximumRenderedPreviews))
 
         return newestFirst.enumerated().map { slot, content in
             placement(content: content, slot: slot, totalCount: count)
@@ -104,8 +97,8 @@ enum BubbleItemLayout {
             )
         }
 
-        // Three unequal planes: a photo lead, with document and diagram faces
-        // separated around the lower-right edge.
+        // Three unequal planes keep the newest preview prominent while older
+        // content remains visible around the lower-right edge.
         let layouts: [(CGFloat, CGFloat, CGFloat, CGFloat, Double, Double)] = [
             (0.37, 0.46, -0.14, -0.02, -5, 0.98),
             (0.28, 0.37, 0.16, -0.09, 6, 0.91),
@@ -151,35 +144,41 @@ struct BubbleInsertionFrame: Equatable {
 /// through front, middle, rear, and omitted states instead of crossfading in
 /// replacement thumbnails.
 enum BubbleInsertionTimeline {
-    static let duration: TimeInterval = 12
-    static let firstInsertStart: TimeInterval = 2.0
-    static let secondInsertStart: TimeInterval = 6.0
-    static let transitionDuration: TimeInterval = 1.35
-    static let settledFourTime = firstInsertStart + transitionDuration + 0.55
-    static let settledFiveTime = secondInsertStart + transitionDuration + 0.55
+    static let duration: TimeInterval = 20
+    static let insertionStartTimes: [TimeInterval] = [1.4, 5.0, 8.6, 12.2, 15.8]
+    static let transitionDuration: TimeInterval = 1.2
+    static let settleHold: TimeInterval = 0.55
+
+    static func settledTime(for count: Int) -> TimeInterval {
+        let boundedCount = min(max(count, 0), insertionStartTimes.count)
+        guard boundedCount > 0 else { return 0 }
+        return insertionStartTimes[boundedCount - 1] + transitionDuration + settleHold
+    }
+
+    static var firstInsertStart: TimeInterval { insertionStartTimes[0] }
+    static var secondInsertStart: TimeInterval { insertionStartTimes[1] }
+    static var settledFourTime: TimeInterval { settledTime(for: 4) }
+    static var settledFiveTime: TimeInterval { settledTime(for: 5) }
 
     static func frame(at time: TimeInterval) -> BubbleInsertionFrame {
-        if time < firstInsertStart {
-            return BubbleInsertionFrame(count: 3, placements: BubbleItemLayout.placements(for: 3))
+        for newCount in 1...5 {
+            let start = insertionStartTimes[newCount - 1]
+            if time < start {
+                return settledFrame(newCount - 1)
+            }
+            if time < start + transitionDuration {
+                let progress = (time - start) / transitionDuration
+                return BubbleInsertionFrame(
+                    count: newCount,
+                    placements: transition(from: newCount - 1, to: newCount, progress: progress)
+                )
+            }
         }
-        if time < firstInsertStart + transitionDuration {
-            let progress = (time - firstInsertStart) / transitionDuration
-            return BubbleInsertionFrame(
-                count: 4,
-                placements: transition(from: 3, to: 4, progress: progress)
-            )
-        }
-        if time < secondInsertStart {
-            return BubbleInsertionFrame(count: 4, placements: BubbleItemLayout.placements(for: 4))
-        }
-        if time < secondInsertStart + transitionDuration {
-            let progress = (time - secondInsertStart) / transitionDuration
-            return BubbleInsertionFrame(
-                count: 5,
-                placements: transition(from: 4, to: 5, progress: progress)
-            )
-        }
-        return BubbleInsertionFrame(count: 5, placements: BubbleItemLayout.placements(for: 5))
+        return settledFrame(5)
+    }
+
+    private static func settledFrame(_ count: Int) -> BubbleInsertionFrame {
+        BubbleInsertionFrame(count: count, placements: BubbleItemLayout.placements(for: count))
     }
 
     private static func transition(from oldCount: Int, to newCount: Int, progress: TimeInterval) -> [BubblePreviewPlacement] {
@@ -600,7 +599,7 @@ struct BubbleCountComparisonScene: View {
 
 struct BubbleInsertionComparisonScene: View {
     static let size = CGSize(width: 960, height: 260)
-    private static let counts = [3, 4, 5]
+    private static let counts = Array(0...5)
 
     let time: TimeInterval
     let light: SIMD2<Float>
@@ -608,14 +607,9 @@ struct BubbleInsertionComparisonScene: View {
     var body: some View {
         ZStack {
             Backdrop(style: .night)
-            HStack(spacing: 8) {
+            HStack(spacing: 0) {
                 ForEach(Self.counts, id: \.self) { count in
-                    let moment: TimeInterval = switch count {
-                    case 3: 0
-                    case 4: BubbleInsertionTimeline.settledFourTime
-                    default: BubbleInsertionTimeline.settledFiveTime
-                    }
-                    let frame = BubbleInsertionTimeline.frame(at: moment)
+                    let frame = BubbleInsertionTimeline.frame(at: BubbleInsertionTimeline.settledTime(for: count))
                     VStack(spacing: 2) {
                         Text(Self.title(for: count))
                             .font(.system(size: 10, weight: .medium, design: .rounded))
@@ -626,12 +620,12 @@ struct BubbleInsertionComparisonScene: View {
                             itemCount: frame.count,
                             insertionFrame: frame,
                             arrival: .resting,
-                            canvasSize: CGSize(width: 308, height: 226),
-                            bubbleDiameter: 214,
+                            canvasSize: CGSize(width: 160, height: 226),
+                            bubbleDiameter: 148,
                             drawBackdrop: false
                         )
                     }
-                    .frame(width: 308)
+                    .frame(width: 160)
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -641,9 +635,12 @@ struct BubbleInsertionComparisonScene: View {
 
     private static func title(for count: Int) -> String {
         switch count {
-        case 3: "初始 · 3份"
-        case 4: "加入第4份"
-        default: "加入第5份"
+        case 0: "空"
+        case 1: "加入1"
+        case 2: "加入2"
+        case 3: "加入3"
+        case 4: "加入4"
+        default: "加入5"
         }
     }
 }
