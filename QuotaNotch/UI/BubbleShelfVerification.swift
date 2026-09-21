@@ -82,8 +82,10 @@ enum BubbleShelfVerification {
 
         let restored = BubbleShelfStore(storageDirectory: root, defaults: defaults, fileManager: fileManager)
         try check(restored.items.count == store.items.count, "A new store must restore the saved manifest")
-        try check(restored.items.contains(where: { $0.kind == .folder && $0.fileURL == folderURL }),
-                  "Restored store must retain folder references")
+        try check(restored.items.contains(where: {
+            $0.kind == .folder && $0.availability == .available
+                && sameFileLocation($0.fileURL, folderURL)
+        }), "Restored store must retain folder references")
 
         let originalData = try Data(contentsOf: fileURL)
         let fileItem = try require(restored.items.first(where: { $0.kind == .file }), "File item missing")
@@ -108,7 +110,9 @@ enum BubbleShelfVerification {
         try Data("gone".utf8).write(to: missingFile)
         let missingResult = restored.addFile(missingFile)
         try check(missingResult.succeeded, "Missing-file export fixture could not be added")
-        let missingID = try require(restored.items.first(where: { $0.fileURL == missingFile })?.id, "Missing-file item missing")
+        let missingID = try require(restored.items.first(where: {
+            sameFileLocation($0.fileURL, missingFile)
+        })?.id, "Missing-file item missing")
         try fileManager.removeItem(at: missingFile)
         let missingWriters = restored.exportItems([missingID])
         try check(missingWriters.isEmpty && restored.exportIssue != nil, "Missing-file export must report an unavailable source")
@@ -206,6 +210,12 @@ enum BubbleShelfVerification {
 
     private static func check(_ condition: @autoclosure () -> Bool, _ message: String) throws {
         guard condition() else { throw VerificationError(message) }
+    }
+
+    private static func sameFileLocation(_ lhs: URL?, _ rhs: URL) -> Bool {
+        guard let lhs else { return false }
+        return lhs.standardizedFileURL.resolvingSymlinksInPath().path
+            == rhs.standardizedFileURL.resolvingSymlinksInPath().path
     }
 
     private struct VerificationError: LocalizedError {
