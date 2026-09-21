@@ -83,7 +83,7 @@ enum NativeCapture {
         guard let empty = images["count-0"], let countOne = images["count-1"],
               let countTwo = images["count-2"], let countThree = images["count-3"],
               let countSix = images["count-6"],
-              let lightNear = images["light-near"], let lightFar = images["light-far"],
+              let lightNear = images["light-near"], let lightRim = images["light-rim"],
               let patternReference = images["transmission-background"],
               let patternThroughShell = images["transmission-patterned"],
               let smallEmpty = images["small-count-0"],
@@ -100,10 +100,10 @@ enum NativeCapture {
                 throw BubbleLabError.capture("the \(count)-item state did not visibly show its built-in preview arrangement")
             }
         }
-        guard difference(lightNear, lightFar) > 0.002 else {
+        guard difference(lightNear, lightRim) > 0.002 else {
             throw BubbleLabError.capture("pointer positions did not change the captured reflected environment")
         }
-        guard spatialLightingChange(lightNear, lightFar) > 0.003 else {
+        guard spatialLightingChange(lightNear, lightRim) > 0.003 else {
             throw BubbleLabError.capture("pointer movement changed overall color but did not move reflected light across the shell")
         }
         guard patternTransmission(background: patternReference, shell: patternThroughShell) > 0.45 else {
