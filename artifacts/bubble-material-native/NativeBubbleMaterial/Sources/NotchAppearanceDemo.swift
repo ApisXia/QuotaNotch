@@ -46,6 +46,10 @@ enum NotchSignalMotion {
     static let cycleDuration: TimeInterval = 4
     static let orbitRadiusFraction: CGFloat = 0.37
     static let arcSpan: Double = 0.96
+    static let slowZoneWeight = 1.18
+    static let returnEaseWeight = 0.25
+    static let minimumSpeed = 0.07
+    static let maximumSpeed = 2.43
 
     private static func phase(at time: TimeInterval) -> Double {
         let turns = time / cycleDuration
@@ -57,11 +61,15 @@ enum NotchSignalMotion {
     static func angle(at time: TimeInterval) -> Double {
         let turns = time / cycleDuration
         let phaseAngle = 2 * .pi * phase(at: time)
-        return -.pi / 2 + 2 * .pi * turns - 0.70 * sin(phaseAngle)
+        let weightedTurns = turns
+            - slowZoneWeight / (2 * .pi) * sin(phaseAngle)
+            + returnEaseWeight / (4 * .pi) * sin(2 * phaseAngle)
+        return -3 * .pi / 4 + 2 * .pi * weightedTurns
     }
 
     static func speed(at time: TimeInterval) -> Double {
-        1 - 0.70 * cos(2 * .pi * phase(at: time))
+        let phaseAngle = 2 * .pi * phase(at: time)
+        return 1 - slowZoneWeight * cos(phaseAngle) + returnEaseWeight * cos(2 * phaseAngle)
     }
 
     static func normalizedProgress(at time: TimeInterval) -> Double {
@@ -69,7 +77,7 @@ enum NotchSignalMotion {
     }
 
     static func speedProgress(at time: TimeInterval) -> Double {
-        (speed(at: time) - 0.30) / 1.40
+        (speed(at: time) - minimumSpeed) / (maximumSpeed - minimumSpeed)
     }
 }
 
@@ -186,9 +194,9 @@ private struct CurvedReceiveGlint: View {
 
     private var angle: Double { NotchSignalMotion.angle(at: time) }
     private var speedProgress: Double { NotchSignalMotion.speedProgress(at: time) }
-    private var lineWidth: CGFloat { max(0.46, size * 0.026) }
-    private var brightness: Double { 0.62 + 0.28 * speedProgress }
-    private var haloRadius: CGFloat { max(0.45, size * 0.025) }
+    private var lineWidth: CGFloat { max(0.46, size * (0.026 + 0.010 * speedProgress)) }
+    private var brightness: Double { 0.50 + 0.48 * speedProgress }
+    private var haloRadius: CGFloat { max(0.55, size * (0.025 + 0.020 * speedProgress)) }
 
     var body: some View {
         InnerReceiveArc(
@@ -200,7 +208,7 @@ private struct CurvedReceiveGlint: View {
             Color.white.opacity(brightness),
             style: StrokeStyle(lineWidth: lineWidth, lineCap: .round)
         )
-        .shadow(color: .white.opacity(0.20 + 0.24 * speedProgress), radius: haloRadius)
+        .shadow(color: .white.opacity(0.14 + 0.52 * speedProgress), radius: haloRadius)
     }
 }
 
