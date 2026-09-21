@@ -26,6 +26,9 @@ enum NativeCapture {
     static func run(outputDirectory: URL) async throws {
         try FileManager.default.createDirectory(at: outputDirectory, withIntermediateDirectories: true)
         try BubbleChecks.run()
+        guard DemoArtwork.isAvailable else {
+            throw BubbleLabError.capture("the built-in still-life preview image is missing from the app bundle")
+        }
 
         let device = MTLCreateSystemDefaultDevice()
         let library = try? device?.makeDefaultLibrary(bundle: .main)
@@ -65,7 +68,7 @@ enum NativeCapture {
         let snapshots = snapshotPlan
         var images: [String: CGImage] = [:]
         for snapshot in snapshots {
-            let image = try render(snapshot.scene)
+            let image = try render(snapshot.scene, size: snapshot.scene.canvasSize)
             try validate(
                 image: image,
                 named: snapshot.name,
@@ -82,11 +85,17 @@ enum NativeCapture {
               let patternReference = images["transmission-background"],
               let patternThroughShell = images["transmission-patterned"],
               let smallEmpty = images["small-widget-light"],
-              let smallPopulated = images["small-widget-populated"] else {
+              let smallPopulated = images["small-widget-populated"],
+              let smallInset = images["small-inset-pair"],
+              let smallFloating = images["small-floating-pair"],
+              let smallSoft = images["small-soft-stack"],
+              let inset = images["variant-inset-pair"],
+              let floating = images["variant-floating-pair"],
+              let soft = images["variant-soft-stack"] else {
             throw BubbleLabError.capture("snapshot plan omitted a required comparison state")
         }
         guard difference(empty, populated) > 0.004 else {
-            throw BubbleLabError.capture("empty and populated captures did not differ enough to show the three flakes")
+            throw BubbleLabError.capture("empty and populated captures did not differ enough to show the built-in previews")
         }
         guard difference(lightNear, lightFar) > 0.002 else {
             throw BubbleLabError.capture("pointer positions did not change the captured reflected environment")
@@ -99,8 +108,26 @@ enum NativeCapture {
         }
         guard localizedDifference(smallEmpty, smallPopulated, center: CGPoint(x: 160, y: 160), insideRadius: 56) > 0.002,
               localizedDifference(smallEmpty, smallPopulated, center: CGPoint(x: 160, y: 160), outsideRadius: 76, maximumRadius: 112) < 0.001 else {
-            throw BubbleLabError.capture("the three populated shards do not stay visible inside the 64-point shell")
+            throw BubbleLabError.capture("the populated previews do not stay visible inside the 64-point shell")
         }
+        for (name, image) in [("A·轻叠", smallInset), ("B·浮游", smallFloating), ("C·柔藏", smallSoft)] {
+            guard localizedDifference(smallEmpty, image, center: CGPoint(x: 160, y: 160), insideRadius: 56) > 0.002,
+                  localizedDifference(smallEmpty, image, center: CGPoint(x: 160, y: 160), outsideRadius: 76, maximumRadius: 112) < 0.001 else {
+                throw BubbleLabError.capture("\(name) content is missing or escapes the 64-point shell")
+            }
+        }
+        guard difference(inset, floating) > 0.002,
+              difference(inset, soft) > 0.002,
+              difference(floating, soft) > 0.002 else {
+            throw BubbleLabError.capture("the three Chinese-labeled compositions rendered too similarly")
+        }
+
+        let comparison = try render(BubbleVariantComparisonScene(
+            time: 1.4,
+            light: SIMD2<Float>(0.34, 0.28),
+            arrival: .resting
+        ), size: BubbleVariantComparisonScene.size)
+        try writePNG(comparison, to: outputDirectory.appendingPathComponent("variants-comparison.png"))
 
         try writeReport(CaptureReport(
             host: ProcessInfo.processInfo.operatingSystemVersionString,
@@ -108,7 +135,7 @@ enum NativeCapture {
             metalAvailable: true,
             shaderAvailable: true,
             renderer: "SwiftUI ImageRenderer with the app's compiled Metal library",
-            snapshots: snapshots.map { "\($0.name).png" },
+            snapshots: snapshots.map { "\($0.name).png" } + ["variants-comparison.png"],
             movies: [],
             result: "native snapshots passed; movie encoding pending",
             limitation: nil
@@ -118,6 +145,8 @@ enum NativeCapture {
         try await writeMovie(to: lightSweepURL, kind: .lightSweep)
         let arrivalURL = outputDirectory.appendingPathComponent("bubble-arrival.mp4")
         try await writeMovie(to: arrivalURL, kind: .arrival)
+        let variantsURL = outputDirectory.appendingPathComponent("bubble-variants-comparison.mp4")
+        try await writeMovie(to: variantsURL, kind: .variants)
 
         try writeReport(CaptureReport(
             host: ProcessInfo.processInfo.operatingSystemVersionString,
@@ -125,8 +154,8 @@ enum NativeCapture {
             metalAvailable: true,
             shaderAvailable: true,
             renderer: "SwiftUI ImageRenderer with the app's compiled Metal library",
-            snapshots: snapshots.map { "\($0.name).png" },
-            movies: [lightSweepURL.lastPathComponent, arrivalURL.lastPathComponent],
+            snapshots: snapshots.map { "\($0.name).png" } + ["variants-comparison.png"],
+            movies: [lightSweepURL.lastPathComponent, arrivalURL.lastPathComponent, variantsURL.lastPathComponent],
             result: "passed",
             limitation: nil
         ), to: reportURL)
@@ -172,14 +201,47 @@ enum NativeCapture {
             bubbleDiameter: 64,
             backdropStyle: .pearl
         )),
+        ("variant-inset-pair", BubbleScene(time: 1.4, light: SIMD2<Float>(0.34, 0.28), populated: true, arrival: .resting, composition: .insetPair)),
+        ("variant-floating-pair", BubbleScene(time: 1.4, light: SIMD2<Float>(0.34, 0.28), populated: true, arrival: .resting, composition: .floatingPair)),
+        ("variant-soft-stack", BubbleScene(time: 1.4, light: SIMD2<Float>(0.34, 0.28), populated: true, arrival: .resting, composition: .softStack)),
+        ("small-inset-pair", BubbleScene(
+            time: 1.4,
+            light: SIMD2<Float>(0.34, 0.28),
+            populated: true,
+            arrival: .resting,
+            canvasSize: CGSize(width: 160, height: 160),
+            bubbleDiameter: 64,
+            backdropStyle: .pearl,
+            composition: .insetPair
+        )),
+        ("small-floating-pair", BubbleScene(
+            time: 1.4,
+            light: SIMD2<Float>(0.34, 0.28),
+            populated: true,
+            arrival: .resting,
+            canvasSize: CGSize(width: 160, height: 160),
+            bubbleDiameter: 64,
+            backdropStyle: .pearl,
+            composition: .floatingPair
+        )),
+        ("small-soft-stack", BubbleScene(
+            time: 1.4,
+            light: SIMD2<Float>(0.34, 0.28),
+            populated: true,
+            arrival: .resting,
+            canvasSize: CGSize(width: 160, height: 160),
+            bubbleDiameter: 64,
+            backdropStyle: .pearl,
+            composition: .softStack
+        )),
         ("arrival-gather", BubbleScene(time: 2.6, light: SIMD2<Float>(0.35, 0.24), populated: true, arrival: BubbleMotion.arrival(at: 0.34))),
         ("arrival-hold", BubbleScene(time: 2.9, light: SIMD2<Float>(0.35, 0.24), populated: true, arrival: BubbleMotion.arrival(at: 0.45 + 0.45))),
         ("arrival-collapse", BubbleScene(time: 3.2, light: SIMD2<Float>(0.35, 0.24), populated: true, arrival: BubbleMotion.arrival(at: 0.45 + 0.90 + 0.55)))
     ]
 
-    private static func render(_ scene: BubbleScene) throws -> CGImage {
-        let renderer = ImageRenderer(content: scene)
-        renderer.proposedSize = ProposedViewSize(width: scene.canvasSize.width, height: scene.canvasSize.height)
+    private static func render<Content: View>(_ content: Content, size: CGSize) throws -> CGImage {
+        let renderer = ImageRenderer(content: content)
+        renderer.proposedSize = ProposedViewSize(width: size.width, height: size.height)
         renderer.scale = renderScale
         renderer.isOpaque = true
         guard let image = renderer.cgImage else {
@@ -330,18 +392,26 @@ enum NativeCapture {
     private enum MovieKind {
         case lightSweep
         case arrival
+        case variants
     }
 
     private static func writeMovie(to url: URL, kind: MovieKind) async throws {
         try? FileManager.default.removeItem(at: url)
-        let width = Int(canvasSize.width * renderScale)
-        let height = Int(canvasSize.height * renderScale)
+        let outputSize: CGSize
+        switch kind {
+        case .lightSweep, .arrival:
+            outputSize = canvasSize
+        case .variants:
+            outputSize = BubbleVariantComparisonScene.size
+        }
+        let width = Int(outputSize.width * renderScale)
+        let height = Int(outputSize.height * renderScale)
         let fps: Int32 = 30
         let duration: Double
         switch kind {
         case .arrival:
             duration = BubbleMotion.totalDuration + 0.10
-        case .lightSweep:
+        case .lightSweep, .variants:
             duration = 3.0
         }
         let frameCount = Int(duration * Double(fps))
@@ -386,7 +456,7 @@ enum NativeCapture {
             case .arrival:
                 pointer = SIMD2<Float>(0.34, 0.30)
                 arrival = BubbleMotion.arrival(at: time)
-            case .lightSweep:
+            case .lightSweep, .variants:
                 let angle = time / duration * 2 * .pi - .pi / 2
                 pointer = SIMD2<Float>(
                     0.5 + 0.32 * Float(cos(angle)),
@@ -394,13 +464,17 @@ enum NativeCapture {
                 )
                 arrival = .resting
             }
-            let scene = BubbleScene(
-                time: 4.0 + time,
-                light: pointer,
-                populated: true,
-                arrival: arrival
-            )
-            let image = try render(scene)
+            let image: CGImage
+            if case .variants = kind {
+                image = try render(BubbleVariantComparisonScene(time: 4.0 + time, light: pointer, arrival: arrival), size: outputSize)
+            } else {
+                image = try render(BubbleScene(
+                    time: 4.0 + time,
+                    light: pointer,
+                    populated: true,
+                    arrival: arrival
+                ), size: outputSize)
+            }
             guard let buffer = makePixelBuffer(from: image, width: width, height: height, pool: adaptor.pixelBufferPool) else {
                 throw BubbleLabError.capture("AVFoundation could not allocate a frame buffer")
             }

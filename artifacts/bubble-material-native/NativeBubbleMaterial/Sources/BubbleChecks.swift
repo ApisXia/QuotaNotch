@@ -2,6 +2,21 @@ import Foundation
 
 enum BubbleChecks {
     static func run() throws {
+        guard BubbleComposition.allCases.count == 3,
+              Set(BubbleComposition.allCases.map(\.label)).count == 3 else {
+            throw BubbleLabError.capture("the three Chinese-labeled compositions must remain distinct")
+        }
+        for composition in BubbleComposition.allCases {
+            let placements = composition.placements
+            guard placements.count == 2,
+                  Set(placements.map(\.content)) == Set(BubbleDemoContent.allCases),
+                  placements.allSatisfy({
+                      $0.width > 0 && $0.height > 0 && (0...1).contains($0.opacity)
+                  }) else {
+                throw BubbleLabError.capture("\(composition.label) must show exactly one photo and one document preview")
+            }
+        }
+
         guard BubbleMotion.arrival(at: -0.01) == .resting else {
             throw BubbleLabError.capture("arrival must be at rest before its trigger")
         }

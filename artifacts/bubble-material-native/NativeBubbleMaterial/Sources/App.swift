@@ -45,6 +45,7 @@ final class BubbleLabDelegate: NSObject, NSApplicationDelegate {
 
 struct InteractiveBubbleLab: View {
     @State private var populated = true
+    @State private var composition = BubbleComposition.insetPair
     @State private var pointer = SIMD2<Float>(0.34, 0.28)
     @State private var arrivalStartedAt: Date?
 
@@ -52,12 +53,23 @@ struct InteractiveBubbleLab: View {
 
     var body: some View {
         VStack(spacing: 18) {
+            Text("预览内容 · 内置演示")
+                .font(.system(size: 12, weight: .medium, design: .rounded))
+                .foregroundStyle(.white.opacity(0.68))
+                .frame(maxWidth: .infinity, alignment: .leading)
+
             TimelineView(.animation(minimumInterval: 1.0 / 60.0, paused: false)) { context in
                 let time = context.date.timeIntervalSince(startTime)
                 let elapsed = arrivalStartedAt.map { context.date.timeIntervalSince($0) }
                 let arrival = elapsed.map { BubbleMotion.arrival(at: $0) } ?? .resting
 
-                BubbleScene(time: time, light: pointer, populated: populated, arrival: arrival)
+                BubbleScene(
+                    time: time,
+                    light: pointer,
+                    populated: populated,
+                    arrival: arrival,
+                    composition: composition
+                )
                     .contentShape(Rectangle())
                     .onContinuousHover { phase in
                         switch phase {
@@ -78,7 +90,7 @@ struct InteractiveBubbleLab: View {
                 DoubleBubbleMark()
                     .frame(width: 28, height: 28)
                     .accessibilityLabel("Layered bubble notch symbol")
-                Toggle("Flakes", isOn: Binding(
+                Toggle("示例内容", isOn: Binding(
                     get: { populated },
                     set: { value in
                         populated = value
@@ -86,13 +98,21 @@ struct InteractiveBubbleLab: View {
                     }
                 ))
                     .toggleStyle(.switch)
-                Button("Play arrival") {
+                Button("播放收拢") {
                     populated = true
                     arrivalStartedAt = .now
                 }
                 .keyboardShortcut(.defaultAction)
             }
             .font(.system(size: 13, weight: .medium))
+
+            Picker("构图", selection: $composition) {
+                ForEach(BubbleComposition.allCases) { variant in
+                    Text(variant.label).tag(variant)
+                }
+            }
+            .pickerStyle(.segmented)
+            .frame(width: 512)
         }
         .padding(24)
         .background(Color(red: 0.025, green: 0.030, blue: 0.050))

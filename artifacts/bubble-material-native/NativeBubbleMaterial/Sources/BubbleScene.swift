@@ -9,6 +9,8 @@ struct BubbleScene: View {
     let bubbleDiameter: CGFloat
     let backdropStyle: BubbleBackdropStyle
     let showsBubble: Bool
+    let drawBackdrop: Bool
+    let composition: BubbleComposition
 
     init(
         time: TimeInterval,
@@ -18,7 +20,9 @@ struct BubbleScene: View {
         canvasSize: CGSize = CGSize(width: 512, height: 512),
         bubbleDiameter: CGFloat = 226,
         backdropStyle: BubbleBackdropStyle = .night,
-        showsBubble: Bool = true
+        showsBubble: Bool = true,
+        drawBackdrop: Bool = true,
+        composition: BubbleComposition = .insetPair
     ) {
         self.time = time
         self.light = light
@@ -28,12 +32,16 @@ struct BubbleScene: View {
         self.bubbleDiameter = bubbleDiameter
         self.backdropStyle = backdropStyle
         self.showsBubble = showsBubble
+        self.drawBackdrop = drawBackdrop
+        self.composition = composition
     }
 
     var body: some View {
         GeometryReader { geometry in
             ZStack {
-                Backdrop(style: backdropStyle)
+                if drawBackdrop {
+                    Backdrop(style: backdropStyle)
+                }
 
                 if showsBubble {
                     bubble
@@ -59,27 +67,31 @@ struct BubbleScene: View {
             .float(Float(breathing))
         )
 
+        let shell = PearlyBubbleShape(time: time, breathing: breathing)
         return ZStack {
-            PearlyBubbleShape(time: time, breathing: breathing)
-                .fill(shader)
-                .overlay {
-                    PearlyBubbleShape(time: time, breathing: breathing)
-                        .stroke(.white.opacity(0.20), lineWidth: 0.7)
-                }
-                .shadow(
-                    color: Color(red: 0.40, green: 0.67, blue: 0.84).opacity(0.18),
-                    radius: max(6, bubbleDiameter * 0.10),
-                    y: bubbleDiameter * 0.04
-                )
-
             if populated {
-                ForEach(0..<3, id: \.self) { index in
-                    Flake(index: index, time: time, gather: arrival.flakeGather, bubbleDiameter: bubbleDiameter)
-                        .opacity(arrival.flakeOpacity)
-                }
+                BubbleContentPreviews(
+                    composition: composition,
+                    time: time,
+                    gather: arrival.flakeGather,
+                    bubbleDiameter: bubbleDiameter
+                )
+                .opacity(arrival.flakeOpacity)
             }
 
+            shell
+                .fill(shader)
+                .overlay {
+                    shell.stroke(.white.opacity(0.20), lineWidth: 0.7)
+                }
         }
+        .frame(width: bubbleDiameter, height: bubbleDiameter)
+        .clipShape(shell)
+        .shadow(
+            color: Color(red: 0.40, green: 0.67, blue: 0.84).opacity(0.18),
+            radius: max(6, bubbleDiameter * 0.10),
+            y: bubbleDiameter * 0.04
+        )
     }
 }
 
@@ -89,7 +101,7 @@ enum BubbleBackdropStyle: Equatable {
     case patterned
 }
 
-private struct Backdrop: View {
+struct Backdrop: View {
     let style: BubbleBackdropStyle
 
     var body: some View {
@@ -176,49 +188,6 @@ private struct PearlyBubbleShape: Shape {
         }
         path.closeSubpath()
         return path
-    }
-}
-
-private struct Flake: View {
-    let index: Int
-    let time: TimeInterval
-    let gather: CGFloat
-    let bubbleDiameter: CGFloat
-
-    private let angles = [-2.62, -0.48, 1.62]
-    private let phases = [0.20, 2.25, 4.12]
-
-    var body: some View {
-        let angle = angles[index] + sin(time * 0.27 + phases[index]) * 0.12
-        let shellRadius = bubbleDiameter * 0.5
-        let radius = bubbleDiameter * 0.23 * (1 - gather)
-            + bubbleDiameter * 0.055 * gather
-            + CGFloat(sin(time * 0.52 + phases[index])) * bubbleDiameter * 0.012
-        let opacity = 0.24 + 0.70 * (0.5 + 0.5 * sin(time * 0.34 + phases[index]))
-        let shardWidth = max(7, bubbleDiameter * (index == 1 ? 0.095 : 0.080))
-        let shardHeight = max(2.5, bubbleDiameter * 0.016)
-
-        Capsule()
-            .fill(
-                LinearGradient(
-                    colors: [
-                        .white.opacity(0.14),
-                        Color(red: 0.79, green: 0.90, blue: 0.98).opacity(0.82),
-                        Color(red: 0.88, green: 0.80, blue: 0.91).opacity(0.52),
-                        .white.opacity(0.12)
-                    ],
-                    startPoint: .leading,
-                    endPoint: .trailing
-                )
-            )
-            .frame(width: shardWidth, height: shardHeight)
-            .rotationEffect(.radians(Double(angle) + 0.52))
-            .shadow(color: .white.opacity(0.32), radius: max(1, bubbleDiameter * 0.012))
-            .position(
-                x: shellRadius + CGFloat(cos(angle)) * radius,
-                y: shellRadius + CGFloat(sin(angle)) * radius
-            )
-            .opacity(opacity)
     }
 }
 

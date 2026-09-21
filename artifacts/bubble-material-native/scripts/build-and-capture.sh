@@ -19,10 +19,12 @@ swift --version
 xcrun --sdk macosx metal -c "$SOURCE_DIR/BubbleFilm.metal" -o "$BUILD_DIR/BubbleFilm.air"
 xcrun --sdk macosx metallib "$BUILD_DIR/BubbleFilm.air" -o "$APP_CONTENTS/Resources/default.metallib"
 cp "$PROTOTYPE_DIR/NativeBubbleMaterial/Info.plist" "$APP_CONTENTS/Info.plist"
+cp "$PROTOTYPE_DIR/NativeBubbleMaterial/Resources/DemoStillLife.png" "$APP_CONTENTS/Resources/DemoStillLife.png"
 printf 'APPL????' > "$APP_CONTENTS/PkgInfo"
 
 SWIFT_SOURCES=(
   "$SOURCE_DIR/App.swift"
+  "$SOURCE_DIR/BubbleContent.swift"
   "$SOURCE_DIR/BubbleChecks.swift"
   "$SOURCE_DIR/BubbleMotion.swift"
   "$SOURCE_DIR/BubbleScene.swift"
