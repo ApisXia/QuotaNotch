@@ -28,6 +28,10 @@ if [[ "${GITHUB_REF_NAME:-}" == feature/notch-cat ]]; then
   cp docs/Notch-cat-preview.md "$staging/Cat-preview.md"
   cp docs/Notch-cat-preview.md "$dist/Cat-preview.md"
 fi
+if [[ "${GITHUB_REF_NAME:-}" == feature/bubble-native-material ]]; then
+  cp docs/Bubble-shelf-preview.md "$staging/Bubble-shelf-preview.md"
+  cp docs/Bubble-shelf-preview.md "$dist/Bubble-shelf-preview.md"
+fi
 cp LICENSE "$staging/LICENSE"
 git archive --format=zip --prefix=QuotaNotch-source/ -o "$dist/QuotaNotch-source.zip" HEAD
 cp "$dist/QuotaNotch-source.zip" "$staging/QuotaNotch-source.zip"
