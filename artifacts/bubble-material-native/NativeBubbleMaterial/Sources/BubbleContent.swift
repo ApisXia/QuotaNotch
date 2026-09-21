@@ -30,8 +30,8 @@ enum BubbleComposition: String, CaseIterable, Hashable, Identifiable {
             ]
         case .softStack:
             [
-                BubblePreviewPlacement(content: .photo, width: 0.39, height: 0.47, x: -0.035, y: 0.11, rotation: -3, opacity: 0.88, depth: 0, drift: 0.007),
-                BubblePreviewPlacement(content: .document, width: 0.40, height: 0.54, x: 0.07, y: -0.04, rotation: 3, opacity: 0.68, depth: 1, drift: 0.007)
+                BubblePreviewPlacement(content: .document, width: 0.40, height: 0.54, x: 0.07, y: -0.11, rotation: 3, opacity: 0.60, depth: 0, drift: 0.007),
+                BubblePreviewPlacement(content: .photo, width: 0.39, height: 0.47, x: -0.035, y: 0.11, rotation: -3, opacity: 0.94, depth: 1, drift: 0.007)
             ]
         }
     }
