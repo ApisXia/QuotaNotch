@@ -170,6 +170,7 @@ final class BubbleCollectorController: ObservableObject {
             guard store.isReceiving, generation == insertionGeneration else { return }
             merge(insert(payload), into: &aggregate)
         }
+        store.recordImportResult(aggregate)
         guard aggregate.succeeded else {
             availability = .error
             statusMessage = aggregate.message ?? "This selection could not be added."
@@ -478,16 +479,11 @@ private enum AXSelectionReader {
     }
 
     private static func selectedText(from element: AXUIElement, anchor: CGPoint) -> AXSelectionSample? {
-        let role = attribute(element, kAXRoleAttribute) as? String
         let subrole = attribute(element, kAXSubroleAttribute) as? String
         if subrole == kAXSecureTextFieldSubrole as String {
             return AXSelectionSample(fingerprint: "secure", payloads: [], omittedCount: 0, anchor: nil, isSecureField: true)
         }
-        let acceptedRoles: Set<String> = [
-            kAXTextFieldRole as String, kAXTextAreaRole as String, kAXComboBoxRole as String
-        ]
-        guard let role, acceptedRoles.contains(role),
-              let value = attribute(element, kAXSelectedTextAttribute) as? String,
+        guard let value = attribute(element, kAXSelectedTextAttribute) as? String,
               !value.isEmpty, value.utf8.count <= BubbleShelfRules.maximumTextBytes else { return nil }
         let fingerprint = "text:" + BubbleShelfItem.sha256(Data(value.utf8))
         return AXSelectionSample(fingerprint: fingerprint, payloads: [.text(value)], omittedCount: 0,
@@ -547,10 +543,10 @@ private enum AXSelectionReader {
         return nil
     }
 
-    private static func attribute(_ element: AXUIElement, _ name: CFString) -> Any? {
+    private static func attribute(_ element: AXUIElement, _ name: String) -> Any? {
         AXUIElementSetMessagingTimeout(element, 0.025)
         var result: CFTypeRef?
-        guard AXUIElementCopyAttributeValue(element, name, &result) == .success else { return nil }
+        guard AXUIElementCopyAttributeValue(element, name as CFString, &result) == .success else { return nil }
         return result
     }
 }
