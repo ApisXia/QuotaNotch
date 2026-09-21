@@ -119,6 +119,10 @@ struct BubbleShelfView: View {
             return AgentText.t("部分原始内容暂时不可用，仍可导出其他项目。", "Some original items are unavailable; the rest can still be exported.")
         }
         if let importSummary { return importSummary }
+        if let result = store.lastImportResult,
+           result.skippedCount > 0 || !result.errors.isEmpty {
+            return Self.summary(for: result)
+        }
         switch collector.availability {
         case .disabled:
             return store.isReceiving
@@ -142,7 +146,22 @@ struct BubbleShelfView: View {
         if result.addedCount > 0 { parts.append(AgentText.t("新增 \(result.addedCount) 项", "Added \(result.addedCount)")) }
         if result.duplicateCount > 0 { parts.append(AgentText.t("已有 \(result.duplicateCount) 项", "Already saved \(result.duplicateCount)")) }
         if result.skippedCount > 0 { parts.append(AgentText.t("跳过 \(result.skippedCount) 项", "Skipped \(result.skippedCount)")) }
-        if !result.errors.isEmpty { parts.append(AgentText.t("部分内容无法读取", "Some content could not be read")) }
+        for error in result.errors {
+            let lower = error.lowercased()
+            if lower.contains("full") {
+                parts.append(AgentText.t("收纳已满，请先移除一项", "Shelf is full; remove an item first"))
+            } else if lower.contains("paused") {
+                parts.append(AgentText.t("接收已暂停", "Receiving is paused"))
+            } else if lower.contains("pasteboard") || lower.contains("promised") || lower.contains("unsupported") {
+                parts.append(AgentText.t("此拖放内容暂不支持", "This dropped content is not supported"))
+            } else if lower.contains("unavailable") || lower.contains("could not be read") {
+                parts.append(AgentText.t("部分内容无法读取", "Some content could not be read"))
+            } else if lower.contains("save") {
+                parts.append(AgentText.t("无法保存到收纳", "The item could not be saved to Shelf"))
+            } else {
+                parts.append(AgentText.t("部分内容无法导入", "Some content could not be imported"))
+            }
+        }
         return parts.isEmpty ? AgentText.t("没有可导入的内容", "No importable content") : parts.joined(separator: " · ")
     }
 }
