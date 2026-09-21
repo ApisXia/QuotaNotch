@@ -190,7 +190,9 @@ struct BubbleShelfSettingsView: View {
                     .font(.callout)
                     .foregroundStyle(.secondary)
                 if collector.availability == .accessibilityRequired {
-                    SettingsHint(AgentText.t("需要辅助功能访问才能显示其他应用中的所选内容。", "Accessibility access is needed to preview selections in other apps."))
+                    Text(AgentText.t("需要辅助功能访问才能显示其他应用中的所选内容。", "Accessibility access is needed to preview selections in other apps."))
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
                     Button(AgentText.t("打开访问设置", "Allow Access")) {
                         collector.requestAccessibilityFromUserAction()
                     }
@@ -584,12 +586,11 @@ private final class BubbleInteractionView: NSView, NSDraggingSource {
             return
         }
 
-        let phase: BubbleScrollPhase = switch event.phase {
-        case .none: .none
-        case .began: .began
-        case .ended, .cancelled: .ended
-        default: .changed
-        }
+        let phase: BubbleScrollPhase
+        if event.phase.isEmpty { phase = .none }
+        else if event.phase.contains(.began) { phase = .began }
+        else if event.phase.contains(.ended) || event.phase.contains(.cancelled) { phase = .ended }
+        else { phase = .changed }
         if let upward = verticalGesture.update(deltaX: event.scrollingDeltaX, deltaY: vertical,
                                                phase: phase, isMomentum: event.momentumPhase != .none,
                                                timestamp: event.timestamp, lastClaimTimestamp: lastVerticalToggle) {
@@ -623,7 +624,7 @@ private struct BubbleShelfDropTarget: NSViewRepresentable {
 
     func updateNSView(_ view: BubbleShelfDropView, context: Context) { view.onImport = onImport }
 
-    @MainActor private final class BubbleShelfDropView: NSView {
+    @MainActor final class BubbleShelfDropView: NSView {
         var onImport: ((BubbleShelfImportResult) -> Void)?
         override func hitTest(_ point: NSPoint) -> NSView? { bounds.contains(point) ? self : nil }
         override func draggingEntered(_ sender: NSDraggingInfo) -> NSDragOperation { .copy }
