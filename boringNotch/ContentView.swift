@@ -411,7 +411,7 @@ struct ContentView: View {
             if agentStore.showAccessory {
                 musicAndTaskWings
             } else {
-                MusicLiveActivity(shelf: bubbleClosedState).contentShape(Rectangle()).onTapGesture { coordinator.currentView = .home; doOpen() }
+                MusicLiveActivity(shelf: bubbleClosedState, onOpen: { coordinator.currentView = .home; doOpen() })
             }
         } else if agentStore.showAccessory && vm.effectiveClosedNotchHeight > 0 && !eventPresentation.replacesPrimary {
             AgentTaskOnlyWings(centerWidth: vm.closedNotchSize.width - cornerRadiusInsets.closed.top,
@@ -503,19 +503,22 @@ struct ContentView: View {
         .frame(height: height)
     }
 
-    func MusicLiveActivity(shelf: BubbleShelfCompactState? = nil) -> some View {
+    func MusicLiveActivity(shelf: BubbleShelfCompactState? = nil, onOpen: @escaping () -> Void = {}) -> some View {
         let height = vm.effectiveClosedNotchHeight
         let size = max(0, height - 12)
         return HStack(spacing: QuotaCompactMetrics.spacing) {
             HStack(spacing: 0) {
-                Image(nsImage: musicManager.albumArt)
-                    .resizable()
-                    .clipped()
-                    .clipShape(RoundedRectangle(cornerRadius: MusicPlayerImageSizes.cornerRadiusInset.closed))
-                    .matchedGeometryEffect(id: "albumArt", in: albumArtNamespace)
-                    .frame(width: max(0, vm.effectiveClosedNotchHeight - 12),
-                           height: max(0, vm.effectiveClosedNotchHeight - 12))
-                    .auditNotchFrame("album")
+                Button(action: onOpen) {
+                    Image(nsImage: musicManager.albumArt)
+                        .resizable()
+                        .clipped()
+                        .clipShape(RoundedRectangle(cornerRadius: MusicPlayerImageSizes.cornerRadiusInset.closed))
+                        .matchedGeometryEffect(id: "albumArt", in: albumArtNamespace)
+                        .frame(width: max(0, vm.effectiveClosedNotchHeight - 12),
+                               height: max(0, vm.effectiveClosedNotchHeight - 12))
+                        .auditNotchFrame("album")
+                }
+                .buttonStyle(.plain)
                 if let shelf {
                     BubbleShelfCompanion(state: shelf, height: height, widgetWidth: size)
                 }
