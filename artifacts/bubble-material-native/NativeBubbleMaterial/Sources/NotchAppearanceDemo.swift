@@ -341,12 +341,12 @@ private struct NotchHardwareSample: View {
                 Group {
                     if presentation == .minimal {
                         HStack(spacing: 4) {
-                            NotchPreviewGlyph(size: 14, itemCount: displayedCount, isArmed: state.isArmed, time: time)
-                                .frame(width: 16, height: 18)
-                            Rectangle().fill(.white.opacity(0.22)).frame(width: 0.7, height: 16)
                             Image(systemName: "waveform")
                                 .font(.system(size: 18, weight: .medium))
                                 .foregroundStyle(.white.opacity(0.40))
+                            Rectangle().fill(.white.opacity(0.22)).frame(width: 0.7, height: 16)
+                            NotchPreviewGlyph(size: 14, itemCount: displayedCount, isArmed: state.isArmed, time: time)
+                                .frame(width: 16, height: 18)
                         }
                     } else {
                         NotchPreviewGlyph(size: 20, itemCount: displayedCount, isArmed: state.isArmed, time: time)
