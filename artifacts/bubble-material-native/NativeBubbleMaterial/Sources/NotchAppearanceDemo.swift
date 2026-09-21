@@ -259,6 +259,104 @@ private struct PlainRectangleStack: View {
     }
 }
 
+struct MinimalTopRectanglePlacement: Identifiable {
+    let id: Int
+    let centerX: CGFloat
+    let centerY: CGFloat
+    let width: CGFloat
+    let height: CGFloat
+    let rotation: Double
+    let opacity: Double
+    let depth: Double
+}
+
+enum MinimalTopRectangleLayout {
+    static func placements(for count: Int, width: CGFloat, height: CGFloat) -> [MinimalTopRectanglePlacement] {
+        let source = NotchRectangleLayout.placements(for: count)
+        guard !source.isEmpty, width > 0, height > 0 else { return [] }
+
+        // Normalize the full rotated group into the wide, shallow Minimal row
+        // instead of shrinking the old circular preview canvas to ten points.
+        let referenceWidth: CGFloat = 16
+        let referenceHeight: CGFloat = 10
+        let sourceDiameter = referenceHeight
+        let targetWidth = width * 0.92
+        let targetHeight = height * 0.84
+
+        func bounds(scaleX: CGFloat, scaleY: CGFloat) -> CGRect {
+            source.reduce(into: CGRect.null) { result, placement in
+                let cardWidth = sourceDiameter * placement.width * scaleX
+                let cardHeight = sourceDiameter * placement.height * scaleY
+                let radians = CGFloat(placement.rotation * .pi / 180)
+                let extentX = abs(cos(radians)) * cardWidth * 0.5 + abs(sin(radians)) * cardHeight * 0.5
+                let extentY = abs(sin(radians)) * cardWidth * 0.5 + abs(cos(radians)) * cardHeight * 0.5
+                let centerX = referenceWidth * placement.x * scaleX
+                let centerY = referenceHeight * placement.y * scaleY
+                result = result.union(CGRect(
+                    x: centerX - extentX,
+                    y: centerY - extentY,
+                    width: extentX * 2,
+                    height: extentY * 2
+                ))
+            }
+        }
+        var scaleX: CGFloat = 1
+        var scaleY: CGFloat = 1
+        for _ in 0..<8 {
+            let current = bounds(scaleX: scaleX, scaleY: scaleY)
+            guard current.width > 0, current.height > 0 else { return [] }
+            scaleX *= targetWidth / current.width
+            scaleY *= targetHeight / current.height
+        }
+        let finalBounds = bounds(scaleX: scaleX, scaleY: scaleY)
+        guard finalBounds.width > 0, finalBounds.height > 0 else { return [] }
+
+        let offsetX = (width - finalBounds.width) * 0.5 - finalBounds.minX
+        let offsetY = (height - finalBounds.height) * 0.5 - finalBounds.minY
+        return source.map { placement in
+            MinimalTopRectanglePlacement(
+                id: placement.id,
+                centerX: referenceWidth * placement.x * scaleX + offsetX,
+                centerY: referenceHeight * placement.y * scaleY + offsetY,
+                width: sourceDiameter * placement.width * scaleX,
+                height: sourceDiameter * placement.height * scaleY,
+                rotation: placement.rotation,
+                opacity: placement.opacity,
+                depth: placement.depth
+            )
+        }
+    }
+}
+
+private struct MinimalTopRectangleStack: View {
+    let itemCount: Int
+
+    var body: some View {
+        GeometryReader { geometry in
+            ZStack {
+                ForEach(MinimalTopRectangleLayout.placements(
+                    for: itemCount,
+                    width: geometry.size.width,
+                    height: geometry.size.height
+                )) { placement in
+                    RoundedRectangle(cornerRadius: max(0.45, min(geometry.size.width, geometry.size.height) * 0.035), style: .continuous)
+                        .fill(Color(white: 0.78).opacity(placement.opacity))
+                        .overlay {
+                            RoundedRectangle(cornerRadius: max(0.45, min(geometry.size.width, geometry.size.height) * 0.035), style: .continuous)
+                                .strokeBorder(.white.opacity(0.35), lineWidth: max(0.35, min(geometry.size.width, geometry.size.height) * 0.018))
+                        }
+                        .frame(width: placement.width, height: placement.height)
+                        .rotationEffect(.degrees(placement.rotation))
+                        .position(x: placement.centerX, y: placement.centerY)
+                        .zIndex(placement.depth)
+                }
+            }
+        }
+        .allowsHitTesting(false)
+        .accessibilityHidden(true)
+    }
+}
+
 enum NotchMinimalGeometry {
     static let width: CGFloat = 16
     static let filesHeight: CGFloat = 10
@@ -280,7 +378,7 @@ struct MinimalStackedBubble: View {
 
     var body: some View {
         VStack(spacing: gap) {
-            PlainRectangleStack(itemCount: itemCount)
+            MinimalTopRectangleStack(itemCount: itemCount)
                 .frame(width: width, height: filesHeight)
 
             NotchPreviewGlyph(size: bubbleDiameter, itemCount: 0, isArmed: isArmed, time: time)

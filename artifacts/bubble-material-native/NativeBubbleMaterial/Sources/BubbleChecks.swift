@@ -208,6 +208,7 @@ enum BubbleChecks {
               NotchMinimalGeometry.bubbleDiameter == 14,
               NotchMinimalGeometry.totalHeight == 26,
               NotchMinimalGeometry.totalHeight <= 28,
+              NotchContentCountBoard.size.height >= 540,
               NotchSignalMotion.cycleDuration == 4,
               abs(NotchSignalMotion.angle(at: 0) + 3 * .pi / 4) < 0.0001,
               abs(NotchSignalMotion.angle(at: 2) - NotchSignalMotion.angle(at: 0) - .pi) < 0.0001,
@@ -232,20 +233,45 @@ enum BubbleChecks {
                   rectangles.allSatisfy({ $0.width > 0 && $0.height > 0 && (0...1).contains($0.opacity) }) else {
                 throw BubbleLabError.capture("the \(count)-item notch mark must contain exactly \(count) plain rectangles")
             }
-            let minimalDiameter = NotchMinimalGeometry.filesHeight
-            for placement in rectangles {
-                let halfWidth = minimalDiameter * placement.width * 0.5
-                let halfHeight = minimalDiameter * placement.height * 0.5
-                let radians = CGFloat(placement.rotation * .pi / 180)
-                let extentX = abs(cos(radians)) * halfWidth + abs(sin(radians)) * halfHeight
-                let extentY = abs(sin(radians)) * halfWidth + abs(cos(radians)) * halfHeight
-                let centerX = NotchMinimalGeometry.width * placement.x
-                let centerY = minimalDiameter * placement.y
-                guard centerX - extentX >= -0.001,
-                      centerY - extentY >= -0.001,
-                      centerX + extentX <= NotchMinimalGeometry.width + 0.001,
-                      centerY + extentY <= NotchMinimalGeometry.filesHeight + 0.001 else {
-                    throw BubbleLabError.capture("the minimal presentation's \(count)-rectangle top group must stay inside its reserved 16×10pt row")
+            for (width, height) in [
+                (NotchMinimalGeometry.width, NotchMinimalGeometry.filesHeight),
+                (CGFloat(52), CGFloat(52) * NotchMinimalGeometry.filesHeight / NotchMinimalGeometry.width)
+            ] {
+                let topRectangles = MinimalTopRectangleLayout.placements(for: count, width: width, height: height)
+                guard topRectangles.count == count else {
+                    throw BubbleLabError.capture("the minimal \(count)-rectangle preview lost an item while fitting its top row")
+                }
+                let strokeMargin = max(0.35, min(width, height) * 0.018) * 0.5
+                let groupBounds = topRectangles.reduce(into: CGRect.null) { result, placement in
+                    let radians = CGFloat(placement.rotation * .pi / 180)
+                    let extentX = abs(cos(radians)) * placement.width * 0.5 + abs(sin(radians)) * placement.height * 0.5
+                    let extentY = abs(sin(radians)) * placement.width * 0.5 + abs(cos(radians)) * placement.height * 0.5
+                    let cardBounds = CGRect(
+                        x: placement.centerX - extentX,
+                        y: placement.centerY - extentY,
+                        width: extentX * 2,
+                        height: extentY * 2
+                    )
+                    result = result.union(cardBounds)
+                }
+                guard topRectangles.allSatisfy({
+                    let radians = CGFloat($0.rotation * .pi / 180)
+                    let extentX = abs(cos(radians)) * $0.width * 0.5 + abs(sin(radians)) * $0.height * 0.5
+                    let extentY = abs(sin(radians)) * $0.width * 0.5 + abs(cos(radians)) * $0.height * 0.5
+                    return (
+                        $0.centerX - extentX - strokeMargin >= -0.001
+                            && $0.centerY - extentY - strokeMargin >= -0.001
+                            && $0.centerX + extentX + strokeMargin <= width + 0.001
+                            && $0.centerY + extentY + strokeMargin <= height + 0.001
+                    )
+                }) else {
+                    throw BubbleLabError.capture("the minimal \(count)-rectangle top group must fit without clipping at \(Int(width))pt width")
+                }
+                if count > 0 {
+                    guard abs(groupBounds.width - width * 0.92) <= width * 0.002,
+                          abs(groupBounds.height - height * 0.84) <= height * 0.002 else {
+                        throw BubbleLabError.capture("the minimal \(count)-rectangle group must use the reserved top row instead of shrinking into a tiny cluster")
+                    }
                 }
             }
             for size in [CGFloat(14), CGFloat(20), CGFloat(54), CGFloat(144)] {
