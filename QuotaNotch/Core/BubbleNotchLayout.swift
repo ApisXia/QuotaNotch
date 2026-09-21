@@ -140,3 +140,40 @@ enum BubbleScrollPolicy {
 
     static func isUpward(_ accumulatedDeltaY: CGFloat) -> Bool { accumulatedDeltaY > 0 }
 }
+
+enum BubbleScrollPhase {
+    case none, began, changed, ended
+}
+
+/// Stateful gesture reducer used by the AppKit event view. Keeping the
+/// accumulator here lets preview tests exercise the same threshold, axis lock,
+/// momentum rejection, and one-claim-per-gesture behavior as the native view.
+struct BubbleScrollGestureState {
+    private(set) var accumulatedDeltaY: CGFloat = 0
+    private(set) var claimed = false
+
+    mutating func update(deltaX: CGFloat, deltaY: CGFloat, phase: BubbleScrollPhase,
+                         isMomentum: Bool, timestamp: TimeInterval,
+                         lastClaimTimestamp: TimeInterval) -> Bool? {
+        guard !isMomentum,
+              BubbleScrollPolicy.isDominantVertical(deltaX: deltaX, deltaY: deltaY) else { return nil }
+        if phase == .began || (phase == .none && timestamp - lastClaimTimestamp >= 0.45) {
+            accumulatedDeltaY = 0
+            claimed = false
+        }
+        accumulatedDeltaY += deltaY
+        var result: Bool?
+        if !claimed,
+           abs(accumulatedDeltaY) >= BubbleScrollPolicy.minimumDelta,
+           timestamp - lastClaimTimestamp >= 0.45 {
+            claimed = true
+            result = BubbleScrollPolicy.isUpward(accumulatedDeltaY)
+            accumulatedDeltaY = 0
+        }
+        if phase == .ended {
+            accumulatedDeltaY = 0
+            claimed = false
+        }
+        return result
+    }
+}

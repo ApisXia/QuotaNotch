@@ -540,8 +540,7 @@ private final class BubbleInteractionView: NSView, NSDraggingSource {
     private var downPoint: NSPoint?
     private var state: Interaction = .idle
     private var lastVerticalToggle: TimeInterval = 0
-    private var verticalAccumulator: CGFloat = 0
-    private var verticalGestureClaimed = false
+    private var verticalGesture = BubbleScrollGestureState()
 
     private enum Interaction { case idle, tracking, dragging }
 
@@ -580,28 +579,22 @@ private final class BubbleInteractionView: NSView, NSDraggingSource {
         // dominant vertical axis until it reaches the gesture threshold, then
         // claim that gesture once. Momentum is deliberately ignored.
         guard event.momentumPhase == .none,
-              BubbleScrollPolicy.isDominantVertical(deltaX: event.scrollingDeltaX, deltaY: vertical),
-              event.phase == .none || event.phase == .began || event.phase == .changed || event.phase == .ended else {
+              BubbleScrollPolicy.isDominantVertical(deltaX: event.scrollingDeltaX, deltaY: vertical) else {
             super.scrollWheel(with: event)
             return
         }
 
-        if event.phase == .began || (event.phase == .none && event.timestamp - lastVerticalToggle >= 0.45) {
-            verticalAccumulator = 0
-            verticalGestureClaimed = false
+        let phase: BubbleScrollPhase = switch event.phase {
+        case .none: .none
+        case .began: .began
+        case .ended, .cancelled: .ended
+        default: .changed
         }
-        verticalAccumulator += vertical
-        if !verticalGestureClaimed,
-           abs(verticalAccumulator) >= BubbleScrollPolicy.minimumDelta,
-           event.timestamp - lastVerticalToggle >= 0.45 {
+        if let upward = verticalGesture.update(deltaX: event.scrollingDeltaX, deltaY: vertical,
+                                               phase: phase, isMomentum: event.momentumPhase != .none,
+                                               timestamp: event.timestamp, lastClaimTimestamp: lastVerticalToggle) {
             lastVerticalToggle = event.timestamp
-            verticalGestureClaimed = true
-            swipe?(BubbleScrollPolicy.isUpward(verticalAccumulator))
-            verticalAccumulator = 0
-        }
-        if event.phase == .ended {
-            verticalAccumulator = 0
-            verticalGestureClaimed = false
+            swipe?(upward)
         }
     }
 

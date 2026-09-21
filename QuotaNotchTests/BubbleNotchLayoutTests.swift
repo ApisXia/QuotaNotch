@@ -80,4 +80,22 @@ final class BubbleNotchLayoutTests: XCTestCase {
         XCTAssertFalse(BubbleScrollPolicy.isUpward(-6))
         XCTAssertEqual(BubbleScrollPolicy.minimumDelta, 5)
     }
+
+    func testScrollGestureReducerMatchesNativeToggleThresholdAndPhaseSequence() {
+        var gesture = BubbleScrollGestureState()
+        XCTAssertNil(gesture.update(deltaX: 0, deltaY: 0, phase: .began, isMomentum: false,
+                                    timestamp: 1, lastClaimTimestamp: 0))
+        XCTAssertNil(gesture.update(deltaX: 0, deltaY: 2, phase: .changed, isMomentum: false,
+                                    timestamp: 1.05, lastClaimTimestamp: 0))
+        XCTAssertEqual(gesture.update(deltaX: 0, deltaY: 3, phase: .changed, isMomentum: false,
+                                      timestamp: 1.1, lastClaimTimestamp: 0), true)
+        XCTAssertNil(gesture.update(deltaX: 0, deltaY: 8, phase: .changed, isMomentum: false,
+                                    timestamp: 1.2, lastClaimTimestamp: 1.1))
+        XCTAssertNil(gesture.update(deltaX: 0, deltaY: 8, phase: .changed, isMomentum: true,
+                                    timestamp: 1.3, lastClaimTimestamp: 1.1))
+        _ = gesture.update(deltaX: 0, deltaY: 0, phase: .ended, isMomentum: false,
+                           timestamp: 1.4, lastClaimTimestamp: 1.1)
+        XCTAssertEqual(gesture.update(deltaX: 0, deltaY: -5, phase: .none, isMomentum: false,
+                                      timestamp: 2, lastClaimTimestamp: 1.1), false)
+    }
 }
