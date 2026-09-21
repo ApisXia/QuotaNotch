@@ -4,32 +4,38 @@ struct BubbleScene: View {
     let time: TimeInterval
     let light: SIMD2<Float>
     let itemCount: Int
+    let insertionFrame: BubbleInsertionFrame?
     let arrival: ArrivalFrame
     let canvasSize: CGSize
     let bubbleDiameter: CGFloat
     let backdropStyle: BubbleBackdropStyle
     let showsBubble: Bool
+    let showsFourthPreview: Bool
     let drawBackdrop: Bool
 
     init(
         time: TimeInterval,
         light: SIMD2<Float>,
         itemCount: Int,
+        insertionFrame: BubbleInsertionFrame? = nil,
         arrival: ArrivalFrame,
         canvasSize: CGSize = CGSize(width: 512, height: 512),
         bubbleDiameter: CGFloat = 226,
         backdropStyle: BubbleBackdropStyle = .night,
         showsBubble: Bool = true,
+        showsFourthPreview: Bool = true,
         drawBackdrop: Bool = true
     ) {
         self.time = time
         self.light = light
         self.itemCount = itemCount
+        self.insertionFrame = insertionFrame
         self.arrival = arrival
         self.canvasSize = canvasSize
         self.bubbleDiameter = bubbleDiameter
         self.backdropStyle = backdropStyle
         self.showsBubble = showsBubble
+        self.showsFourthPreview = showsFourthPreview
         self.drawBackdrop = drawBackdrop
     }
 
@@ -71,7 +77,9 @@ struct BubbleScene: View {
                     totalCount: itemCount,
                     time: time,
                     gather: arrival.contentGather,
-                    bubbleDiameter: bubbleDiameter
+                    bubbleDiameter: bubbleDiameter,
+                    insertionFrame: insertionFrame,
+                    showsFourthPreview: showsFourthPreview
                 )
                 .opacity(arrival.contentOpacity)
             }

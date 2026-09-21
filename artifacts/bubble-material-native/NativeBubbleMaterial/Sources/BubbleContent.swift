@@ -15,25 +15,31 @@ enum BubbleDemoContent: String, CaseIterable, Hashable, Identifiable {
 struct BubblePreviewPlacement: Identifiable, Equatable {
     let slot: Int
     let content: BubbleDemoContent
-    let width: CGFloat
-    let height: CGFloat
-    let x: CGFloat
-    let y: CGFloat
-    let rotation: Double
-    let opacity: Double
-    let depth: Double
-    let drift: CGFloat
+    var width: CGFloat
+    var height: CGFloat
+    var x: CGFloat
+    var y: CGFloat
+    var rotation: Double
+    var opacity: Double
+    var depth: Double
+    var drift: CGFloat
+    /// Gaussian blur measured as a fraction of the shell diameter.
+    var blur: CGFloat
 
-    var id: Int { slot }
+    /// Artwork identity stays stable as its plane moves to a new depth.
+    var id: String { content.id }
 }
 
 enum BubbleItemLayout {
     static let sampleCounts = [0, 1, 2, 3, 6]
     static let maximumVisiblePreviews = 3
-    static let contentCycleDuration: TimeInterval = 24
-    static let contentInitialDwell: TimeInterval = 1.5
-    static let contentTransitionDuration: TimeInterval = 0.8
-    static let contentStaggerInterval: TimeInterval = 4
+    static let maximumRenderedPreviews = 4
+
+    /// The array is oldest to newest. The first three entries form the initial
+    /// 3-item stack; later inserts naturally push earlier identities rearward.
+    static let insertionHistory: [BubbleDemoContent] = [
+        .diagram, .document, .stillLife, .report, .fieldNotes, .stillLifeDetail
+    ]
 
     static func visiblePreviewCount(for totalCount: Int) -> Int {
         min(max(totalCount, 0), maximumVisiblePreviews)
@@ -44,80 +50,79 @@ enum BubbleItemLayout {
     }
 
     static func placements(for totalCount: Int) -> [BubblePreviewPlacement] {
-        return switch visiblePreviewCount(for: totalCount) {
-        case 0:
-            []
-        case 1:
-            [BubblePreviewPlacement(
-                slot: 0, content: .stillLife,
+        let count = min(max(totalCount, 0), insertionHistory.count)
+        guard count > 0 else { return [] }
+
+        let newestFirst: [BubbleDemoContent]
+        if count == 1 {
+            newestFirst = [.stillLife]
+        } else if count == 2 {
+            newestFirst = [.stillLife, .document]
+        } else {
+            newestFirst = Array(insertionHistory.prefix(count).reversed().prefix(maximumRenderedPreviews))
+        }
+
+        return newestFirst.enumerated().map { slot, content in
+            placement(content: content, slot: slot, totalCount: count)
+        }
+    }
+
+    private static func placement(content: BubbleDemoContent, slot: Int, totalCount: Int) -> BubblePreviewPlacement {
+        if totalCount > maximumVisiblePreviews {
+            let layouts: [(CGFloat, CGFloat, CGFloat, CGFloat, Double)] = [
+                (0.32, 0.40, -0.100, -0.100, -7),
+                (0.30, 0.37, 0.100, -0.130, 5),
+                (0.28, 0.35, 0.070, 0.045, 8),
+                // The complete fourth preview sits behind the group and peeks
+                // below its lowest sharp card. Its artwork is blurred as well.
+                (0.26, 0.32, -0.015, 0.225, 2)
+            ]
+            let layout = layouts[slot]
+            return BubblePreviewPlacement(
+                slot: slot, content: content,
+                width: layout.0, height: layout.1, x: layout.2, y: layout.3,
+                rotation: layout.4, opacity: slot == 3 ? 0.88 : 0.97,
+                depth: Double(3 - slot), drift: 0, blur: slot == 3 ? 0.020 : 0
+            )
+        }
+
+        if totalCount == 1 {
+            return BubblePreviewPlacement(
+                slot: 0, content: content,
                 width: 0.43, height: 0.54, x: -0.06, y: 0.04,
-                rotation: -4, opacity: 0.98, depth: 1, drift: 0.006
-            )]
-        case 2:
-            [
-                // B: two relaxed diagonals with the photo settled behind.
-                BubblePreviewPlacement(
-                    slot: 0, content: .stillLife,
-                    width: 0.34, height: 0.41, x: -0.15, y: -0.05,
-                    rotation: -9, opacity: 0.96, depth: 0, drift: 0.010
-                ),
-                BubblePreviewPlacement(
-                    slot: 1, content: .document,
-                    width: 0.34, height: 0.40, x: 0.14, y: 0.05,
-                    rotation: 7, opacity: 0.88, depth: 1, drift: 0.010
-                )
-            ]
-        default:
-            [
-                // Three unequal planes: a photo lead, with document and
-                // diagram faces separated around the lower-right edge.
-                BubblePreviewPlacement(
-                    slot: 0, content: .stillLife,
-                    width: 0.37, height: 0.46, x: -0.14, y: -0.02,
-                    rotation: -5, opacity: 0.98, depth: 2, drift: 0.006
-                ),
-                BubblePreviewPlacement(
-                    slot: 1, content: .document,
-                    width: 0.28, height: 0.37, x: 0.16, y: -0.09,
-                    rotation: 6, opacity: 0.91, depth: 1, drift: 0.006
-                ),
-                BubblePreviewPlacement(
-                    slot: 2, content: .diagram,
-                    width: 0.27, height: 0.34, x: 0.09, y: 0.18,
-                    rotation: 8, opacity: 0.94, depth: 0, drift: 0.006
-                )
-            ]
+                rotation: -4, opacity: 0.98, depth: 1, drift: 0.006, blur: 0
+            )
         }
-    }
-
-    static func contentPair(for placement: BubblePreviewPlacement, totalCount: Int) -> (front: BubbleDemoContent, back: BubbleDemoContent) {
-        guard totalCount > maximumVisiblePreviews else {
-            return (placement.content, placement.content)
+        if totalCount == 2 {
+            let isPhoto = content == .stillLife
+            return BubblePreviewPlacement(
+                slot: slot, content: content,
+                width: 0.34, height: isPhoto ? 0.41 : 0.40,
+                x: isPhoto ? -0.15 : 0.14, y: isPhoto ? -0.05 : 0.05,
+                rotation: isPhoto ? -9 : 7, opacity: isPhoto ? 0.96 : 0.88,
+                depth: isPhoto ? 0 : 1, drift: 0.010, blur: 0
+            )
         }
-        let samples = BubbleDemoContent.allCases
-        return (samples[placement.slot], samples[placement.slot + maximumVisiblePreviews])
-    }
 
-    static func crossfade(at time: TimeInterval, forSlot slot: Int) -> Double {
-        let remainder = time.truncatingRemainder(dividingBy: contentCycleDuration)
-        let phase = (remainder + contentCycleDuration).truncatingRemainder(dividingBy: contentCycleDuration)
-        let reverseStart = contentCycleDuration * 0.5
-        if phase < reverseStart {
-            let local = phase - contentInitialDwell - Double(slot) * contentStaggerInterval
-            return smoothstep(local / contentTransitionDuration)
-        }
-        let local = phase - reverseStart - contentInitialDwell - Double(slot) * contentStaggerInterval
-        return 1 - smoothstep(local / contentTransitionDuration)
-    }
-
-    private static func smoothstep(_ value: TimeInterval) -> Double {
-        let t = min(1, max(0, value))
-        return t * t * (3 - 2 * t)
+        // Three unequal planes: a photo lead, with document and diagram faces
+        // separated around the lower-right edge.
+        let layouts: [(CGFloat, CGFloat, CGFloat, CGFloat, Double, Double)] = [
+            (0.37, 0.46, -0.14, -0.02, -5, 0.98),
+            (0.28, 0.37, 0.16, -0.09, 6, 0.91),
+            (0.27, 0.34, 0.09, 0.18, 8, 0.94)
+        ]
+        let layout = layouts[slot]
+        return BubblePreviewPlacement(
+            slot: slot, content: content,
+            width: layout.0, height: layout.1, x: layout.2, y: layout.3,
+            rotation: layout.4, opacity: layout.5, depth: Double(2 - slot),
+            drift: 0.006, blur: 0
+        )
     }
 
     static func maximumVisualRadius(for placement: BubblePreviewPlacement, diameter: CGFloat) -> CGFloat {
-        let halfWidth = diameter * placement.width * 0.5
-        let halfHeight = diameter * placement.height * 0.5
+        let halfWidth = diameter * placement.width * 0.5 + diameter * placement.blur
+        let halfHeight = diameter * placement.height * 0.5 + diameter * placement.blur
         let radians = CGFloat(placement.rotation * .pi / 180)
         let extentX = abs(cos(radians)) * halfWidth + abs(sin(radians)) * halfHeight
         let extentY = abs(sin(radians)) * halfWidth + abs(cos(radians)) * halfHeight
@@ -127,6 +132,109 @@ enum BubbleItemLayout {
         let y = abs(diameter * placement.y) + extentY + motion + shadowMargin
         return hypot(x, y)
     }
+
+    static func bottomEdgeUnit(for placement: BubblePreviewPlacement) -> CGFloat {
+        let halfWidth = placement.width * 0.5 + placement.blur
+        let halfHeight = placement.height * 0.5 + placement.blur
+        let radians = CGFloat(placement.rotation * .pi / 180)
+        let extentY = abs(sin(radians)) * halfWidth + abs(cos(radians)) * halfHeight
+        return placement.y + extentY
+    }
+}
+
+struct BubbleInsertionFrame: Equatable {
+    let count: Int
+    let placements: [BubblePreviewPlacement]
+}
+
+/// A deterministic newest-first history demo. The same content identity moves
+/// through front, middle, rear, and omitted states instead of crossfading in
+/// replacement thumbnails.
+enum BubbleInsertionTimeline {
+    static let duration: TimeInterval = 12
+    static let firstInsertStart: TimeInterval = 2.0
+    static let secondInsertStart: TimeInterval = 6.0
+    static let transitionDuration: TimeInterval = 1.35
+    static let settledFourTime = firstInsertStart + transitionDuration + 0.55
+    static let settledFiveTime = secondInsertStart + transitionDuration + 0.55
+
+    static func frame(at time: TimeInterval) -> BubbleInsertionFrame {
+        if time < firstInsertStart {
+            return BubbleInsertionFrame(count: 3, placements: BubbleItemLayout.placements(for: 3))
+        }
+        if time < firstInsertStart + transitionDuration {
+            let progress = (time - firstInsertStart) / transitionDuration
+            return BubbleInsertionFrame(
+                count: 4,
+                placements: transition(from: 3, to: 4, progress: progress)
+            )
+        }
+        if time < secondInsertStart {
+            return BubbleInsertionFrame(count: 4, placements: BubbleItemLayout.placements(for: 4))
+        }
+        if time < secondInsertStart + transitionDuration {
+            let progress = (time - secondInsertStart) / transitionDuration
+            return BubbleInsertionFrame(
+                count: 5,
+                placements: transition(from: 4, to: 5, progress: progress)
+            )
+        }
+        return BubbleInsertionFrame(count: 5, placements: BubbleItemLayout.placements(for: 5))
+    }
+
+    private static func transition(from oldCount: Int, to newCount: Int, progress: TimeInterval) -> [BubblePreviewPlacement] {
+        let amount = smoothstep(progress)
+        let old = Dictionary(uniqueKeysWithValues: BubbleItemLayout.placements(for: oldCount).map { ($0.content, $0) })
+        let new = Dictionary(uniqueKeysWithValues: BubbleItemLayout.placements(for: newCount).map { ($0.content, $0) })
+        let ordered = BubbleItemLayout.placements(for: newCount).map(\.content)
+            + BubbleItemLayout.placements(for: oldCount).map(\.content).filter { new[$0] == nil }
+
+        return ordered.compactMap { content in
+            switch (old[content], new[content]) {
+            case let (before?, after?):
+                return interpolate(before, after, amount: amount)
+            case let (nil, after?):
+                var entry = after
+                entry.width *= 0.78
+                entry.height *= 0.78
+                entry.x += 0.035
+                entry.y -= 0.045
+                entry.rotation += 8
+                entry.opacity = 0
+                entry.blur = 0.030
+                return interpolate(entry, after, amount: amount)
+            case let (before?, nil):
+                var exit = before
+                exit.y += 0.012
+                exit.opacity = 0
+                exit.blur = before.blur
+                return interpolate(before, exit, amount: amount)
+            case (nil, nil):
+                return nil
+            }
+        }
+    }
+
+    private static func interpolate(_ a: BubblePreviewPlacement, _ b: BubblePreviewPlacement, amount: Double) -> BubblePreviewPlacement {
+        func mix(_ first: CGFloat, _ second: CGFloat) -> CGFloat {
+            first + (second - first) * amount
+        }
+        return BubblePreviewPlacement(
+            slot: amount < 0.5 ? a.slot : b.slot,
+            content: a.content,
+            width: mix(a.width, b.width), height: mix(a.height, b.height),
+            x: mix(a.x, b.x), y: mix(a.y, b.y),
+            rotation: a.rotation + (b.rotation - a.rotation) * amount,
+            opacity: a.opacity + (b.opacity - a.opacity) * amount,
+            depth: a.depth + (b.depth - a.depth) * amount,
+            drift: mix(a.drift, b.drift), blur: mix(a.blur, b.blur)
+        )
+    }
+
+    private static func smoothstep(_ value: TimeInterval) -> Double {
+        let t = min(1, max(0, value))
+        return t * t * (3 - 2 * t)
+    }
 }
 
 struct BubbleContentPreviews: View {
@@ -134,51 +242,39 @@ struct BubbleContentPreviews: View {
     let time: TimeInterval
     let gather: CGFloat
     let bubbleDiameter: CGFloat
+    let insertionFrame: BubbleInsertionFrame?
+    let showsFourthPreview: Bool
 
     var body: some View {
         GeometryReader { geometry in
             let diameter = min(geometry.size.width, geometry.size.height)
-            let placements = BubbleItemLayout.placements(for: totalCount)
+            let allPlacements = insertionFrame?.placements ?? BubbleItemLayout.placements(for: totalCount)
+            let placements = showsFourthPreview
+                ? allPlacements
+                : allPlacements.filter { $0.slot < BubbleItemLayout.maximumVisiblePreviews }
 
             ZStack {
-                if BubbleItemLayout.showsOverflowHint(for: totalCount),
-                   let document = placements.first(where: { $0.slot == 1 }) {
-                    RearStackEdge(
-                        width: diameter * document.width,
-                        height: diameter * document.height,
-                        shellDiameter: bubbleDiameter
-                    )
-                    .rotationEffect(.degrees(document.rotation))
-                    .position(
-                        x: geometry.size.width * 0.5 + diameter * document.x,
-                        y: geometry.size.height * 0.5 + diameter * document.y
-                    )
-                    .zIndex(document.depth - 0.5)
-                }
-
                 ForEach(placements) { placement in
-                    let contentPair = BubbleItemLayout.contentPair(for: placement, totalCount: totalCount)
                     let driftPhase = time * 0.24 + Double(placement.slot) * 1.73
+                    let drift = insertionFrame == nil ? placement.drift : 0
                     let gatherScale: CGFloat = 1 - gather * 0.76
                     let x = diameter * placement.x * gatherScale
-                        + CGFloat(sin(driftPhase)) * diameter * placement.drift
+                        + CGFloat(sin(driftPhase)) * diameter * drift
                     let y = diameter * placement.y * gatherScale
-                        + CGFloat(cos(driftPhase * 0.83)) * diameter * placement.drift * 0.72
+                        + CGFloat(cos(driftPhase * 0.83)) * diameter * drift * 0.72
+                    let idleScale = insertionFrame == nil ? sin(driftPhase) * 0.006 : 0
 
                     DemoContentCard(
-                        front: contentPair.front,
-                        back: contentPair.back,
-                        crossfade: totalCount > BubbleItemLayout.maximumVisiblePreviews
-                            ? BubbleItemLayout.crossfade(at: time, forSlot: placement.slot)
-                            : 0,
+                        content: placement.content,
                         shellDiameter: bubbleDiameter
                     )
                     .frame(width: diameter * placement.width, height: diameter * placement.height)
-                    .rotationEffect(.degrees(placement.rotation + sin(driftPhase) * Double(placement.drift * 34)))
-                    .scaleEffect(1 + CGFloat(sin(driftPhase + 0.8)) * 0.006 + gather * 0.018)
+                    .rotationEffect(.degrees(placement.rotation + sin(driftPhase) * Double(drift * 34)))
+                    .scaleEffect(1 + CGFloat(idleScale) + gather * 0.018)
                     .opacity(placement.opacity)
+                    .blur(radius: placement.blur * bubbleDiameter)
                     .shadow(
-                        color: .black.opacity(placement.depth == 0 ? 0.20 : 0.30),
+                        color: .black.opacity(0.20 + min(1, max(0, placement.depth / 3)) * 0.10),
                         radius: max(1, min(4, bubbleDiameter * 0.016)),
                         y: bubbleDiameter < 96 ? 0.5 : 2
                     )
@@ -194,27 +290,18 @@ struct BubbleContentPreviews: View {
 }
 
 private struct DemoContentCard: View {
-    let front: BubbleDemoContent
-    let back: BubbleDemoContent
-    let crossfade: Double
+    let content: BubbleDemoContent
     let shellDiameter: CGFloat
 
     private var isCompact: Bool { shellDiameter < 96 }
     private var cornerRadius: CGFloat { max(4, shellDiameter * 0.035) }
 
     var body: some View {
-        ZStack {
-            DemoContentArtwork(content: front, isCompact: isCompact)
-                .opacity(1 - crossfade)
-            if back != front {
-                DemoContentArtwork(content: back, isCompact: isCompact)
-                    .opacity(crossfade)
-            }
-        }
+        DemoContentArtwork(content: content, isCompact: isCompact)
         .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
         .overlay {
             RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-                .strokeBorder(.white.opacity(front == .stillLife || front == .stillLifeDetail ? 0.78 : 0.68), lineWidth: max(0.6, shellDiameter * 0.004))
+                .strokeBorder(.white.opacity(content == .stillLife || content == .stillLifeDetail ? 0.78 : 0.68), lineWidth: max(0.6, shellDiameter * 0.004))
         }
     }
 }
@@ -461,29 +548,6 @@ private struct DocumentLines: View {
     }
 }
 
-private struct RearStackEdge: View {
-    let width: CGFloat
-    let height: CGFloat
-    let shellDiameter: CGFloat
-
-    private var step: CGFloat { max(2.8, shellDiameter * 0.019) }
-    private var radius: CGFloat { max(3, shellDiameter * 0.035) }
-
-    var body: some View {
-        ZStack {
-            RoundedRectangle(cornerRadius: radius, style: .continuous)
-                .fill(Color(red: 0.60, green: 0.70, blue: 0.72).opacity(0.94))
-                .overlay { RoundedRectangle(cornerRadius: radius, style: .continuous).strokeBorder(.white.opacity(0.78), lineWidth: 0.7) }
-                .offset(x: -step * 1.8, y: step * 1.8)
-            RoundedRectangle(cornerRadius: radius, style: .continuous)
-                .fill(Color(red: 0.71, green: 0.79, blue: 0.78).opacity(0.96))
-                .overlay { RoundedRectangle(cornerRadius: radius, style: .continuous).strokeBorder(.white.opacity(0.84), lineWidth: 0.7) }
-                .offset(x: -step * 0.9, y: step * 0.9)
-        }
-        .frame(width: width, height: height)
-    }
-}
-
 enum DemoArtwork {
     static let stillLife: NSImage? = {
         guard let url = Bundle.main.url(forResource: "DemoStillLife", withExtension: "png") else { return nil }
@@ -531,5 +595,55 @@ struct BubbleCountComparisonScene: View {
 
     static func title(for count: Int) -> String {
         count == 0 ? "0 · 空" : "\(count) · 内置示例"
+    }
+}
+
+struct BubbleInsertionComparisonScene: View {
+    static let size = CGSize(width: 960, height: 260)
+    private static let counts = [3, 4, 5]
+
+    let time: TimeInterval
+    let light: SIMD2<Float>
+
+    var body: some View {
+        ZStack {
+            Backdrop(style: .night)
+            HStack(spacing: 8) {
+                ForEach(Self.counts, id: \.self) { count in
+                    let moment: TimeInterval = switch count {
+                    case 3: 0
+                    case 4: BubbleInsertionTimeline.settledFourTime
+                    default: BubbleInsertionTimeline.settledFiveTime
+                    }
+                    let frame = BubbleInsertionTimeline.frame(at: moment)
+                    VStack(spacing: 2) {
+                        Text(Self.title(for: count))
+                            .font(.system(size: 10, weight: .medium, design: .rounded))
+                            .foregroundStyle(.white.opacity(0.82))
+                        BubbleScene(
+                            time: time,
+                            light: light,
+                            itemCount: frame.count,
+                            insertionFrame: frame,
+                            arrival: .resting,
+                            canvasSize: CGSize(width: 308, height: 226),
+                            bubbleDiameter: 214,
+                            drawBackdrop: false
+                        )
+                    }
+                    .frame(width: 308)
+                }
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
+        .frame(width: Self.size.width, height: Self.size.height)
+    }
+
+    private static func title(for count: Int) -> String {
+        switch count {
+        case 3: "初始 · 3份"
+        case 4: "加入第4份"
+        default: "加入第5份"
+        }
     }
 }

@@ -47,6 +47,7 @@ struct InteractiveBubbleLab: View {
     @State private var itemCount = 2
     @State private var pointer = SIMD2<Float>(0.34, 0.28)
     @State private var arrivalStartedAt: Date?
+    @State private var insertionStartedAt: Date?
 
     private let startTime = Date()
 
@@ -61,11 +62,15 @@ struct InteractiveBubbleLab: View {
                 let time = context.date.timeIntervalSince(startTime)
                 let elapsed = arrivalStartedAt.map { context.date.timeIntervalSince($0) }
                 let arrival = elapsed.map { BubbleMotion.arrival(at: $0) } ?? .resting
+                let insertionElapsed = insertionStartedAt.map { context.date.timeIntervalSince($0) }
+                let insertion = insertionElapsed.map { BubbleInsertionTimeline.frame(at: $0) }
+                let displayedCount = insertion?.count ?? itemCount
 
                 BubbleScene(
                     time: time,
                     light: pointer,
-                    itemCount: itemCount,
+                    itemCount: displayedCount,
+                    insertionFrame: insertion,
                     arrival: arrival
                 )
                     .contentShape(Rectangle())
@@ -89,10 +94,15 @@ struct InteractiveBubbleLab: View {
                     .frame(width: 28, height: 28)
                     .accessibilityLabel("Layered bubble notch symbol")
                 Button("播放收拢") {
+                    insertionStartedAt = nil
                     itemCount = max(itemCount, 1)
                     arrivalStartedAt = .now
                 }
                 .keyboardShortcut(.defaultAction)
+                Button("播放新文件加入") {
+                    arrivalStartedAt = nil
+                    insertionStartedAt = .now
+                }
             }
             .font(.system(size: 13, weight: .medium))
 
@@ -101,6 +111,7 @@ struct InteractiveBubbleLab: View {
                 set: { value in
                     itemCount = value
                     arrivalStartedAt = nil
+                    insertionStartedAt = nil
                 }
             )) {
                 ForEach(BubbleItemLayout.sampleCounts, id: \.self) { count in

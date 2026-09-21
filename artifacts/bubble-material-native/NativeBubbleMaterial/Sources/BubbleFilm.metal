@@ -116,7 +116,7 @@ static float studioRibbon(float3 ray, float3 center, float2 angularSize) {
     // 4% normal-incidence Fresnel level. Broad lobes carry the curved sheen;
     // their narrower cores give the surface a polished highlight. Both remain
     // attached to reflected rays, so cursor motion turns the environment.
-    float grazingReturn = mix(1.0, 1.65, grazing);
+    float grazingReturn = mix(1.0, 1.88, grazing);
     float coolCoverage = (coolBox * 0.24 + coolCore * 0.46) * grazingReturn;
     float warmCoverage = (warmBox * 0.10 + warmCore * 0.16) * grazingReturn;
     float softboxCoverage = saturate(coolCoverage + warmCoverage);

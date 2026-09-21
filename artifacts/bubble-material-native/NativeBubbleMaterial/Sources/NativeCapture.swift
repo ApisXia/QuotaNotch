@@ -91,8 +91,16 @@ enum NativeCapture {
               let smallTwo = images["small-count-2"],
               let smallThree = images["small-count-3"],
               let smallSix = images["small-count-6"],
-              let countThreeStart = images["count-3-cycle-start"],
-              let countSixStart = images["count-6-cycle-start"] else {
+              let historyThree = images["history-3"],
+              let historyFour = images["history-4"],
+              let historyFive = images["history-5"],
+              let historySix = images["history-6"],
+              let smallHistoryThree = images["small-history-3"],
+              let smallHistoryFour = images["small-history-4"],
+              let smallHistoryFive = images["small-history-5"],
+              let smallHistorySix = images["small-history-6"],
+              let historySixWithoutFourth = images["history-6-no-fourth"],
+              let smallHistorySixWithoutFourth = images["small-history-6-no-fourth"] else {
             throw BubbleLabError.capture("snapshot plan omitted a required comparison state")
         }
         for (count, image) in [(1, countOne), (2, countTwo), (3, countThree), (6, countSix)] {
@@ -116,19 +124,26 @@ enum NativeCapture {
             }
         }
         guard difference(countThree, countSix) > 0.002,
-              localizedDifference(
-                smallThree,
-                smallSix,
-                center: CGPoint(x: 160, y: 160),
-                insideRadius: 58
-              ) > 0.00015,
-              localizedDifference(
-                countThreeStart,
-                countSixStart,
+              difference(historyThree, historyFour) > 0.002,
+              difference(historyFour, historyFive) > 0.002,
+              difference(historyFive, historySix) > 0.002,
+              localizedDifference(smallThree, smallSix, center: CGPoint(x: 160, y: 160), insideRadius: 58) > 0.00015,
+              localizedDifference(smallHistoryThree, smallHistoryFour, center: CGPoint(x: 160, y: 160), insideRadius: 58) > 0.00015,
+              localizedDifference(smallHistoryFour, smallHistoryFive, center: CGPoint(x: 160, y: 160), insideRadius: 58) > 0.00015,
+              localizedDifference(smallHistoryFive, smallHistorySix, center: CGPoint(x: 160, y: 160), insideRadius: 58) > 0.00015,
+              lowerPeekingDifference(
+                historySix,
+                historySixWithoutFourth,
                 center: CGPoint(x: 512, y: 512),
-                insideRadius: 220
+                bubbleDiameter: 226
+              ) > 0.003,
+              lowerPeekingDifference(
+                smallHistorySix,
+                smallHistorySixWithoutFourth,
+                center: CGPoint(x: 160, y: 160),
+                bubbleDiameter: 64
               ) > 0.0005 else {
-            throw BubbleLabError.capture("the six-item aggregate rear-edge cue did not render behind the stable three-slot layout")
+            throw BubbleLabError.capture("the 3→4→5 history must reflow and show a blurred fourth preview peeking below the group")
         }
 
         let comparison = try render(BubbleCountComparisonScene(
@@ -137,6 +152,11 @@ enum NativeCapture {
             arrival: .resting
         ), size: BubbleCountComparisonScene.size)
         try writePNG(comparison, to: outputDirectory.appendingPathComponent("count-comparison.png"))
+        let historyComparison = try render(BubbleInsertionComparisonScene(
+            time: 1.4,
+            light: SIMD2<Float>(0.34, 0.28)
+        ), size: BubbleInsertionComparisonScene.size)
+        try writePNG(historyComparison, to: outputDirectory.appendingPathComponent("insertion-comparison.png"))
 
         try writeReport(CaptureReport(
             host: ProcessInfo.processInfo.operatingSystemVersionString,
@@ -144,7 +164,7 @@ enum NativeCapture {
             metalAvailable: true,
             shaderAvailable: true,
             renderer: "SwiftUI ImageRenderer with the app's compiled Metal library",
-            snapshots: snapshots.map { "\($0.name).png" } + ["count-comparison.png"],
+            snapshots: snapshots.map { "\($0.name).png" } + ["count-comparison.png", "insertion-comparison.png"],
             movies: [],
             result: "native count and lighting snapshots passed; movie encoding pending",
             limitation: nil
@@ -154,8 +174,8 @@ enum NativeCapture {
         try await writeMovie(to: lightSweepURL, kind: .lightSweep)
         let arrivalURL = outputDirectory.appendingPathComponent("bubble-arrival.mp4")
         try await writeMovie(to: arrivalURL, kind: .arrival)
-        let countsURL = outputDirectory.appendingPathComponent("bubble-count-comparison.mp4")
-        try await writeMovie(to: countsURL, kind: .counts)
+        let insertionURL = outputDirectory.appendingPathComponent("bubble-file-insertion.mp4")
+        try await writeMovie(to: insertionURL, kind: .insertion)
 
         try writeReport(CaptureReport(
             host: ProcessInfo.processInfo.operatingSystemVersionString,
@@ -163,8 +183,8 @@ enum NativeCapture {
             metalAvailable: true,
             shaderAvailable: true,
             renderer: "SwiftUI ImageRenderer with the app's compiled Metal library",
-            snapshots: snapshots.map { "\($0.name).png" } + ["count-comparison.png"],
-            movies: [lightSweepURL.lastPathComponent, arrivalURL.lastPathComponent, countsURL.lastPathComponent],
+            snapshots: snapshots.map { "\($0.name).png" } + ["count-comparison.png", "insertion-comparison.png"],
+            movies: [lightSweepURL.lastPathComponent, arrivalURL.lastPathComponent, insertionURL.lastPathComponent],
             result: "passed",
             limitation: nil
         ), to: reportURL)
@@ -172,6 +192,27 @@ enum NativeCapture {
 
     private static let snapshotPlan: [(name: String, scene: BubbleScene)] = {
         let light = SIMD2<Float>(0.34, 0.28)
+        func historyScene(_ count: Int, small: Bool = false, showsFourthPreview: Bool = true) -> BubbleScene {
+            let moment: TimeInterval = switch count {
+            case 3: 0
+            case 4: BubbleInsertionTimeline.settledFourTime
+            default: BubbleInsertionTimeline.settledFiveTime
+            }
+            let frame = count == 6
+                ? BubbleInsertionFrame(count: 6, placements: BubbleItemLayout.placements(for: 6))
+                : BubbleInsertionTimeline.frame(at: moment)
+            return BubbleScene(
+                time: 1.4,
+                light: light,
+                itemCount: frame.count,
+                insertionFrame: frame,
+                arrival: .resting,
+                canvasSize: small ? CGSize(width: 160, height: 160) : canvasSize,
+                bubbleDiameter: small ? 64 : 226,
+                backdropStyle: small ? .pearl : .night,
+                showsFourthPreview: showsFourthPreview
+            )
+        }
         var scenes = BubbleItemLayout.sampleCounts.map { count in
             ("count-\(count)", BubbleScene(time: 1.4, light: light, itemCount: count, arrival: .resting))
         }
@@ -187,9 +228,16 @@ enum NativeCapture {
             ))
         }
         scenes += [
-            ("count-3-cycle-start", BubbleScene(time: 0, light: light, itemCount: 3, arrival: .resting)),
-            ("count-6-cycle-start", BubbleScene(time: 0, light: light, itemCount: 6, arrival: .resting)),
-            ("count-6-cycle-middle", BubbleScene(time: BubbleItemLayout.contentCycleDuration / 2, light: light, itemCount: 6, arrival: .resting)),
+            ("history-3", historyScene(3)),
+            ("history-4", historyScene(4)),
+            ("history-5", historyScene(5)),
+            ("history-6", historyScene(6)),
+            ("history-6-no-fourth", historyScene(6, showsFourthPreview: false)),
+            ("small-history-3", historyScene(3, small: true)),
+            ("small-history-4", historyScene(4, small: true)),
+            ("small-history-5", historyScene(5, small: true)),
+            ("small-history-6", historyScene(6, small: true)),
+            ("small-history-6-no-fourth", historyScene(6, small: true, showsFourthPreview: false)),
             ("light-near", BubbleScene(time: 1.4, light: SIMD2<Float>(0.18, 0.22), itemCount: 0, arrival: .resting)),
             ("light-center", BubbleScene(time: 1.4, light: SIMD2<Float>(0.50, 0.50), itemCount: 0, arrival: .resting)),
             ("light-rim", BubbleScene(time: 1.4, light: SIMD2<Float>(0.84, 0.78), itemCount: 0, arrival: .resting)),
@@ -294,6 +342,37 @@ enum NativeCapture {
         return count > 0 ? total / Double(count) : 0
     }
 
+    /// Compares only the lower peek area below the bottom-most sharp preview.
+    /// This checks that the fourth layer contributes its actual blurred card
+    /// face there, instead of passing on a global tint or a generic outline.
+    private static func lowerPeekingDifference(
+        _ image: CGImage,
+        _ withoutFourth: CGImage,
+        center: CGPoint,
+        bubbleDiameter: CGFloat
+    ) -> Double {
+        let imageBitmap = NSBitmapImageRep(cgImage: image)
+        let referenceBitmap = NSBitmapImageRep(cgImage: withoutFourth)
+        let pixelsPerPoint = renderScale
+        let xRadius = Int(bubbleDiameter * 0.22 * pixelsPerPoint)
+        func bandDifference(direction: CGFloat) -> Double {
+            let yStart = Int(center.y + direction * bubbleDiameter * 0.31 * pixelsPerPoint)
+            let yEnd = Int(center.y + direction * bubbleDiameter * 0.405 * pixelsPerPoint)
+            var total = 0.0
+            var count = 0
+            for y in stride(from: max(0, min(yStart, yEnd)), to: min(image.height, max(yStart, yEnd)), by: 2) {
+                for x in stride(from: max(0, Int(center.x) - xRadius), to: min(image.width, Int(center.x) + xRadius), by: 2) {
+                    guard let a = rgb(imageBitmap, x: x, y: y),
+                          let b = rgb(referenceBitmap, x: x, y: y) else { continue }
+                    total += zip(a, b).reduce(0.0) { $0 + abs($1.0 - $1.1) }
+                    count += 1
+                }
+            }
+            return count > 0 ? total / Double(count) : 0
+        }
+        return max(bandDifference(direction: -1), bandDifference(direction: 1))
+    }
+
     private static func spatialLightingChange(_ first: CGImage, _ second: CGImage) -> Double {
         let firstBitmap = NSBitmapImageRep(cgImage: first)
         let secondBitmap = NSBitmapImageRep(cgImage: second)
@@ -370,17 +449,15 @@ enum NativeCapture {
     private enum MovieKind {
         case lightSweep
         case arrival
-        case counts
+        case insertion
     }
 
     private static func writeMovie(to url: URL, kind: MovieKind) async throws {
         try? FileManager.default.removeItem(at: url)
         let outputSize: CGSize
         switch kind {
-        case .lightSweep, .arrival:
+        case .lightSweep, .arrival, .insertion:
             outputSize = canvasSize
-        case .counts:
-            outputSize = BubbleCountComparisonScene.size
         }
         let width = Int(outputSize.width * renderScale)
         let height = Int(outputSize.height * renderScale)
@@ -391,8 +468,8 @@ enum NativeCapture {
             duration = BubbleMotion.totalDuration + 0.10
         case .lightSweep:
             duration = 8.0
-        case .counts:
-            duration = 12.0
+        case .insertion:
+            duration = BubbleInsertionTimeline.duration
         }
         let frameCount = Int(duration * Double(fps))
         let writer = try AVAssetWriter(outputURL: url, fileType: .mp4)
@@ -436,17 +513,24 @@ enum NativeCapture {
             case .arrival:
                 pointer = SIMD2<Float>(0.34, 0.30)
                 arrival = BubbleMotion.arrival(at: time)
-            case .lightSweep, .counts:
+            case .lightSweep:
                 let angle = time / duration * 2 * .pi - .pi / 2
-                pointer = SIMD2<Float>(
-                    0.5 + 0.42 * Float(cos(angle)),
-                    0.5 + 0.36 * Float(sin(angle))
-                )
+                pointer = SIMD2<Float>(0.5 + 0.42 * Float(cos(angle)), 0.5 + 0.36 * Float(sin(angle)))
+                arrival = .resting
+            case .insertion:
+                pointer = SIMD2<Float>(0.34, 0.28)
                 arrival = .resting
             }
             let image: CGImage
-            if case .counts = kind {
-                image = try render(BubbleCountComparisonScene(time: time, light: pointer, arrival: arrival), size: outputSize)
+            if case .insertion = kind {
+                let frame = BubbleInsertionTimeline.frame(at: time)
+                image = try render(BubbleScene(
+                    time: 1.4,
+                    light: pointer,
+                    itemCount: frame.count,
+                    insertionFrame: frame,
+                    arrival: .resting
+                ), size: outputSize)
             } else if case .lightSweep = kind {
                 // The only changing input is the environment-light direction.
                 // Holding time and itemCount still makes curvature easy to judge.
