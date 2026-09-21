@@ -233,44 +233,79 @@ enum BubbleChecks {
                   rectangles.allSatisfy({ $0.width > 0 && $0.height > 0 && (0...1).contains($0.opacity) }) else {
                 throw BubbleLabError.capture("the \(count)-item notch mark must contain exactly \(count) plain rectangles")
             }
-            for (width, height) in [
-                (NotchMinimalGeometry.width, NotchMinimalGeometry.filesHeight),
-                (CGFloat(52), CGFloat(52) * NotchMinimalGeometry.filesHeight / NotchMinimalGeometry.width)
-            ] {
-                let topRectangles = MinimalTopRectangleLayout.placements(for: count, width: width, height: height)
-                guard topRectangles.count == count else {
-                    throw BubbleLabError.capture("the minimal \(count)-rectangle preview lost an item while fitting its top row")
+            let smallSize = CGSize(width: NotchMinimalGeometry.width, height: NotchMinimalGeometry.filesHeight)
+            let enlargedSize = CGSize(width: 52, height: 52 * NotchMinimalGeometry.filesHeight / NotchMinimalGeometry.width)
+            let smallFit = MinimalTopRectangleLayout.fit(count: count, width: smallSize.width, height: smallSize.height)
+            let enlargedFit = MinimalTopRectangleLayout.fit(count: count, width: enlargedSize.width, height: enlargedSize.height)
+            guard (count == 0) == smallFit.normalizedBounds.isNull,
+                  (count == 0) == enlargedFit.normalizedBounds.isNull else {
+                throw BubbleLabError.capture("an empty minimal state must leave the top rectangle band blank")
+            }
+            if count > 0 {
+                let largeScale = enlargedSize.width / smallSize.width
+                guard abs(enlargedFit.squareSide - smallFit.squareSide * largeScale) < 0.001,
+                      abs(enlargedFit.squareCenter.x - smallFit.squareCenter.x * largeScale) < 0.001,
+                      abs(enlargedFit.squareCenter.y - smallFit.squareCenter.y * largeScale) < 0.001 else {
+                    throw BubbleLabError.capture("the enlarged minimal top stack must use the same uniformly scaled canonical layout")
                 }
-                let strokeMargin = max(0.35, min(width, height) * 0.018) * 0.5
-                let groupBounds = topRectangles.reduce(into: CGRect.null) { result, placement in
-                    let radians = CGFloat(placement.rotation * .pi / 180)
-                    let extentX = abs(cos(radians)) * placement.width * 0.5 + abs(sin(radians)) * placement.height * 0.5
-                    let extentY = abs(sin(radians)) * placement.width * 0.5 + abs(cos(radians)) * placement.height * 0.5
-                    let cardBounds = CGRect(
-                        x: placement.centerX - extentX,
-                        y: placement.centerY - extentY,
-                        width: extentX * 2,
-                        height: extentY * 2
-                    )
-                    result = result.union(cardBounds)
-                }
-                guard topRectangles.allSatisfy({
-                    let radians = CGFloat($0.rotation * .pi / 180)
-                    let extentX = abs(cos(radians)) * $0.width * 0.5 + abs(sin(radians)) * $0.height * 0.5
-                    let extentY = abs(sin(radians)) * $0.width * 0.5 + abs(cos(radians)) * $0.height * 0.5
-                    return (
-                        $0.centerX - extentX - strokeMargin >= -0.001
-                            && $0.centerY - extentY - strokeMargin >= -0.001
-                            && $0.centerX + extentX + strokeMargin <= width + 0.001
-                            && $0.centerY + extentY + strokeMargin <= height + 0.001
-                    )
-                }) else {
-                    throw BubbleLabError.capture("the minimal \(count)-rectangle top group must fit without clipping at \(Int(width))pt width")
+            }
+
+            for (size, fit) in [(smallSize, smallFit), (enlargedSize, enlargedFit)] {
+                guard rectangles.isEmpty ? fit.squareSide == 0 : fit.squareSide > 0 else {
+                    throw BubbleLabError.capture("the minimal top stack scale is invalid for \(count) rectangles")
                 }
                 if count > 0 {
-                    guard abs(groupBounds.width - width * 0.92) <= width * 0.002,
-                          abs(groupBounds.height - height * 0.84) <= height * 0.002 else {
-                        throw BubbleLabError.capture("the minimal \(count)-rectangle group must use the reserved top row instead of shrinking into a tiny cluster")
+                    let strokeMargin = max(0.35, min(size.width, size.height) * 0.018) * 0.5
+                    let groupBounds = rectangles.reduce(into: CGRect.null) { result, placement in
+                        let center = fit.center(of: placement)
+                        let cardSize = fit.size(of: placement)
+                        let radians = CGFloat(placement.rotation * .pi / 180)
+                        let extentX = abs(cos(radians)) * cardSize.width * 0.5 + abs(sin(radians)) * cardSize.height * 0.5
+                        let extentY = abs(sin(radians)) * cardSize.width * 0.5 + abs(cos(radians)) * cardSize.height * 0.5
+                        result = result.union(CGRect(
+                            x: center.x - extentX,
+                            y: center.y - extentY,
+                            width: extentX * 2,
+                            height: extentY * 2
+                        ))
+                    }
+                    guard rectangles.allSatisfy({ placement in
+                        let center = fit.center(of: placement)
+                        let cardSize = fit.size(of: placement)
+                        let radians = CGFloat(placement.rotation * .pi / 180)
+                        let extentX = abs(cos(radians)) * cardSize.width * 0.5 + abs(sin(radians)) * cardSize.height * 0.5
+                        let extentY = abs(sin(radians)) * cardSize.width * 0.5 + abs(cos(radians)) * cardSize.height * 0.5
+                        return center.x - extentX - strokeMargin >= -0.001
+                            && center.y - extentY - strokeMargin >= -0.001
+                            && center.x + extentX + strokeMargin <= size.width + 0.001
+                            && center.y + extentY + strokeMargin <= size.height + 0.001
+                    }),
+                    abs(groupBounds.midX - size.width * 0.5) < 0.001,
+                    abs(groupBounds.midY - size.height * 0.5) < 0.001,
+                    groupBounds.width <= size.width * 0.92 + 0.001,
+                    groupBounds.height <= size.height * 0.84 + 0.001,
+                    abs(groupBounds.width - size.width * 0.92) < 0.003 || abs(groupBounds.height - size.height * 0.84) < 0.003 else {
+                        throw BubbleLabError.capture("the minimal top stack must preserve a centered, uniformly scaled rectangle group without clipping at \(Int(size.width))pt width")
+                    }
+
+                    for placement in rectangles {
+                        let transformedSize = fit.size(of: placement)
+                        guard abs(transformedSize.width / placement.width - fit.squareSide) < 0.001,
+                              abs(transformedSize.height / placement.height - fit.squareSide) < 0.001 else {
+                            throw BubbleLabError.capture("the minimal stack must preserve rectangle aspect ratios")
+                        }
+                    }
+                    for first in rectangles.indices {
+                        for second in rectangles.indices where second > first {
+                            let firstCenter = fit.center(of: rectangles[first])
+                            let secondCenter = fit.center(of: rectangles[second])
+                            let sourceDeltaX = rectangles[first].x - rectangles[second].x
+                            let sourceDeltaY = rectangles[first].y - rectangles[second].y
+                            guard abs(firstCenter.x - secondCenter.x - sourceDeltaX * fit.squareSide) < 0.001,
+                                  abs(firstCenter.y - secondCenter.y - sourceDeltaY * fit.squareSide) < 0.001 else {
+                                throw BubbleLabError.capture("the minimal stack must preserve all canonical relative positions")
+                            }
+                        }
                     }
                 }
             }
