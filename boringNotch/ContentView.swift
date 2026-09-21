@@ -571,7 +571,8 @@ struct ContentView: View {
                             + -cornerRadiusInsets.closed.top
                 ).auditNotchFrame("camera")
 
-            HStack {
+            Button(action: onOpen) {
+                HStack {
                     Rectangle()
                         .fill(
                             NotchStyle.coloredSpectrogram
@@ -584,7 +585,9 @@ struct ContentView: View {
                             AudioSpectrumView(isPlaying: $musicManager.isPlaying)
                                 .frame(width: 16, height: 12)
                         }
+                }
             }
+            .buttonStyle(.plain)
             .frame(
                 width: max(
                     0,
