@@ -256,12 +256,26 @@ final class BubbleShelfStore: ObservableObject {
             thumbnailCache[item.id] = image
             return image
         case .file, .folder:
-            guard let url = resolvedFileURL(for: item) else { return nil }
+            guard let url = thumbnailFileURL(for: item) else { return nil }
             startThumbnailRequest(for: item, at: url)
             return NSWorkspace.shared.icon(forFile: url.path)
         case .text, .url:
             return nil
         }
+    }
+
+    /// Resolves a file reference for display without publishing bookmark or
+    /// availability changes while SwiftUI is evaluating a view body.
+    private func thumbnailFileURL(for item: BubbleShelfItem) -> URL? {
+        guard let pathURL = item.fileURL else { return nil }
+        if let bookmark = item.bookmarkData, let resolved = resolveBookmark(bookmark) {
+            let didStart = resolved.url.startAccessingSecurityScopedResource()
+            defer { if didStart { resolved.url.stopAccessingSecurityScopedResource() } }
+            guard fileManager.fileExists(atPath: resolved.url.path) else { return nil }
+            return resolved.url
+        }
+        guard fileManager.fileExists(atPath: pathURL.path) else { return nil }
+        return pathURL
     }
 
     /// Resolves a stored bookmark and rechecks the original path before drag export.

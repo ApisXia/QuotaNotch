@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // Preview-only behavioral verification for the persistent Bubble Shelf.
 import AppKit
+import Combine
 import Foundation
 
 #if SETTINGS_PREVIEW
@@ -57,6 +58,37 @@ enum BubbleShelfVerification {
         try check(duplicate.duplicateCount == 1 && duplicate.succeeded,
                   "Duplicate text must report a duplicate without creating a second item")
         try check(store.items.first?.id == textID, "Duplicate promotion must preserve the original stable ID")
+
+        let thumbnailRoot = root.appendingPathComponent("thumbnail-read", isDirectory: true)
+        let thumbnailDefaults = UserDefaults(suiteName: "QuotaNotch.BubbleShelf.Thumbnail.\(UUID().uuidString)")!
+        let thumbnailStore = BubbleShelfStore(storageDirectory: thumbnailRoot,
+                                               defaults: thumbnailDefaults,
+                                               fileManager: fileManager)
+        let thumbnailPasteboard = NSPasteboard(name: NSPasteboard.Name("QuotaNotch.BubbleShelf.Verification.Thumbnail.\(UUID().uuidString)"))
+        thumbnailPasteboard.clearContents()
+        let thumbnailImageItem = NSPasteboardItem()
+        thumbnailImageItem.setData(imageData, forType: .png)
+        thumbnailPasteboard.writeObjects([thumbnailImageItem])
+        let thumbnailImageResult = thumbnailStore.importPasteboardManually(thumbnailPasteboard)
+        try check(thumbnailImageResult.succeeded, "Thumbnail image fixture could not be added")
+        let thumbnailImage = try require(thumbnailStore.items.first(where: { $0.kind == .image }),
+                                         "Thumbnail image fixture is missing")
+        let unbookmarkedFile = BubbleShelfItem(kind: .file, title: "source.txt", resourceURL: fileURL)
+        thumbnailStore.configurePreview(items: [thumbnailImage, unbookmarkedFile])
+        let itemsBeforeThumbnailLookup = thumbnailStore.items
+        var publishedDuringThumbnailLookup = false
+        let thumbnailSubscription = thumbnailStore.objectWillChange.sink { _ in
+            publishedDuringThumbnailLookup = true
+        }
+        _ = thumbnailStore.thumbnail(for: unbookmarkedFile)
+        _ = thumbnailStore.thumbnail(for: thumbnailImage)
+        thumbnailSubscription.cancel()
+        try check(thumbnailStore.items == itemsBeforeThumbnailLookup,
+                  "Thumbnail lookup must not mutate stored item metadata")
+        try check(!publishedDuringThumbnailLookup,
+                  "Thumbnail lookup must not publish synchronously during view evaluation")
+        thumbnailStore.resetPreview()
+        thumbnailPasteboard.clearContents()
 
         let unsupportedPasteboard = NSPasteboard(name: NSPasteboard.Name("QuotaNotch.BubbleShelf.Verification.Unsupported.\(UUID().uuidString)"))
         unsupportedPasteboard.clearContents()
