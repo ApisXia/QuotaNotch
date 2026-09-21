@@ -127,6 +127,7 @@ struct SettingsPreviewRunner {
         try captureBubbleShelfOpenLayouts(output: output)
         try captureBubbleCollectorMotion(output: output)
         try captureBubbleClosedLayouts(output: output, fixtures: fixtures)
+        try captureBubbleGlyphOrbit(output: output)
         try captureTaskPanel(output: output, fixtures: fixtures)
         for dark in [true, false] {
             try capture(VStack(alignment: .leading, spacing: 12) {
@@ -853,6 +854,60 @@ struct SettingsPreviewRunner {
                 .background(Color.black).preferredColorScheme(.dark), width: 190,
                 name: "Bubble-collector-pointer-\(index)", output: output, height: 190)
         }
+    }
+
+    /// Two native four-second receive-arc cycles at the actual widget and Minimal
+    /// footprints. The same count/content state is held throughout the movie so the
+    /// only moving detail is the short curved inner arc and its speed-linked glow.
+    @MainActor private static func captureBubbleGlyphOrbit(output: URL) throws {
+        let receivingState = BubbleShelfCompactState(itemCount: 3, isReceiving: true,
+                                                     onOpen: {}, onVerticalSwipe: { _ in }, writers: { [] })
+        let board = HStack(spacing: 22) {
+            BubbleShelfClosedControl(state: receivingState, presentation: .widget,
+                                     height: 32, widgetWidth: QuotaCompactMetrics.iconSize(height: 32))
+                .frame(width: 32, height: 32)
+            BubbleShelfCompanion(state: receivingState, height: 32,
+                                 widgetWidth: QuotaCompactMetrics.iconSize(height: 32))
+                .frame(width: 26, height: 32)
+        }
+        .padding(.horizontal, 22)
+        .frame(width: 150, height: 76)
+        .background(Color.black)
+        .preferredColorScheme(.dark)
+        let host = NSHostingView(rootView: board)
+        let window = NSWindow(contentRect: NSRect(origin: .zero, size: NSSize(width: 150, height: 76)),
+                              styleMask: [.borderless], backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false
+        window.contentView = host
+        window.orderFront(nil)
+        defer { window.orderOut(nil); window.contentView = nil; window.close() }
+        settle(); host.layoutSubtreeIfNeeded()
+        let movieURL = output.appendingPathComponent("Bubble-notch-glyph-orbit.gif")
+        guard let destination = CGImageDestinationCreateWithURL(movieURL as CFURL,
+                                                                  UTType.gif.identifier as CFString,
+                                                                  96, nil) else {
+            fatalError("Cannot create notch glyph orbit storyboard")
+        }
+        CGImageDestinationSetProperties(destination,
+            [kCGImagePropertyGIFDictionary: [kCGImagePropertyGIFLoopCount: 0]] as CFDictionary)
+        for frameIndex in 0..<96 {
+            RunLoop.main.run(until: Date().addingTimeInterval(1.0 / 12.0))
+            host.layoutSubtreeIfNeeded()
+            guard let bitmap = host.bitmapImageRepForCachingDisplay(in: host.bounds) else {
+                fatalError("Missing notch glyph orbit frame \(frameIndex)")
+            }
+            host.cacheDisplay(in: host.bounds, to: bitmap)
+            guard let cgImage = bitmap.cgImage else {
+                fatalError("Missing notch glyph orbit image \(frameIndex)")
+            }
+            CGImageDestinationAddImage(destination, cgImage,
+                [kCGImagePropertyGIFDictionary: [kCGImagePropertyGIFDelayTime: 1.0 / 12.0]] as CFDictionary)
+            if [0, 24, 48, 72, 95].contains(frameIndex) {
+                try bitmap.representation(using: .png, properties: [:])!.write(to: output.appendingPathComponent(
+                    "Bubble-notch-glyph-orbit-frame-\(frameIndex).png"))
+            }
+        }
+        verifyPresentation(CGImageDestinationFinalize(destination), "Failed to save notch glyph orbit storyboard")
     }
 
     /// Check the closed physical notch with an empty configured shelf and one saved item.
