@@ -194,6 +194,33 @@ final class BubbleCollectorController: ObservableObject {
         #endif
     }
 
+    #if SETTINGS_PREVIEW
+    /// Injects a frozen candidate into the same panel used by AX selection events.
+    /// The preview runner uses this instead of prompting for Accessibility access.
+    func showSelectionForTesting(contents: [BubbleCollectorPayload], anchor: CGPoint) {
+        generation &+= 1
+        let payloads = Array(contents.prefix(80))
+        let selection = BubbleCollectorSelection(
+            fingerprint: "fixture-" + UUID().uuidString,
+            sourceProcessID: 42,
+            payloads: payloads,
+            omittedCount: 0,
+            anchor: anchor,
+            observedAt: Date(),
+            generation: generation
+        )
+        presentation = .selection(selection)
+        stationaryAnchor = anchor
+        statusMessage = "Selection ready. Click the bubble to save it."
+        ensurePanelController().present(anchor: anchor)
+        scheduleExpiration(for: selection.generation, after: 18)
+    }
+
+    func hidePreviewForTesting() {
+        hideCandidate()
+    }
+    #endif
+
     func shutdown() {
         generation &+= 1
         stopMonitors(clearPresentation: true)

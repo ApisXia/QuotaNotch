@@ -16,6 +16,7 @@ final class BubbleCollectorFloatingPanel {
                                          styleMask: [.borderless, .nonactivatingPanel],
                                          backing: .buffered, defer: false)
         panel.isFloatingPanel = true
+        panel.identifier = NSUserInterfaceItemIdentifier("bubble-collector-preview-panel")
         panel.becomesKeyOnlyIfNeeded = true
         panel.level = .floating
         panel.backgroundColor = .clear
