@@ -73,7 +73,11 @@ enum NativeCapture {
 
         guard let empty = images["empty"], let populated = images["populated"],
               let lightNear = images["light-near"], let lightFar = images["light-far"],
-              let lightEmpty = images["light-empty"] else {
+              let lightEmpty = images["light-empty"],
+              let patternReference = images["transmission-background"],
+              let patternThroughShell = images["transmission-patterned"],
+              let smallEmpty = images["small-widget-light"],
+              let smallPopulated = images["small-widget-populated"] else {
             throw BubbleLabError.capture("snapshot plan omitted a required comparison state")
         }
         guard difference(empty, populated) > 0.004 else {
@@ -82,8 +86,15 @@ enum NativeCapture {
         guard difference(lightNear, lightFar) > 0.002 else {
             throw BubbleLabError.capture("pointer positions did not change the captured reflected environment")
         }
-        guard centerDifference(empty, lightEmpty) > 0.20 else {
-            throw BubbleLabError.capture("the shell center does not show enough of the light and dark environments through its translucent body")
+        guard spatialLightingChange(lightNear, lightFar) > 0.003 else {
+            throw BubbleLabError.capture("pointer movement changed overall color but did not move reflected light across the shell")
+        }
+        guard patternTransmission(background: patternReference, shell: patternThroughShell) > 0.45 else {
+            throw BubbleLabError.capture("the shell did not preserve enough of the patterned native backdrop through its center")
+        }
+        guard localizedDifference(smallEmpty, smallPopulated, center: CGPoint(x: 160, y: 160), insideRadius: 56) > 0.002,
+              localizedDifference(smallEmpty, smallPopulated, center: CGPoint(x: 160, y: 160), outsideRadius: 76, maximumRadius: 112) < 0.001 else {
+            throw BubbleLabError.capture("the three populated shards do not stay visible inside the 64-point shell")
         }
 
         try writeReport(CaptureReport(
@@ -123,10 +134,34 @@ enum NativeCapture {
         ("light-far", BubbleScene(time: 2.1, light: SIMD2<Float>(0.84, 0.69), populated: true, arrival: .resting)),
         ("light-empty", BubbleScene(time: 1.4, light: SIMD2<Float>(0.34, 0.28), populated: false, arrival: .resting, backdropStyle: .pearl)),
         ("light-populated", BubbleScene(time: 1.4, light: SIMD2<Float>(0.34, 0.28), populated: true, arrival: .resting, backdropStyle: .pearl)),
+        ("transmission-background", BubbleScene(
+            time: 1.4,
+            light: SIMD2<Float>(0.34, 0.28),
+            populated: false,
+            arrival: .resting,
+            backdropStyle: .patterned,
+            showsBubble: false
+        )),
+        ("transmission-patterned", BubbleScene(
+            time: 1.4,
+            light: SIMD2<Float>(0.34, 0.28),
+            populated: false,
+            arrival: .resting,
+            backdropStyle: .patterned
+        )),
         ("small-widget-light", BubbleScene(
             time: 1.4,
             light: SIMD2<Float>(0.34, 0.28),
             populated: false,
+            arrival: .resting,
+            canvasSize: CGSize(width: 160, height: 160),
+            bubbleDiameter: 64,
+            backdropStyle: .pearl
+        )),
+        ("small-widget-populated", BubbleScene(
+            time: 1.4,
+            light: SIMD2<Float>(0.34, 0.28),
+            populated: true,
             arrival: .resting,
             canvasSize: CGSize(width: 160, height: 160),
             bubbleDiameter: 64,
@@ -154,6 +189,7 @@ enum NativeCapture {
         guard image.width == expectedWidth, image.height == expectedHeight else {
             throw BubbleLabError.capture("\(name) frame has unexpected dimensions \(image.width)×\(image.height)")
         }
+        if name == "transmission-background" { return }
         let bitmap = NSBitmapImageRep(cgImage: image)
         guard let center = rgb(bitmap, x: expectedWidth / 2, y: expectedHeight / 2),
               let background = rgb(bitmap, x: expectedWidth / 8, y: expectedHeight / 8) else {
@@ -189,6 +225,84 @@ enum NativeCapture {
         guard let a = rgb(firstBitmap, x: centerX, y: centerY),
               let b = rgb(secondBitmap, x: centerX, y: centerY) else { return 0 }
         return zip(a, b).reduce(0.0) { $0 + abs($1.0 - $1.1) }
+    }
+
+    private static func localizedDifference(
+        _ first: CGImage,
+        _ second: CGImage,
+        center: CGPoint,
+        insideRadius: CGFloat? = nil,
+        outsideRadius: CGFloat? = nil,
+        maximumRadius: CGFloat? = nil
+    ) -> Double {
+        let firstBitmap = NSBitmapImageRep(cgImage: first)
+        let secondBitmap = NSBitmapImageRep(cgImage: second)
+        var total = 0.0
+        var count = 0
+        for y in stride(from: 8, to: first.height - 8, by: 4) {
+            for x in stride(from: 8, to: first.width - 8, by: 4) {
+                let distance = hypot(CGFloat(x) - center.x, CGFloat(y) - center.y)
+                if let insideRadius, distance > insideRadius { continue }
+                if let outsideRadius, distance < outsideRadius { continue }
+                if let maximumRadius, distance > maximumRadius { continue }
+                guard let a = rgb(firstBitmap, x: x, y: y), let b = rgb(secondBitmap, x: x, y: y) else { continue }
+                total += zip(a, b).reduce(0.0) { $0 + abs($1.0 - $1.1) }
+                count += 1
+            }
+        }
+        return count > 0 ? total / Double(count) : 0
+    }
+
+    private static func spatialLightingChange(_ first: CGImage, _ second: CGImage) -> Double {
+        let firstBitmap = NSBitmapImageRep(cgImage: first)
+        let secondBitmap = NSBitmapImageRep(cgImage: second)
+        var positive = 0.0
+        var negative = 0.0
+        var count = 0
+        let centerX = first.width / 2
+        let centerY = first.height / 2
+        for y in stride(from: centerY - 176, through: centerY + 176, by: 8) {
+            for x in stride(from: centerX - 176, through: centerX + 176, by: 8) {
+                let dx = x - centerX
+                let dy = y - centerY
+                guard dx * dx + dy * dy < 176 * 176,
+                      let a = rgb(firstBitmap, x: x, y: y),
+                      let b = rgb(secondBitmap, x: x, y: y) else { continue }
+                let lumaA = a[0] * 0.2126 + a[1] * 0.7152 + a[2] * 0.0722
+                let lumaB = b[0] * 0.2126 + b[1] * 0.7152 + b[2] * 0.0722
+                let delta = lumaA - lumaB
+                positive += max(delta, 0)
+                negative += max(-delta, 0)
+                count += 1
+            }
+        }
+        guard count > 0 else { return 0 }
+        return min(positive, negative) / Double(count)
+    }
+
+    private static func patternTransmission(background: CGImage, shell: CGImage) -> Double {
+        let backgroundBitmap = NSBitmapImageRep(cgImage: background)
+        let shellBitmap = NSBitmapImageRep(cgImage: shell)
+        let centerX = background.width / 2
+        let centerY = background.height / 2
+        let offsets = [(-48, -48), (48, -48), (-48, 48), (48, 48)]
+        let backdropSamples = offsets.compactMap { rgb(backgroundBitmap, x: centerX + $0.0, y: centerY + $0.1) }
+        let shellSamples = offsets.compactMap { rgb(shellBitmap, x: centerX + $0.0, y: centerY + $0.1) }
+        guard backdropSamples.count == offsets.count, shellSamples.count == offsets.count else { return 0 }
+
+        var signal = 0.0
+        var covariance = 0.0
+        for channel in 0..<3 {
+            let backdropMean = backdropSamples.map { $0[channel] }.reduce(0, +) / Double(offsets.count)
+            let shellMean = shellSamples.map { $0[channel] }.reduce(0, +) / Double(offsets.count)
+            for sample in 0..<offsets.count {
+                let sourceDelta = backdropSamples[sample][channel] - backdropMean
+                let renderedDelta = shellSamples[sample][channel] - shellMean
+                signal += sourceDelta * sourceDelta
+                covariance += sourceDelta * renderedDelta
+            }
+        }
+        return signal > 0 ? covariance / signal : 0
     }
 
     private static func rgb(_ bitmap: NSBitmapImageRep, x: Int, y: Int) -> [Double]? {

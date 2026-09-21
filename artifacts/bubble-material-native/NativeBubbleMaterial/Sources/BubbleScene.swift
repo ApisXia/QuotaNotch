@@ -8,6 +8,7 @@ struct BubbleScene: View {
     let canvasSize: CGSize
     let bubbleDiameter: CGFloat
     let backdropStyle: BubbleBackdropStyle
+    let showsBubble: Bool
 
     init(
         time: TimeInterval,
@@ -16,7 +17,8 @@ struct BubbleScene: View {
         arrival: ArrivalFrame,
         canvasSize: CGSize = CGSize(width: 512, height: 512),
         bubbleDiameter: CGFloat = 226,
-        backdropStyle: BubbleBackdropStyle = .night
+        backdropStyle: BubbleBackdropStyle = .night,
+        showsBubble: Bool = true
     ) {
         self.time = time
         self.light = light
@@ -25,6 +27,7 @@ struct BubbleScene: View {
         self.canvasSize = canvasSize
         self.bubbleDiameter = bubbleDiameter
         self.backdropStyle = backdropStyle
+        self.showsBubble = showsBubble
     }
 
     var body: some View {
@@ -32,11 +35,13 @@ struct BubbleScene: View {
             ZStack {
                 Backdrop(style: backdropStyle)
 
-                bubble
-                    .frame(width: bubbleDiameter, height: bubbleDiameter)
-                    .scaleEffect(arrival.shellScale)
-                    .opacity(arrival.shellOpacity)
-                    .position(x: geometry.size.width / 2, y: geometry.size.height / 2)
+                if showsBubble {
+                    bubble
+                        .frame(width: bubbleDiameter, height: bubbleDiameter)
+                        .scaleEffect(arrival.shellScale)
+                        .opacity(arrival.shellOpacity)
+                        .position(x: geometry.size.width / 2, y: geometry.size.height / 2)
+                }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
@@ -69,7 +74,7 @@ struct BubbleScene: View {
 
             if populated {
                 ForEach(0..<3, id: \.self) { index in
-                    Flake(index: index, time: time, gather: arrival.flakeGather)
+                    Flake(index: index, time: time, gather: arrival.flakeGather, bubbleDiameter: bubbleDiameter)
                         .opacity(arrival.flakeOpacity)
                 }
             }
@@ -81,6 +86,7 @@ struct BubbleScene: View {
 enum BubbleBackdropStyle: Equatable {
     case night
     case pearl
+    case patterned
 }
 
 private struct Backdrop: View {
@@ -102,7 +108,7 @@ private struct Backdrop: View {
                     startRadius: 0,
                     endRadius: 300
                 )
-            } else {
+            } else if style == .pearl {
                 Color(red: 0.91, green: 0.91, blue: 0.94)
                 RadialGradient(
                     colors: [Color(red: 1.00, green: 0.96, blue: 0.93).opacity(0.90), .clear],
@@ -116,6 +122,26 @@ private struct Backdrop: View {
                     startRadius: 0,
                     endRadius: 310
                 )
+            } else {
+                Color(red: 0.12, green: 0.15, blue: 0.20)
+                Canvas { context, size in
+                    let center = CGPoint(x: size.width / 2, y: size.height / 2)
+                    let tile: CGFloat = 64
+                    for row in -6...6 {
+                        for column in -6...6 where (row + column).isMultiple(of: 2) {
+                            let rect = CGRect(
+                                x: center.x + CGFloat(column) * tile,
+                                y: center.y + CGFloat(row) * tile,
+                                width: tile,
+                                height: tile
+                            )
+                            let color = (row - column).isMultiple(of: 4)
+                                ? Color(red: 0.23, green: 0.40, blue: 0.52)
+                                : Color(red: 0.48, green: 0.31, blue: 0.41)
+                            context.fill(Path(rect), with: .color(color))
+                        }
+                    }
+                }
             }
         }
         .ignoresSafeArea()
@@ -157,14 +183,20 @@ private struct Flake: View {
     let index: Int
     let time: TimeInterval
     let gather: CGFloat
+    let bubbleDiameter: CGFloat
 
     private let angles = [-2.62, -0.48, 1.62]
     private let phases = [0.20, 2.25, 4.12]
 
     var body: some View {
         let angle = angles[index] + sin(time * 0.27 + phases[index]) * 0.12
-        let radius = 52 * (1 - gather) + 12 * gather + CGFloat(sin(time * 0.52 + phases[index]) * 3)
+        let shellRadius = bubbleDiameter * 0.5
+        let radius = bubbleDiameter * 0.23 * (1 - gather)
+            + bubbleDiameter * 0.055 * gather
+            + CGFloat(sin(time * 0.52 + phases[index])) * bubbleDiameter * 0.012
         let opacity = 0.24 + 0.70 * (0.5 + 0.5 * sin(time * 0.34 + phases[index]))
+        let shardWidth = max(7, bubbleDiameter * (index == 1 ? 0.095 : 0.080))
+        let shardHeight = max(2.5, bubbleDiameter * 0.016)
 
         Capsule()
             .fill(
@@ -179,10 +211,13 @@ private struct Flake: View {
                     endPoint: .trailing
                 )
             )
-            .frame(width: index == 1 ? 22 : 17, height: 1.2)
+            .frame(width: shardWidth, height: shardHeight)
             .rotationEffect(.radians(Double(angle) + 0.52))
-            .shadow(color: .white.opacity(0.35), radius: 2)
-            .position(x: 113 + CGFloat(cos(angle)) * radius, y: 113 + CGFloat(sin(angle)) * radius)
+            .shadow(color: .white.opacity(0.32), radius: max(1, bubbleDiameter * 0.012))
+            .position(
+                x: shellRadius + CGFloat(cos(angle)) * radius,
+                y: shellRadius + CGFloat(sin(angle)) * radius
+            )
             .opacity(opacity)
     }
 }
