@@ -149,13 +149,13 @@ private struct Flake: View {
 private struct DoubleBubbleMark: View {
     var body: some View {
         ZStack {
-            Circle()
+            RearBubbleArc()
                 .stroke(.white.opacity(0.30), lineWidth: 0.9)
                 .frame(width: 24, height: 24)
                 .offset(x: 5, y: -4)
 
             Circle()
-                .fill(Color(red: 0.70, green: 0.82, blue: 0.90).opacity(0.15))
+                .fill(Color(red: 0.70, green: 0.82, blue: 0.90).opacity(0.58))
                 .overlay {
                     Circle().stroke(.white.opacity(0.58), lineWidth: 0.9)
                 }
@@ -163,5 +163,26 @@ private struct DoubleBubbleMark: View {
                 .offset(x: -4, y: 3)
         }
         .shadow(color: .white.opacity(0.14), radius: 4)
+    }
+}
+
+private struct RearBubbleArc: Shape {
+    func path(in rect: CGRect) -> Path {
+        let center = CGPoint(x: rect.midX, y: rect.midY)
+        let radius = min(rect.width, rect.height) * 0.5
+        var path = Path()
+        for step in 0...48 {
+            let angle = -1.30 + Double(step) / 48 * 1.72
+            let point = CGPoint(
+                x: center.x + CGFloat(cos(angle)) * radius,
+                y: center.y + CGFloat(sin(angle)) * radius
+            )
+            if step == 0 {
+                path.move(to: point)
+            } else {
+                path.addLine(to: point)
+            }
+        }
+        return path
     }
 }

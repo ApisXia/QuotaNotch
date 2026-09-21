@@ -33,14 +33,16 @@ static float gaussian(float2 point, float2 center, float2 width) {
     // reflections follow the spherical normals instead of translating a spot.
     float3 reflected = reflect(-viewDirection, normal);
     float rotation = (pointer.x - 0.5) * 0.82 + sin(time * 0.19) * 0.025;
-    float2 rotated = float2(
+    float3 rotatedDirection = float3(
         reflected.x * cos(rotation) - reflected.z * sin(rotation),
-        reflected.y + (0.5 - pointer.y) * 0.18
+        reflected.y + (0.5 - pointer.y) * 0.18,
+        reflected.x * sin(rotation) + reflected.z * cos(rotation)
     );
+    float2 rotated = rotatedDirection.xy;
 
     float sky = smoothstep(-0.62, 0.74, rotated.y);
     float3 environment = mix(float3(0.28, 0.37, 0.52), float3(0.94, 0.84, 0.78), sky);
-    environment = mix(environment, float3(0.34, 0.51, 0.65), smoothstep(0.34, 0.91, rotated.z) * 0.42);
+    environment = mix(environment, float3(0.34, 0.51, 0.65), smoothstep(0.34, 0.91, rotatedDirection.z) * 0.42);
 
     float bend = 0.045 * sin(rotated.y * 3.2 + 0.5);
     float silkbox = gaussian(float2(rotated.x, rotated.y), float2(-0.20 + bend, 0.28), float2(0.13, 0.36));

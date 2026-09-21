@@ -6,7 +6,7 @@ The sample has two resting states: an empty shell and a populated shell with exa
 
 ## Build and preview on macOS
 
-Run `scripts/build-and-capture.sh /path/to/output` on macOS with Xcode command line tools installed. The script compiles the app for Apple silicon and Intel, compiles the Metal shader, runs motion and render checks, and writes native PNG frames plus an MP4 animation. It also packages `BubbleMaterialLab.app` in the output folder.
+Run `scripts/build-and-capture.sh /path/to/output` on macOS with Xcode command line tools installed. The script compiles the app for Apple silicon and Intel, compiles the Metal shader, runs motion and render checks, and writes native PNG frames, a steady-state pointer-sweep MP4, and a separate arrival MP4. It also packages `BubbleMaterialLab.app` in the output folder.
 
 Open `BubbleMaterialLab.app` for the live pointer and arrival interaction. In the preview window, use the controls below the stage to show/hide flakes or play the arrival pass. The capture harness drives the same SwiftUI scene with fixed inputs so its output is repeatable.
 

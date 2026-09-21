@@ -13,7 +13,7 @@ private struct CaptureReport: Encodable {
     let shaderAvailable: Bool
     let renderer: String
     let snapshots: [String]
-    let movie: String?
+    let movies: [String]
     let result: String
     let limitation: String?
 }
@@ -40,7 +40,7 @@ enum NativeCapture {
                 shaderAvailable: false,
                 renderer: "SwiftUI ImageRenderer",
                 snapshots: [],
-                movie: nil,
+                movies: [],
                 result: "unavailable",
                 limitation: "No Metal device is exposed by this macOS runner."
             ), to: reportURL)
@@ -55,7 +55,7 @@ enum NativeCapture {
                 shaderAvailable: false,
                 renderer: "SwiftUI ImageRenderer",
                 snapshots: [],
-                movie: nil,
+                movies: [],
                 result: "unavailable",
                 limitation: "The app bundle does not expose the compiled pearlFilm shader."
             ), to: reportURL)
@@ -89,13 +89,15 @@ enum NativeCapture {
             shaderAvailable: true,
             renderer: "SwiftUI ImageRenderer with the app's compiled Metal library",
             snapshots: snapshots.map { "\($0.name).png" },
-            movie: nil,
+            movies: [],
             result: "native snapshots passed; movie encoding pending",
             limitation: nil
         ), to: reportURL)
 
-        let movieURL = outputDirectory.appendingPathComponent("bubble-arrival.mp4")
-        try await writeArrivalMovie(to: movieURL)
+        let lightSweepURL = outputDirectory.appendingPathComponent("bubble-light-sweep.mp4")
+        try await writeMovie(to: lightSweepURL, kind: .lightSweep)
+        let arrivalURL = outputDirectory.appendingPathComponent("bubble-arrival.mp4")
+        try await writeMovie(to: arrivalURL, kind: .arrival)
 
         try writeReport(CaptureReport(
             host: ProcessInfo.processInfo.operatingSystemVersionString,
@@ -104,7 +106,7 @@ enum NativeCapture {
             shaderAvailable: true,
             renderer: "SwiftUI ImageRenderer with the app's compiled Metal library",
             snapshots: snapshots.map { "\($0.name).png" },
-            movie: movieURL.lastPathComponent,
+            movies: [lightSweepURL.lastPathComponent, arrivalURL.lastPathComponent],
             result: "passed",
             limitation: nil
         ), to: reportURL)
@@ -183,12 +185,24 @@ enum NativeCapture {
         try encoder.encode(report).write(to: url, options: .atomic)
     }
 
-    private static func writeArrivalMovie(to url: URL) async throws {
+    private enum MovieKind {
+        case lightSweep
+        case arrival
+    }
+
+    private static func writeMovie(to url: URL, kind: MovieKind) async throws {
         try? FileManager.default.removeItem(at: url)
         let width = Int(canvasSize.width * renderScale)
         let height = Int(canvasSize.height * renderScale)
         let fps: Int32 = 30
-        let frameCount = Int((BubbleMotion.totalDuration + 0.10) * Double(fps))
+        let duration: Double
+        switch kind {
+        case .arrival:
+            duration = BubbleMotion.totalDuration + 0.10
+        case .lightSweep:
+            duration = 3.0
+        }
+        let frameCount = Int(duration * Double(fps))
         let writer = try AVAssetWriter(outputURL: url, fileType: .mp4)
         let input = AVAssetWriterInput(mediaType: .video, outputSettings: [
             AVVideoCodecKey: AVVideoCodecType.h264,
@@ -217,10 +231,23 @@ enum NativeCapture {
                 try await Task.sleep(nanoseconds: 2_000_000)
             }
             let time = Double(frameIndex) / Double(fps)
-            let arrival = BubbleMotion.arrival(at: time)
+            let pointer: SIMD2<Float>
+            let arrival: ArrivalFrame
+            switch kind {
+            case .arrival:
+                pointer = SIMD2<Float>(0.34, 0.30)
+                arrival = BubbleMotion.arrival(at: time)
+            case .lightSweep:
+                let angle = time / duration * 2 * .pi - .pi / 2
+                pointer = SIMD2<Float>(
+                    0.5 + 0.32 * Float(cos(angle)),
+                    0.5 + 0.27 * Float(sin(angle))
+                )
+                arrival = .resting
+            }
             let scene = BubbleScene(
                 time: 4.0 + time,
-                light: SIMD2<Float>(0.34 + Float(sin(time * 0.62)) * 0.16, 0.30 + Float(cos(time * 0.50)) * 0.10),
+                light: pointer,
                 populated: true,
                 arrival: arrival
             )
