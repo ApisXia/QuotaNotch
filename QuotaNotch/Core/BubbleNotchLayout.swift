@@ -155,8 +155,13 @@ struct BubbleScrollGestureState {
     mutating func update(deltaX: CGFloat, deltaY: CGFloat, phase: BubbleScrollPhase,
                          isMomentum: Bool, timestamp: TimeInterval,
                          lastClaimTimestamp: TimeInterval) -> Bool? {
-        guard !isMomentum,
-              BubbleScrollPolicy.isDominantVertical(deltaX: deltaX, deltaY: deltaY) else { return nil }
+        guard !isMomentum else { return nil }
+        if phase == .ended {
+            accumulatedDeltaY = 0
+            claimed = false
+            return nil
+        }
+        guard BubbleScrollPolicy.isDominantVertical(deltaX: deltaX, deltaY: deltaY) else { return nil }
         if phase == .began || (phase == .none && timestamp - lastClaimTimestamp >= 0.45) {
             accumulatedDeltaY = 0
             claimed = false
@@ -169,10 +174,6 @@ struct BubbleScrollGestureState {
             claimed = true
             result = BubbleScrollPolicy.isUpward(accumulatedDeltaY)
             accumulatedDeltaY = 0
-        }
-        if phase == .ended {
-            accumulatedDeltaY = 0
-            claimed = false
         }
         return result
     }

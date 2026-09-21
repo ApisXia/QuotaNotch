@@ -347,6 +347,8 @@ struct BubbleShelfClosedControl: View {
     let presentation: BubbleNotchPresentation
     let height: CGFloat
     let widgetWidth: CGFloat
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var isHovering = false
 
     var body: some View {
         Group {
@@ -361,12 +363,17 @@ struct BubbleShelfClosedControl: View {
                     .frame(width: BubbleNotchLayout.minimalWidth, height: height)
             }
         }
+        .scaleEffect(isHovering && state.itemCount > 0 && !reduceMotion ? 1.06 : 1)
+        .brightness(isHovering && state.itemCount > 0 ? 0.045 : 0)
+        .shadow(color: .white.opacity(isHovering && state.itemCount > 0 ? 0.16 : 0), radius: 2)
+        .animation(reduceMotion ? nil : .easeOut(duration: 0.18), value: isHovering)
         .overlay {
             BubbleShelfDragHandle(
                 writers: state.writers,
                 preview: { BubbleDragPreview.mark(itemCount: state.itemCount) },
                 click: state.onOpen,
-                verticalSwipe: state.onVerticalSwipe
+                verticalSwipe: state.onVerticalSwipe,
+                hover: { isHovering = $0 }
             )
         }
         .auditNotchModule("bubble", mode: presentation.rawValue)
@@ -558,6 +565,7 @@ private struct BubbleShelfDragHandle: NSViewRepresentable {
     var preview: () -> NSImage? = { nil }
     var click: (() -> Void)? = nil
     var verticalSwipe: ((Bool) -> Void)? = nil
+    var hover: ((Bool) -> Void)? = nil
 
     func makeNSView(context: Context) -> BubbleInteractionView {
         let view = BubbleInteractionView()
@@ -572,6 +580,7 @@ private struct BubbleShelfDragHandle: NSViewRepresentable {
         view.preview = preview
         view.activate = click
         view.swipe = verticalSwipe
+        view.hover = hover
     }
 }
 
@@ -581,6 +590,7 @@ private final class BubbleInteractionView: NSView, NSDraggingSource {
     var preview: (() -> NSImage?)?
     var activate: (() -> Void)?
     var swipe: ((Bool) -> Void)?
+    var hover: ((Bool) -> Void)?
     private var downPoint: NSPoint?
     private var state: Interaction = .idle
     private var lastVerticalToggle: TimeInterval = 0
@@ -591,6 +601,17 @@ private final class BubbleInteractionView: NSView, NSDraggingSource {
     override var isFlipped: Bool { true }
     override func hitTest(_ point: NSPoint) -> NSView? { bounds.contains(point) ? self : nil }
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
+
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        trackingAreas.forEach(removeTrackingArea)
+        addTrackingArea(NSTrackingArea(rect: bounds,
+                                       options: [.activeInKeyWindow, .mouseEnteredAndExited, .inVisibleRect],
+                                       owner: self))
+    }
+
+    override func mouseEntered(with event: NSEvent) { hover?(true) }
+    override func mouseExited(with event: NSEvent) { hover?(false) }
 
     override func mouseDown(with event: NSEvent) {
         downPoint = convert(event.locationInWindow, from: nil)
@@ -622,17 +643,23 @@ private final class BubbleInteractionView: NSView, NSDraggingSource {
         // delta and deliver the useful movement in `.changed`. Accumulate a
         // dominant vertical axis until it reaches the gesture threshold, then
         // claim that gesture once. Momentum is deliberately ignored.
-        guard event.momentumPhase.isEmpty,
-              BubbleScrollPolicy.isDominantVertical(deltaX: event.scrollingDeltaX, deltaY: vertical) else {
-            super.scrollWheel(with: event)
-            return
-        }
-
         let phase: BubbleScrollPhase
         if event.phase.isEmpty { phase = .none }
         else if event.phase.contains(.began) { phase = .began }
         else if event.phase.contains(.ended) || event.phase.contains(.cancelled) { phase = .ended }
         else { phase = .changed }
+        if phase == .ended {
+            _ = verticalGesture.update(deltaX: 0, deltaY: 0, phase: .ended,
+                                       isMomentum: false, timestamp: event.timestamp,
+                                       lastClaimTimestamp: lastVerticalToggle)
+            super.scrollWheel(with: event)
+            return
+        }
+        guard event.momentumPhase.isEmpty,
+              BubbleScrollPolicy.isDominantVertical(deltaX: event.scrollingDeltaX, deltaY: vertical) else {
+            super.scrollWheel(with: event)
+            return
+        }
         if let upward = verticalGesture.update(deltaX: event.scrollingDeltaX, deltaY: vertical,
                                                phase: phase, isMomentum: false,
                                                timestamp: event.timestamp, lastClaimTimestamp: lastVerticalToggle) {
