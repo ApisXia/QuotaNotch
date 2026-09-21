@@ -123,6 +123,7 @@ struct SettingsPreviewRunner {
         try captureCat(output: output, fixtures: fixtures)
         try captureNotchSwitching(output: output)
         try captureBubbleShelfPreview(output: output)
+        try captureBubbleClosedLayouts(output: output, fixtures: fixtures)
         try captureTaskPanel(output: output, fixtures: fixtures)
         for dark in [true, false] {
             try capture(VStack(alignment: .leading, spacing: 12) {
@@ -684,6 +685,83 @@ struct SettingsPreviewRunner {
                 .background(Color.black).preferredColorScheme(.dark), width: 220,
                 name: "Shelf-collector-count-\(count)", output: output, height: 190)
         }
+    }
+
+    /// Check the closed physical notch with an empty configured shelf and one saved item.
+    /// Existing quota, music, task, and camera footprints remain the source of truth.
+    @MainActor private static func captureBubbleClosedLayouts(output: URL, fixtures: [AgentSession]) throws {
+        let shelf = BubbleShelfStore.shared
+        let shelfFile = output.appendingPathComponent("shelf-closed-fixture.txt")
+        try Data("Closed-notch shelf fixture".utf8).write(to: shelfFile)
+        let savedReceiving = shelf.isReceiving
+        defer {
+            shelf.isReceiving = savedReceiving
+            shelf.resetPreviewConfiguration()
+        }
+
+        let vm = BoringViewModel()
+        vm.hideOnClosed = false
+        let coordinator = BoringViewCoordinator.shared
+        coordinator.helloAnimationRunning = false
+        coordinator.currentView = .home
+        let quota = QuotaNotchStore.shared
+        let music = MusicManager.shared
+        let activity = AgentActivityStore.shared
+        let window = NSWindow(contentRect: NSRect(origin: .zero, size: windowSize), styleMask: [.borderless], backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false
+        defer { window.orderOut(nil); window.contentView = nil; window.close(); vm.destroy() }
+
+        var modules: [String: String] = [:]
+        var frames: [String: CGRect] = [:]
+        let host = NSHostingView(rootView: ContentView().environmentObject(vm)
+            .onPreferenceChange(NotchModuleAuditKey.self) { modules = $0 }
+            .onPreferenceChange(NotchModuleFrameAuditKey.self) { frames = $0 }
+            .transaction { $0.animation = nil; $0.disablesAnimations = true }
+            .background(Color(red: 0.25, green: 0.15, blue: 0.35)))
+        window.contentView = host
+        window.orderFront(nil)
+
+        let masks = Array(0..<8)
+        for itemCount in [0, 1] {
+            shelf.configurePreview(items: itemCount == 0 ? [] : [
+                BubbleShelfItem(kind: .file, title: "shelf-closed-fixture.txt", resourceURL: shelfFile)
+            ])
+            shelf.isReceiving = false
+            for mask in masks {
+                quota.configureSettingsPreview(paused: mask & 1 == 0)
+                music.isPlaying = mask & 2 != 0
+                music.isPlayerIdle = !music.isPlaying
+                activity.configurePreview(mask & 4 != 0 ? fixtures : [])
+                activity.compactExpanded = false
+                for rawHeight: CGFloat in [24, 32, 38] {
+                    vm.close()
+                    vm.closedNotchSize.height = rawHeight
+                    settle(); host.layoutSubtreeIfNeeded(); settle()
+                    guard let camera = frames["camera"] else {
+                        fatalError("Shelf closed fixture did not publish notch geometry")
+                    }
+                    let widget = QuotaCompactMetrics.iconSize(height: rawHeight)
+                    verifyPresentation(abs(camera.midX - host.bounds.midX) <= 1,
+                                       "Shelf shifted the physical notch at mask \(mask), height \(rawHeight), count \(itemCount)")
+                    let hasLeftModule = (mask & 1 != 0) || (mask & 2 != 0) || (mask & 4 != 0)
+                    let expectedBubble = hasLeftModule ? "minimal" : "widget"
+                    verifyPresentation(modules["bubble"] == expectedBubble,
+                                       "Shelf state used \(modules["bubble"] ?? "none") instead of \(expectedBubble) for mask \(mask), count \(itemCount)")
+                    if let album = frames["album"], mask & 2 != 0 {
+                        verifyPresentation(abs(album.width - widget) <= 1,
+                                           "Shelf changed music width at mask \(mask), height \(rawHeight): \(album.width) vs \(widget)")
+                    }
+                    let bitmap = host.bitmapImageRepForCachingDisplay(in: host.bounds)!
+                    host.cacheDisplay(in: host.bounds, to: bitmap)
+                    try bitmap.representation(using: .png, properties: [:])!.write(to: output.appendingPathComponent(
+                        "Notch-bubble-closed-mask\(mask)-height\(Int(rawHeight))-count\(itemCount).png"))
+                }
+            }
+        }
+        quota.configureSettingsPreview(paused: false)
+        music.isPlaying = false; music.isPlayerIdle = true
+        activity.configurePreview(fixtures)
+        print("Verified closed Shelf states across \(masks.count) module masks, counts 0/1, and heights 24/32/38")
     }
 
     @MainActor private static func verifyCatRubRegion() throws {
