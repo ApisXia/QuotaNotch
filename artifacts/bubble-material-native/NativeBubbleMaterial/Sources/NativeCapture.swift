@@ -411,8 +411,10 @@ enum NativeCapture {
         switch kind {
         case .arrival:
             duration = BubbleMotion.totalDuration + 0.10
-        case .lightSweep, .variants:
+        case .lightSweep:
             duration = 3.0
+        case .variants:
+            duration = 8.0
         }
         let frameCount = Int(duration * Double(fps))
         let writer = try AVAssetWriter(outputURL: url, fileType: .mp4)
