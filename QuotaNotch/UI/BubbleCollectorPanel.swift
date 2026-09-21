@@ -77,7 +77,7 @@ struct BubbleCollectorPreview: View {
         TimelineView(.animation(minimumInterval: 1.0 / 30.0, paused: false)) { timeline in
             let time = timeline.date.timeIntervalSince(timelineStart)
             let payloads = displayedPayloads
-            let phase = capturePhase(at: time)
+            let phase = capturePhase(at: timeline.date)
             let breathing = 0.5 + 0.5 * sin(time * 0.68)
             let shell = CollectorSphereShape(time: time, breathing: breathing)
             let shader = ShaderLibrary.default.pearlFilm(
@@ -135,20 +135,12 @@ struct BubbleCollectorPreview: View {
         }
     }
 
-    private func capturePhase(at time: TimeInterval) -> CollectorCapturePhase {
+    private func capturePhase(at date: Date) -> CollectorCapturePhase {
         guard case .captured(_, _, let startedAt, _) = controller.presentation else { return .resting }
-        let elapsed = max(0, time - startedAt.timeIntervalSinceReferenceDate)
-        if elapsed < 0.55 {
-            let t = smooth(elapsed / 0.55)
-            return CollectorCapturePhase(scale: 1 + 0.045 * t, opacity: 1, contentOpacity: 1 - 0.08 * t)
-        }
-        let t = smooth((elapsed - 0.55) / 1.05)
-        return CollectorCapturePhase(scale: 1.045 - 0.88 * t, opacity: 1 - t, contentOpacity: 0.92 * (1 - t))
-    }
-
-    private func smooth(_ value: TimeInterval) -> CGFloat {
-        let t = CGFloat(min(1, max(0, value)))
-        return t * t * (3 - 2 * t)
+        let frame = BubbleCollectorMotion.frame(at: max(0, date.timeIntervalSince(startedAt)))
+        return CollectorCapturePhase(scale: frame.shellScale,
+                                     opacity: frame.shellOpacity,
+                                     contentOpacity: frame.contentOpacity)
     }
 }
 
