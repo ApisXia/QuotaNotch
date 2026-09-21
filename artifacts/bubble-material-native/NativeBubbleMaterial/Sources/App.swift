@@ -75,9 +75,14 @@ struct InteractiveBubbleLab: View {
             .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
 
             HStack(spacing: 14) {
-                Toggle("Flakes", isOn: $populated)
+                Toggle("Flakes", isOn: Binding(
+                    get: { populated },
+                    set: { value in
+                        populated = value
+                        arrivalStartedAt = nil
+                    }
+                ))
                     .toggleStyle(.switch)
-                    .onChange(of: populated) { _ in arrivalStartedAt = nil }
                 Button("Play arrival") {
                     populated = true
                     arrivalStartedAt = .now
