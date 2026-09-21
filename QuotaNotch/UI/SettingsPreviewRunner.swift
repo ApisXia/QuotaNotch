@@ -17,6 +17,19 @@ struct SettingsPreviewRunner {
         let language = UserDefaults.standard.stringArray(forKey: "AppleLanguages")?.first ?? "en"
         let output = URL(fileURLWithPath: "build/Settings-previews/\(language)")
         try FileManager.default.createDirectory(at: output, withIntermediateDirectories: true)
+        try BubbleShelfVerification.run()
+        let shelfPreviewFile = output.appendingPathComponent("shelf-preview.txt")
+        let shelfPreviewNote = output.appendingPathComponent("shelf-preview-note.md")
+        try Data(AgentText.t("内置预览文件\n用于收纳面板截图", "Built-in preview file\nfor Shelf panel screenshots").utf8).write(to: shelfPreviewFile)
+        try Data("# Preview note\n\nA second built-in document for the shelf fixture.".utf8).write(to: shelfPreviewNote)
+        let shelfPreviewItems = [
+            BubbleShelfItem(kind: .file, title: "shelf-preview.txt", resourceURL: shelfPreviewFile),
+            BubbleShelfItem(kind: .text, title: AgentText.t("选中的文本", "Selected text"), text: AgentText.t("一段可拖出的示例文本", "A sample text item that can be dragged out")),
+            BubbleShelfItem(kind: .url, title: "example.com", resourceURL: URL(string: "https://example.com/preview")!),
+            BubbleShelfItem(kind: .file, title: "shelf-preview-note.md", resourceURL: shelfPreviewNote)
+        ]
+        BubbleShelfStore.shared.configurePreview(items: shelfPreviewItems)
+        BubbleShelfStore.shared.isReceiving = false
         // Old manual sizing preferences must no longer affect the actual screen layout.
         UserDefaults.standard.set(15, forKey: "notchHeight")
         UserDefaults.standard.set(10, forKey: "nonNotchHeight")
@@ -43,7 +56,7 @@ struct SettingsPreviewRunner {
                 color: .systemBlue, isSubscribed: false, isReminder: false)
         }
         for width: CGFloat in [700, 900] {
-            for page in ["General", "Quota", "Activity", "Media", "Calendar", "Appearance", "System", "About"] {
+            for page in ["General", "Quota", "Activity", "Media", "Calendar", "Appearance", "System", "Shelf", "About"] {
                 UserDefaults.standard.set(page, forKey: "settingsSelectedTab")
                 try capture(SettingsView().environment(\.locale, Locale(identifier: language)), width: width,
                             name: "\(page)-\(Int(width))", output: output)
@@ -116,6 +129,7 @@ struct SettingsPreviewRunner {
         try verifyCatRubRegion()
         try captureCat(output: output, fixtures: fixtures)
         try captureNotchSwitching(output: output)
+        try captureBubbleShelfPreview(output: output)
         try captureTaskPanel(output: output, fixtures: fixtures)
         for dark in [true, false] {
             try capture(VStack(alignment: .leading, spacing: 12) {
@@ -246,7 +260,7 @@ struct SettingsPreviewRunner {
         vm.open()
         for headerHeight: CGFloat in [24, 32, 38] {
             vm.closedNotchSize.height = headerHeight
-            for (index, tab) in [NotchViews.home, .activity, .aiUsage, .activity].enumerated() {
+            for (index, tab) in [NotchViews.home, .activity, .aiUsage, .bubbleShelf].enumerated() {
                 coordinator.currentView = tab
                 settle()
                 host.layoutSubtreeIfNeeded()
@@ -293,8 +307,14 @@ struct SettingsPreviewRunner {
                            "Swiping to Tasks did not use explicit opening behavior")
         verifyPresentation(AgentActivityStore.shared.unread.count == unreadBeforeSwipe, "Swiping instantly read unseen tasks")
         swipe.handleScroll(x: -20, y: 0, at: 6, phase: .began, eventWindow: window, location: inside)
-        verifyPresentation(coordinator.currentView == .activity, "Swiping at the last tab wrapped around")
-        swipe.handleScroll(x: 20, y: 0, at: 7, phase: .began, eventWindow: window, location: inside)
+        verifyPresentation(coordinator.currentView == .bubbleShelf && !AgentActivityStore.shared.notchReadEnabled,
+                           "Swiping to Shelf did not select the Shelf tab")
+        swipe.handleScroll(x: -20, y: 0, at: 7, phase: .began, eventWindow: window, location: inside)
+        verifyPresentation(coordinator.currentView == .bubbleShelf, "Swiping at the last tab wrapped around")
+        swipe.handleScroll(x: 20, y: 0, at: 8, phase: .began, eventWindow: window, location: inside)
+        verifyPresentation(coordinator.currentView == .activity && AgentActivityStore.shared.notchReadEnabled,
+                           "Swiping back did not leave Shelf correctly")
+        swipe.handleScroll(x: 20, y: 0, at: 9, phase: .began, eventWindow: window, location: inside)
         verifyPresentation(coordinator.currentView == .aiUsage && !AgentActivityStore.shared.notchReadEnabled,
                            "Swiping back did not leave Tasks correctly")
         for (index, fraction) in [CGFloat(0.05), 0.5, 0.95].enumerated() {
@@ -612,6 +632,56 @@ struct SettingsPreviewRunner {
         verifyPresentation(abs(window.frame.height - windowSize.height) < 1, "Closing left an oversized input window")
         window.orderOut(nil); window.contentView = nil; window.close(); vm.destroy()
         store.configurePreview(fixtures); store.expandedTaskID = nil
+    }
+
+    /// Render the shelf tab and the closed glyph at its actual widget/minimal footprints.
+    /// The fixture uses ordinary text, URL, and file items; it never reads the user's shelf.
+    @MainActor private static func captureBubbleShelfPreview(output: URL) throws {
+        let shelf = BubbleShelfStore.shared
+        let originalReceiving = shelf.isReceiving
+        defer {
+            shelf.isReceiving = originalReceiving
+            shelf.resetPreview()
+        }
+
+        for receiving in [false, true] {
+            shelf.isReceiving = receiving
+            try capture(BubbleShelfView().background(Color.black).preferredColorScheme(.dark), width: 520,
+                        name: "Shelf-panel-\(receiving ? "receiving" : "paused")", output: output, height: 420)
+            try capture(BubbleShelfSettingsView().background(Color.black).preferredColorScheme(.dark), width: 520,
+                        name: "Shelf-settings-\(receiving ? "receiving" : "paused")", output: output, height: 260)
+        }
+
+        for receivingState in [false, true] {
+            let compactHost = HStack(alignment: .center, spacing: 28) {
+                ForEach([24, 32, 38], id: \.self) { rawHeight in
+                    let height = CGFloat(rawHeight)
+                    VStack(spacing: 5) {
+                        Text("\(rawHeight)pt").font(.system(size: 9)).foregroundStyle(.secondary)
+                        HStack(spacing: 9) {
+                            BubbleShelfClosedControl(
+                                state: BubbleShelfCompactState(itemCount: 3, isReceiving: receivingState,
+                                                               onOpen: {}, onVerticalSwipe: { _ in }, writers: { [] }),
+                                presentation: .widget, height: height, widgetWidth: QuotaCompactMetrics.iconSize(height: height)
+                            )
+                            BubbleShelfCompanion(
+                                state: BubbleShelfCompactState(itemCount: 3, isReceiving: receivingState,
+                                                               onOpen: {}, onVerticalSwipe: { _ in }, writers: { [] }),
+                                height: height, widgetWidth: QuotaCompactMetrics.iconSize(height: height)
+                            )
+                        }
+                    }
+                }
+            }
+            try capture(compactHost.background(Color.black).preferredColorScheme(.dark), width: 420,
+                        name: "Shelf-closed-\(receivingState ? "receiving" : "paused")", output: output, height: 92)
+        }
+        for count in 0...4 {
+            let payloads = Array(shelf.items.prefix(count)).map(BubbleCollectorPayload.stored)
+            try capture(BubbleCollectorFixtureView(payloads: payloads)
+                .background(Color.black).preferredColorScheme(.dark), width: 220,
+                name: "Shelf-collector-count-\(count)", output: output, height: 190)
+        }
     }
 
     @MainActor private static func verifyCatRubRegion() throws {

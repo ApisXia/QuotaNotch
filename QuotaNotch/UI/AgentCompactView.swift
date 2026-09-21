@@ -411,26 +411,35 @@ struct AgentTaskOnlyWings: View {
     let centerWidth: CGFloat
     let height: CGFloat
     let open: () -> Void
+    var shelf: BubbleShelfCompactState? = nil
     @ObservedObject private var store = AgentActivityStore.shared
     private var iconWidth: CGFloat { QuotaCompactMetrics.iconSize(height: height) }
+    private var metrics: NotchModuleMetrics { NotchModuleMetrics(widgetWidth: iconWidth) }
     private var textWidth: CGFloat { iconWidth + NotchModuleMetrics(widgetWidth: iconWidth).additionalWidth }
     private var candidates: [AgentSession] { store.visible.filter { $0.state.isActive || store.isUnread($0) } }
     private var recent: [AgentSession] { AgentTaskOnlySummary.recent(candidates) }
     private var emphasis: AgentSession? { AgentTaskOnlySummary.emphasis(candidates) }
     var body: some View {
         HStack(spacing: QuotaCompactMetrics.spacing) {
-            Button(action: open) {
-                Group {
-                    if let session = emphasis {
-                        AgentPaperGlyph(state: session.state)
-                            .scaleEffect(iconWidth / 16)
+            HStack(spacing: 0) {
+                Button(action: open) {
+                    Group {
+                        if let session = emphasis {
+                            AgentPaperGlyph(state: session.state)
+                                .scaleEffect(iconWidth / 16)
+                        }
                     }
+                    .frame(width: iconWidth, height: height).contentShape(Rectangle())
+                    .auditNotchModule("task")
+                }.buttonStyle(.plain)
+                    .accessibilityLabel(AgentText.t("任务", "Tasks") + " · " + AgentText.state(emphasis?.state ?? .unknown))
+                if let shelf {
+                    BubbleShelfCompanion(state: shelf, height: height, widgetWidth: iconWidth)
                 }
-                .frame(width: iconWidth, height: height).contentShape(Rectangle())
-                .auditNotchModule("task")
-            }.buttonStyle(.plain)
-                .accessibilityLabel(AgentText.t("任务", "Tasks") + " · " + AgentText.state(emphasis?.state ?? .unknown))
-                .catWing(.left, occupied: iconWidth, height: height)
+            }
+            .catWing(.left,
+                     occupied: iconWidth + (shelf == nil ? 0 : metrics.additionalWidth),
+                     height: height, widgetWidth: iconWidth)
             Color.clear.frame(width: centerWidth, height: height).auditNotchFrame("camera")
             Button(action: open) {
                 VStack(alignment: .leading, spacing: 1) {
