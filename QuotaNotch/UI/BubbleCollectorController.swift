@@ -335,7 +335,7 @@ final class BubbleCollectorController: ObservableObject {
         )
         availability = .ready
         statusMessage = sample.omittedCount > 0
-            ? "Selection ready. \(sample.omittedCount) item(s) could not be read or exceed the 80-item batch limit. Click the bubble to save the rest."
+            ? "Selection ready. \(sample.omittedCount) item(s) could not be read or exceed the 80-item batch limit. Click the bubble to save the readable items."
             : "Selection ready. Click the bubble to save it."
         presentation = .selection(snapshot)
         stationaryAnchor = snapshot.anchor
