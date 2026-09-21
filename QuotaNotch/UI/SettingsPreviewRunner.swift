@@ -810,14 +810,11 @@ struct SettingsPreviewRunner {
             fatalError("Collector motion panel was not created")
         }
         content.layoutSubtreeIfNeeded()
-        let movieURL = output.appendingPathComponent("Bubble-collector-insertion.gif")
-        guard let destination = CGImageDestinationCreateWithURL(movieURL as CFURL,
-                                                                  UTType.gif.identifier as CFString,
-                                                                  81, nil) else {
-            fatalError("Cannot create collector motion storyboard")
-        }
-        CGImageDestinationSetProperties(destination,
-            [kCGImagePropertyGIFDictionary: [kCGImagePropertyGIFLoopCount: 0]] as CFDictionary)
+        // Capture timed frames first and encode the GIF afterward. GIF encoding and
+        // thumbnail work can take longer than one frame interval and would otherwise
+        // let the live 2.05s gather/hold/collapse animation expire between snapshots.
+        var motionFrames: [CGImage] = []
+        let captureStart = Date()
         for frameIndex in 0..<81 {
             let stageIndex = min(fixtureItems.count, frameIndex / 14)
             if frameIndex <= 56 && frameIndex % 14 == 0 {
@@ -827,25 +824,57 @@ struct SettingsPreviewRunner {
                 shelf.configurePreview(items: Array(fixtureItems.prefix(stageIndex)))
             }
             if frameIndex == 56 {
-                // The fifth item is a real capture through the controller API;
-                // its own 2.05s gather/hold/collapse follows the reflow proof.
+                // Refresh the injected candidate immediately before capture so a
+                // slow CI render cannot cross its 18s fixture expiration. Reusing
+                // the existing panel keeps this a real insertion, not a new scene.
+                controller.showSelectionForTesting(contents: [finalPayload], anchor: anchor)
                 controller.captureCurrentCandidate()
+                guard shelf.items.count == 5,
+                      case .captured(let captured, _, _, _) = controller.presentation,
+                      captured.count == 4 else {
+                    fatalError("Collector candidate capture did not produce the fifth shelf item")
+                }
             }
-            RunLoop.main.run(until: Date().addingTimeInterval(1.0 / 12.0))
-            content.layoutSubtreeIfNeeded()
-            guard let bitmap = content.bitmapImageRepForCachingDisplay(in: content.bounds) else {
+            let frameDeadline = captureStart.addingTimeInterval(Double(frameIndex + 1) / 12.0)
+            while Date() < frameDeadline {
+                RunLoop.main.run(mode: .default,
+                                 before: min(frameDeadline, Date().addingTimeInterval(0.01)))
+            }
+            // The panel may replace its hosting view during a real capture. Always
+            // cache the current view instead of retaining a detached NSHostingView.
+            guard let liveContent = panel.contentView else {
+                fatalError("Collector motion panel lost its content view at frame \(frameIndex)")
+            }
+            liveContent.layoutSubtreeIfNeeded()
+            guard let bitmap = liveContent.bitmapImageRepForCachingDisplay(in: liveContent.bounds) else {
                 fatalError("Missing collector motion frame \(frameIndex)")
             }
-            content.cacheDisplay(in: content.bounds, to: bitmap)
+            liveContent.cacheDisplay(in: liveContent.bounds, to: bitmap)
             guard let cgImage = bitmap.cgImage else {
                 fatalError("Missing collector motion image \(frameIndex)")
             }
-            CGImageDestinationAddImage(destination, cgImage,
-                [kCGImagePropertyGIFDictionary: [kCGImagePropertyGIFDelayTime: 1.0 / 12.0]] as CFDictionary)
+            motionFrames.append(cgImage)
             if [0, 14, 28, 42, 56, 70, 80].contains(frameIndex) {
                 try bitmap.representation(using: .png, properties: [:])!.write(to: output.appendingPathComponent(
                     "Bubble-collector-insertion-frame-\(frameIndex).png"))
             }
+        }
+        guard shelf.items.count == 5,
+              case .captured = controller.presentation,
+              motionFrames.count == 81 else {
+            fatalError("Collector motion capture lost its final captured presentation")
+        }
+        let movieURL = output.appendingPathComponent("Bubble-collector-insertion.gif")
+        guard let destination = CGImageDestinationCreateWithURL(movieURL as CFURL,
+                                                                  UTType.gif.identifier as CFString,
+                                                                  motionFrames.count, nil) else {
+            fatalError("Cannot create collector motion storyboard")
+        }
+        CGImageDestinationSetProperties(destination,
+            [kCGImagePropertyGIFDictionary: [kCGImagePropertyGIFLoopCount: 0]] as CFDictionary)
+        for frame in motionFrames {
+            CGImageDestinationAddImage(destination, frame,
+                [kCGImagePropertyGIFDictionary: [kCGImagePropertyGIFDelayTime: 1.0 / 12.0]] as CFDictionary)
         }
         verifyPresentation(CGImageDestinationFinalize(destination), "Failed to save collector insertion storyboard")
 
