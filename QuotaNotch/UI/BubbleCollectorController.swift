@@ -862,8 +862,12 @@ private enum FinderAppleEventReader {
 
     static func read() -> FinderAppleEventReadResult {
         var error: NSDictionary?
-        guard let script = NSAppleScript(source: source),
-              let descriptor = script.executeAndReturnError(&error) else {
+        guard let script = NSAppleScript(source: source) else {
+            return FinderAppleEventReadResult(urls: [], omittedCount: 0,
+                                              failureMessage: failureMessage(from: error))
+        }
+        let descriptor = script.executeAndReturnError(&error)
+        if error != nil {
             return FinderAppleEventReadResult(urls: [], omittedCount: 0,
                                               failureMessage: failureMessage(from: error))
         }
