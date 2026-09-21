@@ -59,10 +59,17 @@ struct BubbleShelfItem: Identifiable, Codable, Equatable {
             return "text:" + Self.sha256(Data(text.utf8))
         case .url:
             guard let resourceURL, !resourceURL.isFileURL else { return nil }
-            var components = URLComponents(url: resourceURL, resolvingAgainstBaseURL: false)
-            components?.scheme = components?.scheme?.lowercased()
-            components?.host = components?.host?.lowercased()
-            return "url:" + (components?.url?.absoluteString ?? resourceURL.absoluteString)
+            guard var components = URLComponents(url: resourceURL, resolvingAgainstBaseURL: false) else {
+                return "url:" + resourceURL.absoluteString
+            }
+            // Read the optional fields before assigning them back. Swift's
+            // exclusivity checker rejects overlapping access when a property
+            // is read from and written through the same optional chain.
+            let normalizedScheme = components.scheme?.lowercased()
+            let normalizedHost = components.host?.lowercased()
+            components.scheme = normalizedScheme
+            components.host = normalizedHost
+            return "url:" + (components.url?.absoluteString ?? resourceURL.absoluteString)
         case .image:
             guard let contentDigest, !contentDigest.isEmpty else { return nil }
             return "image:" + contentDigest.lowercased()
