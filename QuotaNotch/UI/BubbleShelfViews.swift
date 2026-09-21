@@ -15,7 +15,6 @@ struct BubbleShelfCompactState {
 struct BubbleShelfView: View {
     @ObservedObject private var store = BubbleShelfStore.shared
     @ObservedObject private var collector = BubbleCollectorController.shared
-    @State private var importSummary: String?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
@@ -97,9 +96,7 @@ struct BubbleShelfView: View {
         .padding(.vertical, 8)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .background {
-            BubbleShelfDropTarget { result in
-                importSummary = Self.summary(for: result)
-            }
+            BubbleShelfDropTarget { _ in }
         }
         .accessibilityIdentifier("bubble-shelf-panel")
     }
@@ -111,7 +108,6 @@ struct BubbleShelfView: View {
         if store.exportIssue != nil {
             return AgentText.t("部分原始内容暂时不可用，仍可导出其他项目。", "Some original items are unavailable; the rest can still be exported.")
         }
-        if let importSummary { return importSummary }
         if let result = store.lastImportResult,
            result.skippedCount > 0 || !result.errors.isEmpty {
             return Self.summary(for: result)
