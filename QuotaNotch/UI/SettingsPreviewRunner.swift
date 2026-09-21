@@ -779,11 +779,12 @@ struct SettingsPreviewRunner {
         try Data("Collector motion fixture".utf8).write(to: fileURL)
         let noteURL = output.appendingPathComponent("collector-motion-note.md")
         try Data("# Collector motion fixture\n\nA second native card.".utf8).write(to: noteURL)
+        let fixtureDate = Date()
         let fixtureItems: [BubbleShelfItem] = [
-            BubbleShelfItem(kind: .file, title: "collector-motion-fixture.txt", resourceURL: fileURL),
-            BubbleShelfItem(kind: .text, title: AgentText.t("示例文本", "Sample text"), text: "Collector motion sample"),
-            BubbleShelfItem(kind: .url, title: "example.com", resourceURL: URL(string: "https://example.com/collector")!),
-            BubbleShelfItem(kind: .file, title: "collector-motion-note.md", resourceURL: noteURL)
+            BubbleShelfItem(kind: .file, title: "collector-motion-fixture.txt", addedAt: fixtureDate, resourceURL: fileURL),
+            BubbleShelfItem(kind: .text, title: AgentText.t("示例文本", "Sample text"), addedAt: fixtureDate.addingTimeInterval(1), text: "Collector motion sample"),
+            BubbleShelfItem(kind: .url, title: "example.com", addedAt: fixtureDate.addingTimeInterval(2), resourceURL: URL(string: "https://example.com/collector")!),
+            BubbleShelfItem(kind: .file, title: "collector-motion-note.md", addedAt: fixtureDate.addingTimeInterval(3), resourceURL: noteURL)
         ]
         let finalURL = output.appendingPathComponent("collector-motion-final.txt")
         try Data("The final inserted item.".utf8).write(to: finalURL)
