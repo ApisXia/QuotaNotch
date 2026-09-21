@@ -96,6 +96,7 @@ final class BubbleCollectorController: ObservableObject {
     private var panelController: BubbleCollectorFloatingPanel?
     private var isRunning = false
     private var selectionReadRevision: UInt64 = 0
+    private var finderPermissionRevision: UInt64 = 0
     private var stationaryAnchor: CGPoint?
 
     private init() {}
@@ -301,6 +302,7 @@ final class BubbleCollectorController: ObservableObject {
         // Establish a baseline without presenting or importing the current selection.
         previousFingerprint = nil
         lastDragPasteboardChangeCount = NSPasteboard(name: .drag).changeCount
+        refreshFinderAutomationPermission()
         if let app = NSWorkspace.shared.frontmostApplication,
            app.processIdentifier != ProcessInfo.processInfo.processIdentifier {
             enqueueSelectionRead(for: app.processIdentifier, bundleID: app.bundleIdentifier, baseline: true)
@@ -313,6 +315,36 @@ final class BubbleCollectorController: ObservableObject {
         }
         eventMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseUp, .rightMouseUp, .keyUp, .leftMouseDragged]) { [weak self] event in
             Task { @MainActor [weak self] in self?.handleGlobalEvent(event) }
+        }
+    }
+
+    /// Rehydrates Finder consent without prompting. The system permission is
+    /// durable across pause/relaunch, while the in-memory state is deliberately
+    /// reset so a revoked grant cannot make a passive Apple Event call.
+    private func refreshFinderAutomationPermission() {
+        guard store.isReceiving else { return }
+        let expectedGeneration = generation
+        finderPermissionRevision &+= 1
+        let revision = finderPermissionRevision
+        axQueue.async { [weak self] in
+            let result = FinderAppleEventReader.determinePermission(askUserIfNeeded: false)
+            DispatchQueue.main.async { [weak self] in
+                guard let self, self.isRunning, self.store.isReceiving,
+                      self.generation == expectedGeneration,
+                      self.finderPermissionRevision == revision else { return }
+                switch result {
+                case .succeeded:
+                    self.finderAutomationState = .enabled
+                case .failed(let message):
+                    self.finderAutomationState = .denied
+                    self.statusMessage = message
+                case .notAttempted:
+                    // No consent yet (errAEEventWouldRequireUserConsent) is
+                    // distinct from a denied/revoked grant; wait for the
+                    // visible Allow Finder action instead of prompting.
+                    break
+                }
+            }
         }
     }
 
@@ -642,6 +674,10 @@ private enum AXSelectionReader {
         guard NSWorkspace.shared.frontmostApplication?.processIdentifier == processID else {
             return AXSelectionReadResult(sample: nil, finderAutomation: .notAttempted)
         }
+        let permission = FinderAppleEventReader.determinePermission(askUserIfNeeded: false)
+        guard case .succeeded = permission else {
+            return AXSelectionReadResult(sample: nil, finderAutomation: permission)
+        }
         let result = FinderAppleEventReader.read()
         guard result.succeeded else {
             return AXSelectionReadResult(
@@ -817,6 +853,9 @@ private enum FinderAppleEventReader {
         let status = AEDeterminePermissionToAutomateTarget(
             &target, typeWildCard, typeWildCard, askUserIfNeeded
         )
+        if status == errAEEventWouldRequireUserConsent {
+            return .notAttempted
+        }
         guard status == noErr else { return .failed(failureMessage(for: status)) }
         return .succeeded
     }
