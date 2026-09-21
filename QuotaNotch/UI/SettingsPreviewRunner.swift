@@ -815,6 +815,8 @@ struct SettingsPreviewRunner {
         // let the live 2.05s gather/hold/collapse animation expire between snapshots.
         var motionFrames: [CGImage] = []
         let captureStart = Date()
+        var candidateCaptureStart: Date?
+        var observedCollapsedEnd = false
         for frameIndex in 0..<81 {
             let stageIndex = min(fixtureItems.count, frameIndex / 14)
             if frameIndex <= 56 && frameIndex % 14 == 0 {
@@ -834,6 +836,7 @@ struct SettingsPreviewRunner {
                       captured.count == 4 else {
                     fatalError("Collector candidate capture did not produce the fifth shelf item")
                 }
+                candidateCaptureStart = Date()
             }
             let frameDeadline = captureStart.addingTimeInterval(Double(frameIndex + 1) / 12.0)
             while Date() < frameDeadline {
@@ -843,7 +846,21 @@ struct SettingsPreviewRunner {
             // The panel may replace its hosting view during a real capture. Always
             // cache the current view instead of retaining a detached NSHostingView.
             guard let liveContent = panel.contentView else {
-                fatalError("Collector motion panel lost its content view at frame \(frameIndex)")
+                let elapsed = candidateCaptureStart.map { Date().timeIntervalSince($0) } ?? 0
+                guard candidateCaptureStart != nil, elapsed >= BubbleCollectorMotion.totalDuration else {
+                    fatalError("Collector motion panel lost its content view at frame \(frameIndex)")
+                }
+                // The scheduled expiration is the real collapsed endpoint. Keep
+                // the movie's timing grid intact with transparent frames after
+                // the native panel has correctly disappeared.
+                let collapsed = clearCollectorFrame(width: 150, height: 150)
+                motionFrames.append(collapsed)
+                observedCollapsedEnd = true
+                if [0, 14, 28, 42, 56, 70, 80].contains(frameIndex) {
+                    try NSBitmapImageRep(cgImage: collapsed).representation(using: .png, properties: [:])!.write(to: output.appendingPathComponent(
+                        "Bubble-collector-insertion-frame-\(frameIndex).png"))
+                }
+                continue
             }
             liveContent.layoutSubtreeIfNeeded()
             guard let bitmap = liveContent.bitmapImageRepForCachingDisplay(in: liveContent.bounds) else {
@@ -859,9 +876,20 @@ struct SettingsPreviewRunner {
                     "Bubble-collector-insertion-frame-\(frameIndex).png"))
             }
         }
+        if !observedCollapsedEnd, let candidateCaptureStart {
+            let expirationDeadline = Date().addingTimeInterval(0.35)
+            while controller.presentation != nil && Date() < expirationDeadline {
+                RunLoop.main.run(mode: .default,
+                                 before: min(expirationDeadline, Date().addingTimeInterval(0.01)))
+            }
+            observedCollapsedEnd = controller.presentation == nil
+                && Date().timeIntervalSince(candidateCaptureStart) >= BubbleCollectorMotion.totalDuration
+        }
         guard shelf.items.count == 5,
-              case .captured = controller.presentation,
-              motionFrames.count == 81 else {
+              candidateCaptureStart != nil,
+              observedCollapsedEnd,
+              motionFrames.count == 81,
+              controller.presentation == nil else {
             fatalError("Collector motion capture lost its final captured presentation")
         }
         let movieURL = output.appendingPathComponent("Bubble-collector-insertion.gif")
@@ -884,6 +912,21 @@ struct SettingsPreviewRunner {
                 .background(Color.black).preferredColorScheme(.dark), width: 190,
                 name: "Bubble-collector-pointer-\(index)", output: output, height: 190)
         }
+    }
+
+    private static func clearCollectorFrame(width: Int, height: Int) -> CGImage {
+        let colorSpace = CGColorSpaceCreateDeviceRGB()
+        guard let context = CGContext(data: nil, width: width, height: height,
+                                      bitsPerComponent: 8, bytesPerRow: width * 4,
+                                      space: colorSpace,
+                                      bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else {
+            fatalError("Could not create collapsed collector frame")
+        }
+        context.clear(CGRect(x: 0, y: 0, width: width, height: height))
+        guard let image = context.makeImage() else {
+            fatalError("Could not finalize collapsed collector frame")
+        }
+        return image
     }
 
     /// Two native four-second receive-arc cycles at the actual widget and Minimal
