@@ -3,37 +3,34 @@ import SwiftUI
 struct BubbleScene: View {
     let time: TimeInterval
     let light: SIMD2<Float>
-    let populated: Bool
+    let itemCount: Int
     let arrival: ArrivalFrame
     let canvasSize: CGSize
     let bubbleDiameter: CGFloat
     let backdropStyle: BubbleBackdropStyle
     let showsBubble: Bool
     let drawBackdrop: Bool
-    let composition: BubbleComposition
 
     init(
         time: TimeInterval,
         light: SIMD2<Float>,
-        populated: Bool,
+        itemCount: Int,
         arrival: ArrivalFrame,
         canvasSize: CGSize = CGSize(width: 512, height: 512),
         bubbleDiameter: CGFloat = 226,
         backdropStyle: BubbleBackdropStyle = .night,
         showsBubble: Bool = true,
-        drawBackdrop: Bool = true,
-        composition: BubbleComposition = .insetPair
+        drawBackdrop: Bool = true
     ) {
         self.time = time
         self.light = light
-        self.populated = populated
+        self.itemCount = itemCount
         self.arrival = arrival
         self.canvasSize = canvasSize
         self.bubbleDiameter = bubbleDiameter
         self.backdropStyle = backdropStyle
         self.showsBubble = showsBubble
         self.drawBackdrop = drawBackdrop
-        self.composition = composition
     }
 
     var body: some View {
@@ -58,25 +55,25 @@ struct BubbleScene: View {
     }
 
     private var bubble: some View {
-        let breathing = BubbleMotion.breathing(at: time, populated: populated)
+        let breathing = BubbleMotion.breathing(at: time, populated: itemCount > 0)
         let shader = ShaderLibrary.default.pearlFilm(
             .boundingRect,
             .float(Float(time)),
             .float2(CGPoint(x: CGFloat(light.x), y: CGFloat(light.y))),
-            .float(populated ? 1 : 0),
+            .float(itemCount > 0 ? 1 : 0),
             .float(Float(breathing))
         )
 
         let shell = PearlyBubbleShape(time: time, breathing: breathing)
         return ZStack {
-            if populated {
+            if itemCount > 0 {
                 BubbleContentPreviews(
-                    composition: composition,
+                    totalCount: itemCount,
                     time: time,
-                    gather: arrival.flakeGather,
+                    gather: arrival.contentGather,
                     bubbleDiameter: bubbleDiameter
                 )
-                .opacity(arrival.flakeOpacity)
+                .opacity(arrival.contentOpacity)
             }
 
             shell

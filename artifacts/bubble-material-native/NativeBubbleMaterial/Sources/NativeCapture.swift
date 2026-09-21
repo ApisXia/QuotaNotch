@@ -80,22 +80,25 @@ enum NativeCapture {
             images[snapshot.name] = image
         }
 
-        guard let empty = images["empty"], let populated = images["populated"],
+        guard let empty = images["count-0"], let countOne = images["count-1"],
+              let countTwo = images["count-2"], let countThree = images["count-3"],
+              let countSix = images["count-6"],
               let lightNear = images["light-near"], let lightFar = images["light-far"],
               let patternReference = images["transmission-background"],
               let patternThroughShell = images["transmission-patterned"],
-              let smallEmpty = images["small-widget-light"],
-              let smallPopulated = images["small-widget-populated"],
-              let smallInset = images["small-inset-pair"],
-              let smallFloating = images["small-floating-pair"],
-              let smallSoft = images["small-soft-stack"],
-              let inset = images["variant-inset-pair"],
-              let floating = images["variant-floating-pair"],
-              let soft = images["variant-soft-stack"] else {
+              let smallEmpty = images["small-count-0"],
+              let smallOne = images["small-count-1"],
+              let smallTwo = images["small-count-2"],
+              let smallThree = images["small-count-3"],
+              let smallSix = images["small-count-6"],
+              let countThreeStart = images["count-3-cycle-start"],
+              let countSixStart = images["count-6-cycle-start"] else {
             throw BubbleLabError.capture("snapshot plan omitted a required comparison state")
         }
-        guard difference(empty, populated) > 0.004 else {
-            throw BubbleLabError.capture("empty and populated captures did not differ enough to show the built-in previews")
+        for (count, image) in [(1, countOne), (2, countTwo), (3, countThree), (6, countSix)] {
+            guard difference(empty, image) > 0.004 else {
+                throw BubbleLabError.capture("the \(count)-item state did not visibly show its built-in preview arrangement")
+            }
         }
         guard difference(lightNear, lightFar) > 0.002 else {
             throw BubbleLabError.capture("pointer positions did not change the captured reflected environment")
@@ -106,28 +109,28 @@ enum NativeCapture {
         guard patternTransmission(background: patternReference, shell: patternThroughShell) > 0.45 else {
             throw BubbleLabError.capture("the shell did not preserve enough of the patterned native backdrop through its center")
         }
-        guard localizedDifference(smallEmpty, smallPopulated, center: CGPoint(x: 160, y: 160), insideRadius: 56) > 0.002,
-              localizedDifference(smallEmpty, smallPopulated, center: CGPoint(x: 160, y: 160), outsideRadius: 76, maximumRadius: 112) < 0.001 else {
-            throw BubbleLabError.capture("the populated previews do not stay visible inside the 64-point shell")
-        }
-        for (name, image) in [("A·轻叠", smallInset), ("B·浮游", smallFloating), ("C·柔藏", smallSoft)] {
-            guard localizedDifference(smallEmpty, image, center: CGPoint(x: 160, y: 160), insideRadius: 56) > 0.002,
-                  localizedDifference(smallEmpty, image, center: CGPoint(x: 160, y: 160), outsideRadius: 76, maximumRadius: 112) < 0.001 else {
-                throw BubbleLabError.capture("\(name) content is missing or escapes the 64-point shell")
+        for (count, image) in [(1, smallOne), (2, smallTwo), (3, smallThree), (6, smallSix)] {
+            guard localizedDifference(smallEmpty, image, center: CGPoint(x: 160, y: 160), insideRadius: 58) > 0.002,
+                  localizedDifference(smallEmpty, image, center: CGPoint(x: 160, y: 160), outsideRadius: 67, maximumRadius: 112) < 0.001 else {
+                throw BubbleLabError.capture("the \(count)-item previews are missing or escape the 64-point shell")
             }
         }
-        guard difference(inset, floating) > 0.002,
-              difference(inset, soft) > 0.002,
-              difference(floating, soft) > 0.002 else {
-            throw BubbleLabError.capture("the three Chinese-labeled compositions rendered too similarly")
+        guard difference(countThree, countSix) > 0.002,
+              localizedDifference(
+                countThreeStart,
+                countSixStart,
+                center: CGPoint(x: 512, y: 512),
+                insideRadius: 220
+              ) > 0.0005 else {
+            throw BubbleLabError.capture("the six-item aggregate rear-edge cue did not render behind the stable three-slot layout")
         }
 
-        let comparison = try render(BubbleVariantComparisonScene(
+        let comparison = try render(BubbleCountComparisonScene(
             time: 1.4,
             light: SIMD2<Float>(0.34, 0.28),
             arrival: .resting
-        ), size: BubbleVariantComparisonScene.size)
-        try writePNG(comparison, to: outputDirectory.appendingPathComponent("variants-comparison.png"))
+        ), size: BubbleCountComparisonScene.size)
+        try writePNG(comparison, to: outputDirectory.appendingPathComponent("count-comparison.png"))
 
         try writeReport(CaptureReport(
             host: ProcessInfo.processInfo.operatingSystemVersionString,
@@ -135,9 +138,9 @@ enum NativeCapture {
             metalAvailable: true,
             shaderAvailable: true,
             renderer: "SwiftUI ImageRenderer with the app's compiled Metal library",
-            snapshots: snapshots.map { "\($0.name).png" } + ["variants-comparison.png"],
+            snapshots: snapshots.map { "\($0.name).png" } + ["count-comparison.png"],
             movies: [],
-            result: "native snapshots passed; movie encoding pending",
+            result: "native count and lighting snapshots passed; movie encoding pending",
             limitation: nil
         ), to: reportURL)
 
@@ -145,8 +148,8 @@ enum NativeCapture {
         try await writeMovie(to: lightSweepURL, kind: .lightSweep)
         let arrivalURL = outputDirectory.appendingPathComponent("bubble-arrival.mp4")
         try await writeMovie(to: arrivalURL, kind: .arrival)
-        let variantsURL = outputDirectory.appendingPathComponent("bubble-variants-comparison.mp4")
-        try await writeMovie(to: variantsURL, kind: .variants)
+        let countsURL = outputDirectory.appendingPathComponent("bubble-count-comparison.mp4")
+        try await writeMovie(to: countsURL, kind: .counts)
 
         try writeReport(CaptureReport(
             host: ProcessInfo.processInfo.operatingSystemVersionString,
@@ -154,90 +157,59 @@ enum NativeCapture {
             metalAvailable: true,
             shaderAvailable: true,
             renderer: "SwiftUI ImageRenderer with the app's compiled Metal library",
-            snapshots: snapshots.map { "\($0.name).png" } + ["variants-comparison.png"],
-            movies: [lightSweepURL.lastPathComponent, arrivalURL.lastPathComponent, variantsURL.lastPathComponent],
+            snapshots: snapshots.map { "\($0.name).png" } + ["count-comparison.png"],
+            movies: [lightSweepURL.lastPathComponent, arrivalURL.lastPathComponent, countsURL.lastPathComponent],
             result: "passed",
             limitation: nil
         ), to: reportURL)
     }
 
-    private static let snapshotPlan: [(name: String, scene: BubbleScene)] = [
-        ("empty", BubbleScene(time: 1.4, light: SIMD2<Float>(0.34, 0.28), populated: false, arrival: .resting)),
-        ("populated", BubbleScene(time: 1.4, light: SIMD2<Float>(0.34, 0.28), populated: true, arrival: .resting)),
-        ("light-near", BubbleScene(time: 2.1, light: SIMD2<Float>(0.16, 0.25), populated: true, arrival: .resting)),
-        ("light-far", BubbleScene(time: 2.1, light: SIMD2<Float>(0.84, 0.69), populated: true, arrival: .resting)),
-        ("light-empty", BubbleScene(time: 1.4, light: SIMD2<Float>(0.34, 0.28), populated: false, arrival: .resting, backdropStyle: .pearl)),
-        ("light-populated", BubbleScene(time: 1.4, light: SIMD2<Float>(0.34, 0.28), populated: true, arrival: .resting, backdropStyle: .pearl)),
-        ("transmission-background", BubbleScene(
-            time: 1.4,
-            light: SIMD2<Float>(0.34, 0.28),
-            populated: false,
-            arrival: .resting,
-            backdropStyle: .patterned,
-            showsBubble: false
-        )),
-        ("transmission-patterned", BubbleScene(
-            time: 1.4,
-            light: SIMD2<Float>(0.34, 0.28),
-            populated: false,
-            arrival: .resting,
-            backdropStyle: .patterned
-        )),
-        ("small-widget-light", BubbleScene(
-            time: 1.4,
-            light: SIMD2<Float>(0.34, 0.28),
-            populated: false,
-            arrival: .resting,
-            canvasSize: CGSize(width: 160, height: 160),
-            bubbleDiameter: 64,
-            backdropStyle: .pearl
-        )),
-        ("small-widget-populated", BubbleScene(
-            time: 1.4,
-            light: SIMD2<Float>(0.34, 0.28),
-            populated: true,
-            arrival: .resting,
-            canvasSize: CGSize(width: 160, height: 160),
-            bubbleDiameter: 64,
-            backdropStyle: .pearl
-        )),
-        ("variant-inset-pair", BubbleScene(time: 1.4, light: SIMD2<Float>(0.34, 0.28), populated: true, arrival: .resting, composition: .insetPair)),
-        ("variant-floating-pair", BubbleScene(time: 1.4, light: SIMD2<Float>(0.34, 0.28), populated: true, arrival: .resting, composition: .floatingPair)),
-        ("variant-soft-stack", BubbleScene(time: 1.4, light: SIMD2<Float>(0.34, 0.28), populated: true, arrival: .resting, composition: .softStack)),
-        ("small-inset-pair", BubbleScene(
-            time: 1.4,
-            light: SIMD2<Float>(0.34, 0.28),
-            populated: true,
-            arrival: .resting,
-            canvasSize: CGSize(width: 160, height: 160),
-            bubbleDiameter: 64,
-            backdropStyle: .pearl,
-            composition: .insetPair
-        )),
-        ("small-floating-pair", BubbleScene(
-            time: 1.4,
-            light: SIMD2<Float>(0.34, 0.28),
-            populated: true,
-            arrival: .resting,
-            canvasSize: CGSize(width: 160, height: 160),
-            bubbleDiameter: 64,
-            backdropStyle: .pearl,
-            composition: .floatingPair
-        )),
-        ("small-soft-stack", BubbleScene(
-            time: 1.4,
-            light: SIMD2<Float>(0.34, 0.28),
-            populated: true,
-            arrival: .resting,
-            canvasSize: CGSize(width: 160, height: 160),
-            bubbleDiameter: 64,
-            backdropStyle: .pearl,
-            composition: .softStack
-        )),
-        ("arrival-gather", BubbleScene(time: 2.6, light: SIMD2<Float>(0.35, 0.24), populated: true, arrival: BubbleMotion.arrival(at: 0.34))),
-        ("arrival-hold", BubbleScene(time: 2.9, light: SIMD2<Float>(0.35, 0.24), populated: true, arrival: BubbleMotion.arrival(at: 0.45 + 0.45))),
-        ("arrival-collapse", BubbleScene(time: 3.2, light: SIMD2<Float>(0.35, 0.24), populated: true, arrival: BubbleMotion.arrival(at: 0.45 + 0.90 + 0.55)))
-    ]
+    private static let snapshotPlan: [(name: String, scene: BubbleScene)] = {
+        let light = SIMD2<Float>(0.34, 0.28)
+        var scenes = BubbleItemLayout.sampleCounts.map { count in
+            ("count-\(count)", BubbleScene(time: 1.4, light: light, itemCount: count, arrival: .resting))
+        }
+        scenes += BubbleItemLayout.sampleCounts.map { count in
+            ("small-count-\(count)", BubbleScene(
+                time: 1.4,
+                light: light,
+                itemCount: count,
+                arrival: .resting,
+                canvasSize: CGSize(width: 160, height: 160),
+                bubbleDiameter: 64,
+                backdropStyle: .pearl
+            ))
+        }
+        scenes += [
+            ("count-3-cycle-start", BubbleScene(time: 0, light: light, itemCount: 3, arrival: .resting)),
+            ("count-6-cycle-start", BubbleScene(time: 0, light: light, itemCount: 6, arrival: .resting)),
+            ("count-6-cycle-middle", BubbleScene(time: BubbleItemLayout.contentCycleDuration / 2, light: light, itemCount: 6, arrival: .resting)),
+            ("light-near", BubbleScene(time: 1.4, light: SIMD2<Float>(0.18, 0.22), itemCount: 0, arrival: .resting)),
+            ("light-center", BubbleScene(time: 1.4, light: SIMD2<Float>(0.50, 0.50), itemCount: 0, arrival: .resting)),
+            ("light-rim", BubbleScene(time: 1.4, light: SIMD2<Float>(0.84, 0.78), itemCount: 0, arrival: .resting)),
+            ("light-empty", BubbleScene(time: 1.4, light: light, itemCount: 0, arrival: .resting, backdropStyle: .pearl)),
+            ("light-populated", BubbleScene(time: 1.4, light: light, itemCount: 2, arrival: .resting, backdropStyle: .pearl)),
+            ("transmission-background", BubbleScene(
+                time: 1.4,
+                light: light,
+                itemCount: 0,
+                arrival: .resting,
+                backdropStyle: .patterned,
+                showsBubble: false
+            )),
+            ("transmission-patterned", BubbleScene(
+                time: 1.4,
+                light: light,
+                itemCount: 0,
+                arrival: .resting,
+                backdropStyle: .patterned
+            )),
+            ("arrival-gather", BubbleScene(time: 2.6, light: SIMD2<Float>(0.35, 0.24), itemCount: 3, arrival: BubbleMotion.arrival(at: 0.34))),
+            ("arrival-hold", BubbleScene(time: 2.9, light: SIMD2<Float>(0.35, 0.24), itemCount: 3, arrival: BubbleMotion.arrival(at: 0.45 + 0.45))),
+            ("arrival-collapse", BubbleScene(time: 3.2, light: SIMD2<Float>(0.35, 0.24), itemCount: 3, arrival: BubbleMotion.arrival(at: 0.45 + 0.90 + 0.55)))
+        ]
+        return scenes.map { (name: $0.0, scene: $0.1) }
+    }()
 
     private static func render<Content: View>(_ content: Content, size: CGSize) throws -> CGImage {
         let renderer = ImageRenderer(content: content)
@@ -392,7 +364,7 @@ enum NativeCapture {
     private enum MovieKind {
         case lightSweep
         case arrival
-        case variants
+        case counts
     }
 
     private static func writeMovie(to url: URL, kind: MovieKind) async throws {
@@ -401,8 +373,8 @@ enum NativeCapture {
         switch kind {
         case .lightSweep, .arrival:
             outputSize = canvasSize
-        case .variants:
-            outputSize = BubbleVariantComparisonScene.size
+        case .counts:
+            outputSize = BubbleCountComparisonScene.size
         }
         let width = Int(outputSize.width * renderScale)
         let height = Int(outputSize.height * renderScale)
@@ -412,9 +384,9 @@ enum NativeCapture {
         case .arrival:
             duration = BubbleMotion.totalDuration + 0.10
         case .lightSweep:
-            duration = 3.0
-        case .variants:
             duration = 8.0
+        case .counts:
+            duration = BubbleItemLayout.contentCycleDuration
         }
         let frameCount = Int(duration * Double(fps))
         let writer = try AVAssetWriter(outputURL: url, fileType: .mp4)
@@ -458,22 +430,31 @@ enum NativeCapture {
             case .arrival:
                 pointer = SIMD2<Float>(0.34, 0.30)
                 arrival = BubbleMotion.arrival(at: time)
-            case .lightSweep, .variants:
+            case .lightSweep, .counts:
                 let angle = time / duration * 2 * .pi - .pi / 2
                 pointer = SIMD2<Float>(
-                    0.5 + 0.32 * Float(cos(angle)),
-                    0.5 + 0.27 * Float(sin(angle))
+                    0.5 + 0.42 * Float(cos(angle)),
+                    0.5 + 0.36 * Float(sin(angle))
                 )
                 arrival = .resting
             }
             let image: CGImage
-            if case .variants = kind {
-                image = try render(BubbleVariantComparisonScene(time: 4.0 + time, light: pointer, arrival: arrival), size: outputSize)
+            if case .counts = kind {
+                image = try render(BubbleCountComparisonScene(time: time, light: pointer, arrival: arrival), size: outputSize)
+            } else if case .lightSweep = kind {
+                // The only changing input is the environment-light direction.
+                // Holding time and itemCount still makes curvature easy to judge.
+                image = try render(BubbleScene(
+                    time: 1.4,
+                    light: pointer,
+                    itemCount: 0,
+                    arrival: .resting
+                ), size: outputSize)
             } else {
                 image = try render(BubbleScene(
                     time: 4.0 + time,
                     light: pointer,
-                    populated: true,
+                    itemCount: 3,
                     arrival: arrival
                 ), size: outputSize)
             }

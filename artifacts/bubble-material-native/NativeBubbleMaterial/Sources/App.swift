@@ -44,8 +44,7 @@ final class BubbleLabDelegate: NSObject, NSApplicationDelegate {
 }
 
 struct InteractiveBubbleLab: View {
-    @State private var populated = true
-    @State private var composition = BubbleComposition.insetPair
+    @State private var itemCount = 2
     @State private var pointer = SIMD2<Float>(0.34, 0.28)
     @State private var arrivalStartedAt: Date?
 
@@ -53,7 +52,7 @@ struct InteractiveBubbleLab: View {
 
     var body: some View {
         VStack(spacing: 18) {
-            Text("预览内容 · 内置演示")
+            Text("内置示例预览 · 数量仅用于演示")
                 .font(.system(size: 12, weight: .medium, design: .rounded))
                 .foregroundStyle(.white.opacity(0.68))
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -66,9 +65,8 @@ struct InteractiveBubbleLab: View {
                 BubbleScene(
                     time: time,
                     light: pointer,
-                    populated: populated,
-                    arrival: arrival,
-                    composition: composition
+                    itemCount: itemCount,
+                    arrival: arrival
                 )
                     .contentShape(Rectangle())
                     .onContinuousHover { phase in
@@ -90,25 +88,23 @@ struct InteractiveBubbleLab: View {
                 DoubleBubbleMark()
                     .frame(width: 28, height: 28)
                     .accessibilityLabel("Layered bubble notch symbol")
-                Toggle("示例内容", isOn: Binding(
-                    get: { populated },
-                    set: { value in
-                        populated = value
-                        arrivalStartedAt = nil
-                    }
-                ))
-                    .toggleStyle(.switch)
                 Button("播放收拢") {
-                    populated = true
+                    itemCount = max(itemCount, 1)
                     arrivalStartedAt = .now
                 }
                 .keyboardShortcut(.defaultAction)
             }
             .font(.system(size: 13, weight: .medium))
 
-            Picker("构图", selection: $composition) {
-                ForEach(BubbleComposition.allCases) { variant in
-                    Text(variant.label).tag(variant)
+            Picker("示例项数", selection: Binding(
+                get: { itemCount },
+                set: { value in
+                    itemCount = value
+                    arrivalStartedAt = nil
+                }
+            )) {
+                ForEach(BubbleItemLayout.sampleCounts, id: \.self) { count in
+                    Text("\(count)").tag(count)
                 }
             }
             .pickerStyle(.segmented)

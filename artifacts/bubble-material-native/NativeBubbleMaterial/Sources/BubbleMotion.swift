@@ -3,14 +3,14 @@ import Foundation
 struct ArrivalFrame: Equatable {
     let shellScale: CGFloat
     let shellOpacity: CGFloat
-    let flakeGather: CGFloat
-    let flakeOpacity: CGFloat
+    let contentGather: CGFloat
+    let contentOpacity: CGFloat
 
     static let resting = ArrivalFrame(
         shellScale: 1,
         shellOpacity: 1,
-        flakeGather: 0,
-        flakeOpacity: 1
+        contentGather: 0,
+        contentOpacity: 1
     )
 }
 
@@ -28,8 +28,8 @@ enum BubbleMotion {
             return ArrivalFrame(
                 shellScale: 1 + 0.055 * progress,
                 shellOpacity: 1,
-                flakeGather: progress * 0.70,
-                flakeOpacity: 1
+                contentGather: progress * 0.70,
+                contentOpacity: 1
             )
         }
 
@@ -40,8 +40,8 @@ enum BubbleMotion {
             return ArrivalFrame(
                 shellScale: 1.055 + breathing,
                 shellOpacity: 1,
-                flakeGather: 0.70 + 0.08 * sin(holdProgress * 2 * .pi),
-                flakeOpacity: 1
+                contentGather: 0.70 + 0.08 * sin(holdProgress * 2 * .pi),
+                contentOpacity: 1
             )
         }
 
@@ -50,8 +50,8 @@ enum BubbleMotion {
         return ArrivalFrame(
             shellScale: 1.055 * (1 - 0.90 * eased),
             shellOpacity: 1 - smoothstep((progress - 0.55) / 0.45),
-            flakeGather: 0.78 + 0.22 * eased,
-            flakeOpacity: 1 - smoothstep((progress - 0.14) / 0.76)
+            contentGather: 0.78 + 0.22 * eased,
+            contentOpacity: 1 - smoothstep((progress - 0.14) / 0.76)
         )
     }
 
