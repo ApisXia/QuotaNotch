@@ -29,6 +29,7 @@ enum BubbleCollectorVerification {
         guard panel.styleMask.contains(.nonactivatingPanel), panel.canBecomeKey == false else {
             throw VerificationError("Collector panel is not a nonactivating panel")
         }
+        settle(0.05)
         try sendClick(to: panel)
         settle(0.12)
         guard store.items.contains(where: { $0.text == fixtureText }),
@@ -46,6 +47,11 @@ enum BubbleCollectorVerification {
         }
 
         let dropBoard = NSPasteboard(name: .init("collector-fixture-drop-\(UUID().uuidString)"))
+        let unsupportedBoard = NSPasteboard(name: .init("collector-fixture-unsupported-\(UUID().uuidString)"))
+        defer {
+            dropBoard.clearContents()
+            unsupportedBoard.clearContents()
+        }
         dropBoard.clearContents()
         dropBoard.declareTypes([.string], owner: nil)
         let dropText = "drop fixture \(UUID().uuidString)"
@@ -54,7 +60,6 @@ enum BubbleCollectorVerification {
               store.items.contains(where: { $0.text == dropText }) else {
             throw VerificationError("Private pasteboard drop was not imported through the collector")
         }
-        let unsupportedBoard = NSPasteboard(name: .init("collector-fixture-unsupported-\(UUID().uuidString)"))
         unsupportedBoard.clearContents()
         unsupportedBoard.declareTypes([.init("com.example.unsupported")], owner: nil)
         guard !controller.receiveDrop(unsupportedBoard, sourceProcessID: 42),
@@ -77,7 +82,12 @@ enum BubbleCollectorVerification {
     }
 
     private static func sendClick(to window: NSWindow) throws {
-        let location = CGPoint(x: window.frame.midX, y: window.frame.midY)
+        guard let contentView = window.contentView else {
+            throw VerificationError("Collector panel has no content view")
+        }
+        contentView.layoutSubtreeIfNeeded()
+        let bounds = contentView.bounds
+        let location = CGPoint(x: bounds.midX, y: bounds.midY)
         guard let down = NSEvent.mouseEvent(with: .leftMouseDown, location: location,
                                             modifierFlags: [], timestamp: 0,
                                             windowNumber: window.windowNumber, context: nil,
