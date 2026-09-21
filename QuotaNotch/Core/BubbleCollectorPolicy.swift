@@ -3,6 +3,10 @@ import Foundation
 
 /// Small deterministic rules shared by the global-event collector and its tests.
 enum BubbleCollectorPolicy {
+    static func shouldPersistPausedStartup(hasBeenConfigured: Bool) -> Bool {
+        hasBeenConfigured
+    }
+
     static func shouldPresentSelection(
         receiving: Bool,
         sourceProcessID: Int32?,

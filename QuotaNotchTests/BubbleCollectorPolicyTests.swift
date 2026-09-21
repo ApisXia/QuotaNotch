@@ -2,6 +2,11 @@ import XCTest
 @testable import QuotaNotchCore
 
 final class BubbleCollectorPolicyTests: XCTestCase {
+    func testFreshStartupDoesNotPersistPausedMode() {
+        XCTAssertFalse(BubbleCollectorPolicy.shouldPersistPausedStartup(hasBeenConfigured: false))
+        XCTAssertTrue(BubbleCollectorPolicy.shouldPersistPausedStartup(hasBeenConfigured: true))
+    }
+
     func testSelectionRequiresChangedExternalNonSecureContent() {
         XCTAssertTrue(BubbleCollectorPolicy.shouldPresentSelection(
             receiving: true, sourceProcessID: 42, ownProcessID: 7, isSecureField: false,

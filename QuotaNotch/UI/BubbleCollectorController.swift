@@ -113,7 +113,13 @@ final class BubbleCollectorController: ObservableObject {
     /// Restores the user's saved mode without prompting at launch.
     func synchronizePersistedMode() {
         guard store.isReceiving else {
-            pauseReceiving()
+            generation &+= 1
+            stopMonitors(clearPresentation: true)
+            if BubbleCollectorPolicy.shouldPersistPausedStartup(hasBeenConfigured: store.hasBeenConfigured) {
+                store.isReceiving = false
+            }
+            availability = .disabled
+            statusMessage = nil
             return
         }
         #if SETTINGS_PREVIEW
