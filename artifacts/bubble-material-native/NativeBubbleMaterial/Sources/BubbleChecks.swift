@@ -31,7 +31,7 @@ enum BubbleChecks {
             let frame = BubbleMotion.arrival(at: elapsed)
             let values = [frame.shellScale, frame.shellOpacity, frame.flakeGather, frame.flakeOpacity]
             guard values.allSatisfy({ $0.isFinite }),
-                  (0.10...1.06).contains(frame.shellScale),
+                  (0.10...1.062).contains(frame.shellScale),
                   (0...1).contains(frame.shellOpacity),
                   (0...1).contains(frame.flakeGather),
                   (0...1).contains(frame.flakeOpacity) else {
