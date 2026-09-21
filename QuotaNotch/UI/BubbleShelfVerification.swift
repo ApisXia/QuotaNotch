@@ -3,6 +3,7 @@
 import AppKit
 import Foundation
 
+#if SETTINGS_PREVIEW
 @MainActor
 enum BubbleShelfVerification {
     private static let urlType = NSPasteboard.PasteboardType("public.url")
@@ -134,10 +135,31 @@ enum BubbleShelfVerification {
                let url = URL(string: value) {
                 fallbackURLs.append(url)
                 try check(fileManager.fileExists(atPath: url.path), "Export fallback file was not created")
+                if types.contains(.png) {
+                    try check(url.pathExtension == "png", "Image export fallback must be a PNG file")
+                } else if types.contains(urlType) {
+                    try check(url.pathExtension == "webloc", "URL export fallback must be a Webloc file")
+                } else if types.contains(.string) {
+                    try check(url.pathExtension == "txt", "Text export fallback must be a text file")
+                }
             }
-            if types.contains(.string) || types.contains(urlType) { try check(true, "native string/url representation") }
-            if types.contains(.png) { try check(writer.pasteboardPropertyList(forType: .png) is Data, "PNG representation was not readable") }
+            if types.contains(.string) {
+                try check((writer.pasteboardPropertyList(forType: .string) as? String)?.isEmpty == false,
+                          "Text/URL export native string representation was not readable")
+            }
+            if types.contains(urlType) {
+                let value = writer.pasteboardPropertyList(forType: urlType) as? String
+                let parsedURL = value.flatMap { URL(string: $0) }
+                try check(parsedURL?.isFileURL == false,
+                          "URL export native URL representation was not readable")
+            }
+            if types.contains(.png) {
+                let data = writer.pasteboardPropertyList(forType: .png) as? Data
+                let image = data.flatMap { NSImage(data: $0) }
+                try check(image != nil, "PNG representation was not readable")
+            }
         }
+        try check(exportStore.items.map(\.id) == exportIDs, "Export preparation must not remove shelf source items")
         exportStore.clear()
         for url in fallbackURLs {
             try check(fileManager.fileExists(atPath: url.path) && (try? Data(contentsOf: url))?.isEmpty == false,
@@ -192,3 +214,4 @@ enum BubbleShelfVerification {
         init(_ message: String) { self.message = message }
     }
 }
+#endif

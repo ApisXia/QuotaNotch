@@ -57,13 +57,21 @@ private final class BubbleCollectorPanel: NSPanel {
     override var canBecomeMain: Bool { false }
 }
 
-private struct BubbleCollectorPreview: View {
+struct BubbleCollectorPreview: View {
     @ObservedObject var controller: BubbleCollectorController
     @ObservedObject private var store = BubbleShelfStore.shared
+    private let fixturePayloads: [BubbleCollectorPayload]?
     @State private var pointer = CGPoint(x: 0.5, y: 0.5)
     @State private var timelineStart = Date()
 
     private let diameter: CGFloat = 150
+
+    init(controller: BubbleCollectorController, fixturePayloads: [BubbleCollectorPayload]? = nil,
+         pointer: CGPoint = CGPoint(x: 0.5, y: 0.5)) {
+        self.controller = controller
+        self.fixturePayloads = fixturePayloads
+        self._pointer = State(initialValue: pointer)
+    }
 
     var body: some View {
         TimelineView(.animation(minimumInterval: 1.0 / 30.0, paused: false)) { timeline in
@@ -113,6 +121,7 @@ private struct BubbleCollectorPreview: View {
     }
 
     private var displayedPayloads: [BubbleCollectorPayload] {
+        if let fixturePayloads { return Array(fixturePayloads.prefix(4)) }
         guard let presentation = controller.presentation else {
             return Array(store.items.prefix(4)).map(BubbleCollectorPayload.stored)
         }
@@ -142,6 +151,25 @@ private struct BubbleCollectorPreview: View {
         return t * t * (3 - 2 * t)
     }
 }
+
+#if SETTINGS_PREVIEW
+/// Inline native material fixture used by the settings capture runner. It never
+/// starts AX monitors or imports data; callers provide the desired stored-item
+/// payloads and can render counts 0…4 with a fixed cursor light.
+struct BubbleCollectorFixtureView: View {
+    let payloads: [BubbleCollectorPayload]
+    let pointer: CGPoint
+
+    init(payloads: [BubbleCollectorPayload], pointer: CGPoint = CGPoint(x: 0.68, y: 0.34)) {
+        self.payloads = payloads
+        self.pointer = pointer
+    }
+
+    var body: some View {
+        BubbleCollectorPreview(controller: .shared, fixturePayloads: payloads, pointer: pointer)
+    }
+}
+#endif
 
 private struct CollectorCapturePhase {
     var scale: CGFloat = 1
