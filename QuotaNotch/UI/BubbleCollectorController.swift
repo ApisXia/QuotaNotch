@@ -498,7 +498,7 @@ private enum AXSelectionReader {
     static func read(processID: pid_t, bundleID: String?, fallbackAnchor: CGPoint) -> AXSelectionSample? {
         guard AXIsProcessTrusted(), processID != ProcessInfo.processInfo.processIdentifier else { return nil }
         let application = AXUIElementCreateApplication(processID)
-        if let focused = attribute(application, kAXFocusedUIElementAttribute) as? AXUIElement,
+        if let focused = axElement(from: attribute(application, kAXFocusedUIElementAttribute)),
            let sample = selectedText(from: focused, anchor: fallbackAnchor) {
             return sample
         }
@@ -576,5 +576,12 @@ private enum AXSelectionReader {
         var result: CFTypeRef?
         guard AXUIElementCopyAttributeValue(element, name as CFString, &result) == .success else { return nil }
         return result
+    }
+
+    private static func axElement(from value: Any?) -> AXUIElement? {
+        guard let value else { return nil }
+        let object = value as AnyObject
+        guard CFGetTypeID(object) == AXUIElementGetTypeID() else { return nil }
+        return object as! AXUIElement
     }
 }
