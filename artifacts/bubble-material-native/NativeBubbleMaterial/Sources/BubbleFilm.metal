@@ -37,8 +37,8 @@ static float studioLobe(float3 ray, float3 center, float angularWidth) {
     // The cursor rotates a broad studio environment. Reflected rays sample
     // its softboxes, so the highlights bend across the spherical normals.
     float3 reflected = reflect(-viewDirection, normal);
-    float yaw = (pointer.x - 0.5) * 1.30 + sin(time * 0.19) * 0.025;
-    float pitch = (0.5 - pointer.y) * 0.62;
+    float yaw = (pointer.x - 0.5) * 1.85 + sin(time * 0.19) * 0.025;
+    float pitch = (0.5 - pointer.y) * 0.90;
     float3 yawedDirection = float3(
         reflected.x * cos(yaw) - reflected.z * sin(yaw),
         reflected.y,
@@ -51,17 +51,19 @@ static float studioLobe(float3 ray, float3 center, float angularWidth) {
     ));
 
     float sky = smoothstep(-0.62, 0.74, rotatedDirection.z);
-    float coolBox = studioLobe(rotatedDirection, float3(-0.70, 0.56, 0.45), 0.34);
-    float warmBox = studioLobe(rotatedDirection, float3(0.63, -0.46, 0.62), 0.40);
+    float coolBox = studioLobe(rotatedDirection, float3(-0.70, 0.56, 0.45), 0.42);
+    float warmBox = studioLobe(rotatedDirection, float3(0.63, -0.46, 0.62), 0.45);
     float illuminated = saturate(coolBox * 0.95 + warmBox * 0.78);
     float3 environment = mix(float3(0.40, 0.49, 0.61), float3(0.82, 0.77, 0.75), sky);
-    environment += float3(0.92, 1.00, 1.08) * coolBox * 0.94;
-    environment += float3(1.08, 0.84, 0.76) * warmBox * 0.78;
+    // These HDR softboxes carry enough energy to register through normal-angle
+    // dielectric Fresnel reflection, while the broad lobe keeps the gloss soft.
+    environment += float3(0.94, 1.02, 1.10) * coolBox * 4.8;
+    environment += float3(1.10, 0.88, 0.78) * warmBox * 3.8;
 
     float3 lightDirection = normalize(float3((pointer.x - 0.5) * 1.10, (0.5 - pointer.y) * 0.82, 0.86));
     float diffuse = max(dot(normal, lightDirection), 0.0);
     float breathingTint = 0.5 + 0.5 * sin(time * 0.68);
-    float3 pearl = mix(float3(0.70, 0.78, 0.86), float3(0.96, 0.91, 0.88), 0.28 + diffuse * 0.36);
+    float3 pearl = mix(float3(0.78, 0.83, 0.89), float3(0.99, 0.95, 0.92), 0.28 + diffuse * 0.36);
     pearl += float3(0.030, 0.024, 0.034) * (breathingTint * (0.55 + populated * 0.30));
 
     // Thin-film interference appears only inside illuminated reflections.
@@ -74,7 +76,7 @@ static float studioLobe(float3 ray, float3 center, float angularWidth) {
 
     // Keep the softly tinted transmitted body separate from Fresnel reflection
     // so the interior stays airy while edge reflections retain their own light.
-    float bodyAlpha = 0.14 + diffuse * 0.025 + breathing * 0.006;
+    float bodyAlpha = 0.17 + diffuse * 0.025 + breathing * 0.006;
     float reflectionAlpha = fresnel * 0.88;
     float alpha = reflectionAlpha + bodyAlpha * (1.0 - reflectionAlpha);
     float3 premultiplied = pearl * bodyAlpha * (1.0 - reflectionAlpha)

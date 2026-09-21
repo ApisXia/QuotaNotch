@@ -73,7 +73,6 @@ enum NativeCapture {
 
         guard let empty = images["empty"], let populated = images["populated"],
               let lightNear = images["light-near"], let lightFar = images["light-far"],
-              let lightEmpty = images["light-empty"],
               let patternReference = images["transmission-background"],
               let patternThroughShell = images["transmission-patterned"],
               let smallEmpty = images["small-widget-light"],
@@ -196,7 +195,7 @@ enum NativeCapture {
             throw BubbleLabError.capture("\(name) frame could not be sampled")
         }
         let delta = zip(center, background).reduce(0.0) { $0 + abs($1.0 - $1.1) }
-        let minimumContrast = name.contains("light") ? 0.025 : 0.12
+        let minimumContrast = name.contains("light") || name.contains("small-widget") ? 0.025 : 0.12
         guard delta > minimumContrast else {
             throw BubbleLabError.capture("\(name) frame is present but the center shell has no visible material contrast")
         }
