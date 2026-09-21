@@ -14,6 +14,7 @@ final class BubbleShelfStore: ObservableObject {
     }
     @Published private(set) var storageIssue: String?
     @Published private(set) var exportIssue: String?
+    @Published private(set) var lastImportResult: BubbleShelfImportResult?
 
     /// Compatibility spelling for surfaces that call receive mode "enabled".
     var isEnabled: Bool {
@@ -57,12 +58,16 @@ final class BubbleShelfStore: ObservableObject {
         for id in Array(thumbnailRequests.keys) { cancelThumbnail(for: id) }
         thumbnailCache.removeAll()
         self.items = BubbleShelfRules.restoring(items)
+        lastImportResult = nil
+        storageIssue = nil
+        exportIssue = nil
     }
 
     func resetPreview() {
         for id in Array(thumbnailRequests.keys) { cancelThumbnail(for: id) }
         thumbnailCache.removeAll()
         items = []
+        lastImportResult = nil
         exportIssue = nil
         storageIssue = nil
     }
@@ -78,6 +83,26 @@ final class BubbleShelfStore: ObservableObject {
 
     @discardableResult
     func addFile(_ url: URL) -> BubbleShelfImportResult {
+        beginImportAction()
+        let result = addFileInternal(url)
+        recordImportResult(result)
+        return result
+    }
+
+    /// Records the aggregate result of an explicit shelf import action.
+    /// Collection owners use this after importing several payloads so the UI
+    /// can show one complete result instead of the last item in the batch.
+    func recordImportResult(_ result: BubbleShelfImportResult) {
+        lastImportResult = result
+    }
+
+    private func beginImportAction() {
+        lastImportResult = nil
+        storageIssue = nil
+        exportIssue = nil
+    }
+
+    private func addFileInternal(_ url: URL) -> BubbleShelfImportResult {
         guard url.isFileURL, fileManager.fileExists(atPath: url.path) else {
             return rejected("The selected file or folder is unavailable.")
         }
@@ -101,6 +126,13 @@ final class BubbleShelfStore: ObservableObject {
 
     @discardableResult
     func addText(_ text: String) -> BubbleShelfImportResult {
+        beginImportAction()
+        let result = addTextInternal(text)
+        recordImportResult(result)
+        return result
+    }
+
+    private func addTextInternal(_ text: String) -> BubbleShelfImportResult {
         guard !text.isEmpty else { return rejected("The text item is empty.") }
         guard text.utf8.count <= BubbleShelfRules.maximumTextBytes else {
             return rejected("The text item exceeds the shelf size limit.")
@@ -110,6 +142,13 @@ final class BubbleShelfStore: ObservableObject {
 
     @discardableResult
     func addURL(_ url: URL) -> BubbleShelfImportResult {
+        beginImportAction()
+        let result = addURLInternal(url)
+        recordImportResult(result)
+        return result
+    }
+
+    private func addURLInternal(_ url: URL) -> BubbleShelfImportResult {
         guard !url.isFileURL, url.scheme != nil else { return rejected("The URL is not supported.") }
         return insert(BubbleShelfItem(kind: .url, title: url.host ?? url.absoluteString,
                                       resourceURL: url))
@@ -118,27 +157,34 @@ final class BubbleShelfStore: ObservableObject {
     /// Imports the explicit contents of a pasteboard snapshot. The shelf never polls the global clipboard.
     @discardableResult
     func importPasteboard(_ pasteboard: NSPasteboard) -> BubbleShelfImportResult {
-        guard isReceiving else { return rejected("Receive mode is paused.") }
+        beginImportAction()
+        guard isReceiving else {
+            let result = rejected("Receive mode is paused.")
+            recordImportResult(result)
+            return result
+        }
         return importPasteboardContents(pasteboard)
     }
 
     /// Imports a user-dropped pasteboard even when automatic receive mode is paused.
     @discardableResult
     func importPasteboardManually(_ pasteboard: NSPasteboard) -> BubbleShelfImportResult {
+        beginImportAction()
         importPasteboardContents(pasteboard)
     }
 
     private func importPasteboardContents(_ pasteboard: NSPasteboard) -> BubbleShelfImportResult {
         var result = BubbleShelfImportResult()
+        defer { recordImportResult(result) }
         let entries = pasteboard.pasteboardItems ?? []
         guard !entries.isEmpty else {
             for object in pasteboard.readObjects(forClasses: [NSURL.self, NSImage.self, NSString.self], options: nil) ?? [] {
                 if let url = object as? URL {
-                    merge(url.isFileURL ? addFile(url) : addURL(url), into: &result)
+                    merge(url.isFileURL ? addFileInternal(url) : addURLInternal(url), into: &result)
                 } else if let image = object as? NSImage {
                     merge(addImage(image), into: &result)
                 } else if let text = object as? String {
-                    merge(addPasteboardText(text), into: &result)
+                    merge(addPasteboardTextInternal(text), into: &result)
                 }
             }
             if result.addedCount + result.duplicateCount + result.skippedCount == 0 {
@@ -156,13 +202,13 @@ final class BubbleShelfStore: ObservableObject {
             if entry.types.contains(where: Self.isFilePromiseType) {
                 result.reject("A promised file could not be imported from this pasteboard.")
             } else if let fileURL = Self.fileURL(from: entry) {
-                merge(addFile(fileURL), into: &result)
+                merge(addFileInternal(fileURL), into: &result)
             } else if let webURL = Self.webURL(from: entry) {
-                merge(addURL(webURL), into: &result)
+                merge(addURLInternal(webURL), into: &result)
             } else if let imageData = Self.imageData(from: entry) {
                 merge(addImageData(imageData), into: &result)
             } else if let text = entry.string(forType: .string), !text.isEmpty {
-                merge(addPasteboardText(text), into: &result)
+                merge(addPasteboardTextInternal(text), into: &result)
             } else {
                 result.reject("A pasteboard item used an unsupported format.")
             }
@@ -174,6 +220,9 @@ final class BubbleShelfStore: ObservableObject {
     }
 
     func remove(id: UUID) {
+        lastImportResult = nil
+        storageIssue = nil
+        exportIssue = nil
         guard let removed = items.first(where: { $0.id == id }) else { return }
         cancelThumbnail(for: id)
         let prior = items
@@ -184,6 +233,9 @@ final class BubbleShelfStore: ObservableObject {
     }
 
     func clear() {
+        lastImportResult = nil
+        storageIssue = nil
+        exportIssue = nil
         guard !items.isEmpty else { return }
         let prior = items
         for item in prior { cancelThumbnail(for: item.id) }
@@ -235,6 +287,9 @@ final class BubbleShelfStore: ObservableObject {
 
     /// Produces one native pasteboard writer per selected shelf item for ordinary multi-item drags.
     func exportItems(_ ids: [UUID]) -> [NSPasteboardWriting] {
+        lastImportResult = nil
+        storageIssue = nil
+        exportIssue = nil
         let requested = Set(ids)
         let selected = items.filter { requested.contains($0.id) }
         let foundIDs = Set(selected.map(\.id))
@@ -338,11 +393,11 @@ final class BubbleShelfStore: ObservableObject {
         }
     }
 
-    private func addPasteboardText(_ text: String) -> BubbleShelfImportResult {
+    private func addPasteboardTextInternal(_ text: String) -> BubbleShelfImportResult {
         if let url = URL(string: text), url.scheme != nil, !url.isFileURL {
-            return addURL(url)
+            return addURLInternal(url)
         }
-        return addText(text)
+        return addTextInternal(text)
     }
 
     private func addImage(_ image: NSImage) -> BubbleShelfImportResult {
