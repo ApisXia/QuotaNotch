@@ -109,7 +109,7 @@ struct BubbleShelfView: View {
             return AgentText.t("部分原始内容暂时不可用，仍可导出其他项目。", "Some original items are unavailable; the rest can still be exported.")
         }
         if let result = store.lastImportResult,
-           result.skippedCount > 0 || !result.errors.isEmpty {
+           result.succeeded || result.skippedCount > 0 || !result.errors.isEmpty {
             return Self.summary(for: result)
         }
         switch collector.availability {

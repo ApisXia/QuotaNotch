@@ -125,6 +125,7 @@ struct SettingsPreviewRunner {
         try captureNotchSwitching(output: output)
         try captureBubbleShelfPreview(output: output)
         try captureBubbleShelfOpenLayouts(output: output)
+        try captureBubbleCollectorMotion(output: output)
         try captureBubbleClosedLayouts(output: output, fixtures: fixtures)
         try captureTaskPanel(output: output, fixtures: fixtures)
         for dark in [true, false] {
@@ -765,6 +766,67 @@ struct SettingsPreviewRunner {
             host.cacheDisplay(in: host.bounds, to: bitmap)
             try bitmap.representation(using: .png, properties: [:])!.write(to: output.appendingPathComponent(
                 "Notch-shelf-open-\(scenario.name).png"))
+        }
+    }
+
+    /// Capture the real floating collector panel so the cloud artifact includes the
+    /// gather/hold/collapse cycle, plus a small pointer-light storyboard from the same
+    /// native SwiftUI/Metal view. No Accessibility or external selection is involved.
+    @MainActor private static func captureBubbleCollectorMotion(output: URL) throws {
+        let shelf = BubbleShelfStore.shared
+        let fileURL = output.appendingPathComponent("collector-motion-fixture.txt")
+        try Data("Collector motion fixture".utf8).write(to: fileURL)
+        shelf.configurePreview(items: [
+            BubbleShelfItem(kind: .file, title: "collector-motion-fixture.txt", resourceURL: fileURL),
+            BubbleShelfItem(kind: .text, title: AgentText.t("示例文本", "Sample text"), text: "Collector motion sample")
+        ])
+        let payloads = Array(shelf.items.prefix(4)).map(BubbleCollectorPayload.stored)
+        let controller = BubbleCollectorController.shared
+        let anchor = CGPoint(x: 320, y: 320)
+        controller.showPreviewForTesting(contents: payloads, anchor: anchor)
+        defer {
+            controller.hidePreviewForTesting()
+            shelf.resetPreviewConfiguration()
+        }
+
+        guard let panel = NSApp.windows.compactMap({ $0 as? NSPanel }).first(where: {
+            $0.identifier == NSUserInterfaceItemIdentifier("bubble-collector-preview-panel")
+        }), let content = panel.contentView else {
+            fatalError("Collector motion panel was not created")
+        }
+        content.layoutSubtreeIfNeeded()
+        let movieURL = output.appendingPathComponent("Bubble-collector-motion.gif")
+        guard let destination = CGImageDestinationCreateWithURL(movieURL as CFURL,
+                                                                  UTType.gif.identifier as CFString,
+                                                                  96, nil) else {
+            fatalError("Cannot create collector motion storyboard")
+        }
+        CGImageDestinationSetProperties(destination,
+            [kCGImagePropertyGIFDictionary: [kCGImagePropertyGIFLoopCount: 0]] as CFDictionary)
+        for frameIndex in 0..<96 {
+            RunLoop.main.run(until: Date().addingTimeInterval(1.0 / 12.0))
+            content.layoutSubtreeIfNeeded()
+            guard let bitmap = content.bitmapImageRepForCachingDisplay(in: content.bounds) else {
+                fatalError("Missing collector motion frame \(frameIndex)")
+            }
+            content.cacheDisplay(in: content.bounds, to: bitmap)
+            guard let cgImage = bitmap.cgImage else {
+                fatalError("Missing collector motion image \(frameIndex)")
+            }
+            CGImageDestinationAddImage(destination, cgImage,
+                [kCGImagePropertyGIFDictionary: [kCGImagePropertyGIFDelayTime: 1.0 / 12.0]] as CFDictionary)
+            if [0, 12, 24, 48, 72, 95].contains(frameIndex) {
+                try bitmap.representation(using: .png, properties: [:])!.write(to: output.appendingPathComponent(
+                    "Bubble-collector-motion-frame-\(frameIndex).png"))
+            }
+        }
+        verifyPresentation(CGImageDestinationFinalize(destination), "Failed to save collector motion storyboard")
+
+        controller.hidePreviewForTesting()
+        for (index, pointer) in [CGPoint(x: 0.28, y: 0.36), CGPoint(x: 0.50, y: 0.28), CGPoint(x: 0.72, y: 0.62)].enumerated() {
+            try capture(BubbleCollectorFixtureView(payloads: payloads, pointer: pointer)
+                .background(Color.black).preferredColorScheme(.dark), width: 190,
+                name: "Bubble-collector-pointer-\(index)", output: output, height: 190)
         }
     }
 
