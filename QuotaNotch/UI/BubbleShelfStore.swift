@@ -66,6 +66,14 @@ final class BubbleShelfStore: ObservableObject {
         exportIssue = nil
         storageIssue = nil
     }
+
+    /// Clears all preview fixtures and returns the shared preview store to an unconfigured,
+    /// default-off state without writing a receive preference back to UserDefaults.
+    func resetPreviewConfiguration() {
+        resetPreview()
+        _isReceiving = Published(initialValue: false)
+        defaults.removeObject(forKey: Self.isReceivingDefaultsKey)
+    }
 #endif
 
     @discardableResult
