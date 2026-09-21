@@ -201,44 +201,84 @@ enum BubbleChecks {
               NotchDemoState.receivingEmpty.shortStatus == NotchDemoState.receivingPopulated.shortStatus,
               NotchDemoState.pausedEmpty.shortStatus == NotchDemoState.pausedPopulated.shortStatus,
               NotchDemoState.allCases.count == 4,
-              NotchContentCountBoard.counts == [0, 1, 2, 3, 6],
-              abs(NotchSignalMotion.angle(at: 0) - NotchSignalMotion.angle(at: 8)) < 0.0001,
+              NotchContentCountBoard.counts == [0, 1, 2, 3, 4],
+              NotchSignalMotion.cycleDuration == 4,
+              abs(NotchSignalMotion.angle(at: 4) - NotchSignalMotion.angle(at: 0) - 2 * .pi) < 0.0001,
+              abs(NotchSignalMotion.angle(at: 8) - NotchSignalMotion.angle(at: 0) - 4 * .pi) < 0.0001,
               NotchSignalMotion.angle(at: 2) > NotchSignalMotion.angle(at: 0),
-              NotchSignalMotion.angle(at: 4) > NotchSignalMotion.angle(at: 2),
-              NotchSignalMotion.angle(at: 6) > NotchSignalMotion.angle(at: 4),
-              NotchSignalMotion.normalizedProgress(at: 4) > NotchSignalMotion.normalizedProgress(at: 2),
-              hypot(NotchSignalMotion.radialFraction, NotchSignalMotion.maximumBarFraction * 0.5) < 0.5 else {
-            throw BubbleLabError.capture("the 20pt/14pt notch matrix and localized eight-second receive signal must preserve all four state semantics")
+              NotchSignalMotion.speed(at: 0) < NotchSignalMotion.speed(at: 2),
+              NotchSignalMotion.speed(at: 2) > NotchSignalMotion.speed(at: 4),
+              abs(NotchSignalMotion.speed(at: 0) - NotchSignalMotion.speed(at: 4)) < 0.0001,
+              abs(NotchSignalMotion.normalizedProgress(at: 2) - 0.5) < 0.0001,
+              NotchSignalMotion.normalizedProgress(at: 4) == 0 else {
+            throw BubbleLabError.capture("the 20pt/14pt notch matrix must preserve its four states and a weighted four-second receive-arc orbit")
         }
-        for size in [CGFloat(14), CGFloat(20)] {
-            let unit = size / 28
-            let frontDiameter = size * 24 / 28
-            let strokeMargin = max(0.42, 0.9 * unit) * 0.5
-            let frontCenter = CGPoint(x: size * 0.5 - 1.5 * unit, y: size * 0.5 + 1.5 * unit)
-            let radius = frontDiameter * 0.5
-            guard frontCenter.x - radius - strokeMargin >= -0.001,
-                  frontCenter.y - radius - strokeMargin >= -0.001,
-                  frontCenter.x + radius + strokeMargin <= size + 0.001,
-                  frontCenter.y + radius + strokeMargin <= size + 0.001 else {
-                throw BubbleLabError.capture("the small symbol must keep the complete closed front loop stroke inside its notch slot")
+
+        for count in NotchRectangleLayout.counts {
+            let rectangles = NotchRectangleLayout.placements(for: count)
+            guard rectangles.count == count,
+                  rectangles.map(\.id) == Array(0..<count),
+                  rectangles.allSatisfy({ $0.width > 0 && $0.height > 0 && (0...1).contains($0.opacity) }) else {
+                throw BubbleLabError.capture("the \(count)-item notch mark must contain exactly \(count) plain rectangles")
             }
-            let rearCenter = CGPoint(x: size * 0.5 + 2 * unit, y: size * 0.5 - 1.5 * unit)
-            let rearRadius = size * 12 / 28
-            let rearStart = -1.30
-            let rearEnd = 0.42
-            let rearMinimumX = rearCenter.x + rearRadius * CGFloat(cos(rearStart)) - strokeMargin
-            let rearMaximumX = rearCenter.x + rearRadius * CGFloat(cos(rearEnd)) + strokeMargin
-            let rearMinimumY = rearCenter.y + rearRadius * CGFloat(sin(rearStart)) - strokeMargin
-            let rearMaximumY = rearCenter.y + rearRadius * CGFloat(sin(rearEnd)) + strokeMargin
-            guard rearMinimumX >= -0.001, rearMaximumX <= size + 0.001,
-                  rearMinimumY >= -0.001, rearMaximumY <= size + 0.001 else {
-                throw BubbleLabError.capture("the small symbol's rear contour stroke must stay inside its notch slot")
+            for size in [CGFloat(14), CGFloat(20), CGFloat(54), CGFloat(144)] {
+                let diameter = NotchBubbleGeometry.frontDiameter(for: size)
+                let halfStroke = NotchBubbleGeometry.contourWidth(for: size) * 0.5
+                let frontCenter = NotchBubbleGeometry.point(NotchBubbleGeometry.frontCenter, in: size)
+                let frontRadius = diameter * 0.5
+                guard frontCenter.x - frontRadius - halfStroke >= -0.001,
+                      frontCenter.y - frontRadius - halfStroke >= -0.001,
+                      frontCenter.x + frontRadius + halfStroke <= size + 0.001,
+                      frontCenter.y + frontRadius + halfStroke <= size + 0.001 else {
+                    throw BubbleLabError.capture("the \(Int(size))-point front contour must stay wholly inside its glyph slot")
+                }
+
+                let rearDiameter = NotchBubbleGeometry.rearDiameter(for: size)
+                let rearCenter = NotchBubbleGeometry.point(NotchBubbleGeometry.rearCenter, in: size)
+                let rearRadius = rearDiameter * 0.5
+                guard rearCenter.x - rearRadius - halfStroke >= -0.001,
+                      rearCenter.y - rearRadius - halfStroke >= -0.001,
+                      rearCenter.x + rearRadius + halfStroke <= size + 0.001,
+                      rearCenter.y + rearRadius + halfStroke <= size + 0.001 else {
+                    throw BubbleLabError.capture("the \(Int(size))-point rear contour must stay wholly inside its glyph slot")
+                }
+
+                guard NotchSignalMotion.orbitRadiusFraction * diameter + max(0.46, diameter * 0.026) * 0.5 < frontRadius else {
+                    throw BubbleLabError.capture("the curved receive arc must remain inside the front circle at \(Int(size)) points")
+                }
+                for placement in rectangles {
+                    let halfWidth = diameter * placement.width * 0.5
+                    let halfHeight = diameter * placement.height * 0.5
+                    let centerX = diameter * (placement.x - 0.5)
+                    let centerY = diameter * (placement.y - 0.5)
+                    let radians = CGFloat(placement.rotation * .pi / 180)
+                    let cosine = cos(radians)
+                    let sine = sin(radians)
+                    let maximumCornerRadius = [-CGFloat(1), CGFloat(1)].flatMap { xSign in
+                        [-CGFloat(1), CGFloat(1)].map { ySign in
+                            let x = centerX + xSign * halfWidth * cosine - ySign * halfHeight * sine
+                            let y = centerY + xSign * halfWidth * sine + ySign * halfHeight * cosine
+                            return hypot(x, y)
+                        }
+                    }.max() ?? .infinity
+                    guard maximumCornerRadius + max(0.20, diameter * 0.008) < frontRadius else {
+                        throw BubbleLabError.capture("a \(count)-rectangle stack exceeds the \(Int(size))-point front circle")
+                    }
+                }
             }
         }
-        let orbitAngles = (0..<8).map { NotchSignalMotion.angle(at: Double($0)) }
-        guard Set(orbitAngles.map { Int(($0 * 1000).rounded()) }).count == 8 else {
-            throw BubbleLabError.capture("the receive glint must travel around the shell instead of staying on one short arc")
+
+        var previousAngle = NotchSignalMotion.angle(at: 0)
+        for sample in 1...800 {
+            let time = NotchSignalMotion.cycleDuration * Double(sample) / 800
+            let angle = NotchSignalMotion.angle(at: time)
+            let speed = NotchSignalMotion.speed(at: time)
+            guard angle.isFinite, angle > previousAngle, speed.isFinite, speed > 0 else {
+                throw BubbleLabError.capture("the receive arc must orbit continuously without reversing or pausing at \(time)s")
+            }
+            previousAngle = angle
         }
+
     }
 
     private static func reflows(

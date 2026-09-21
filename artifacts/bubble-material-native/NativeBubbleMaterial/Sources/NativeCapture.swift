@@ -540,7 +540,7 @@ enum NativeCapture {
         case .insertion:
             duration = BubbleInsertionTimeline.duration
         case .notchSignal:
-            duration = NotchSignalMotion.cycleDuration
+            duration = NotchSignalMotion.cycleDuration * 2
         }
         let frameCount = Int(duration * Double(fps))
         let writer = try AVAssetWriter(outputURL: url, fileType: .mp4)

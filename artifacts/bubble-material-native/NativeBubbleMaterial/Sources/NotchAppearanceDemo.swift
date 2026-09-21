@@ -43,22 +43,91 @@ enum NotchDemoState: CaseIterable, Identifiable, Equatable {
 }
 
 enum NotchSignalMotion {
-    static let cycleDuration: TimeInterval = 8
-    static let radialFraction: CGFloat = 0.375
-    static let maximumBarFraction: CGFloat = 0.23
+    static let cycleDuration: TimeInterval = 4
+    static let orbitRadiusFraction: CGFloat = 0.37
+    static let arcSpan: Double = 0.96
 
-    /// One short tangent makes a slow orbit just inside the closed front shell.
-    /// It never leaves a trail or lights the rest of the ring.
+    private static func phase(at time: TimeInterval) -> Double {
+        let turns = time / cycleDuration
+        return turns - floor(turns)
+    }
+
+    /// The short inner arc slows near the top, swishes fastest through the bottom,
+    /// then eases back up without reversing or leaving a trail.
     static func angle(at time: TimeInterval) -> Double {
-        let cycle = ((time.truncatingRemainder(dividingBy: cycleDuration)) + cycleDuration)
-            .truncatingRemainder(dividingBy: cycleDuration)
-        return -.pi / 2 + 2 * .pi * cycle / cycleDuration
+        let turns = time / cycleDuration
+        let phaseAngle = 2 * .pi * phase(at: time)
+        return -.pi / 2 + 2 * .pi * turns - 0.70 * sin(phaseAngle)
+    }
+
+    static func speed(at time: TimeInterval) -> Double {
+        1 - 0.70 * cos(2 * .pi * phase(at: time))
     }
 
     static func normalizedProgress(at time: TimeInterval) -> Double {
-        let cycle = ((time.truncatingRemainder(dividingBy: cycleDuration)) + cycleDuration)
-            .truncatingRemainder(dividingBy: cycleDuration)
-        return cycle / cycleDuration
+        phase(at: time)
+    }
+
+    static func speedProgress(at time: TimeInterval) -> Double {
+        (speed(at: time) - 0.30) / 1.40
+    }
+}
+
+enum NotchBubbleGeometry {
+    static let frontDiameterFraction: CGFloat = 0.78
+    static let frontCenter = CGPoint(x: 0.59, y: 0.59)
+    static let rearDiameterFraction: CGFloat = 0.54
+    static let rearCenter = CGPoint(x: 0.34, y: 0.38)
+
+    static func frontDiameter(for size: CGFloat) -> CGFloat { size * frontDiameterFraction }
+    static func rearDiameter(for size: CGFloat) -> CGFloat { size * rearDiameterFraction }
+    static func point(_ fraction: CGPoint, in size: CGFloat) -> CGPoint {
+        CGPoint(x: fraction.x * size, y: fraction.y * size)
+    }
+    static func contourWidth(for size: CGFloat) -> CGFloat { max(0.42, size * 0.026) }
+}
+
+struct NotchRectanglePlacement: Identifiable {
+    let id: Int
+    let x: CGFloat
+    let y: CGFloat
+    let width: CGFloat
+    let height: CGFloat
+    let rotation: Double
+    let opacity: Double
+    let depth: Double
+}
+
+enum NotchRectangleLayout {
+    static let counts = [0, 1, 2, 3, 4]
+
+    static func placements(for count: Int) -> [NotchRectanglePlacement] {
+        switch min(max(count, 0), 4) {
+        case 0:
+            return []
+        case 1:
+            return [
+                .init(id: 0, x: 0.48, y: 0.51, width: 0.34, height: 0.42, rotation: -4, opacity: 0.93, depth: 1)
+            ]
+        case 2:
+            return [
+                .init(id: 0, x: 0.43, y: 0.47, width: 0.29, height: 0.38, rotation: -7, opacity: 0.68, depth: 0),
+                .init(id: 1, x: 0.57, y: 0.55, width: 0.29, height: 0.38, rotation: 5, opacity: 0.96, depth: 1)
+            ]
+        case 3:
+            return [
+                .init(id: 0, x: 0.43, y: 0.49, width: 0.30, height: 0.39, rotation: -5, opacity: 0.96, depth: 3),
+                .init(id: 1, x: 0.60, y: 0.43, width: 0.24, height: 0.31, rotation: 5, opacity: 0.78, depth: 2),
+                .init(id: 2, x: 0.57, y: 0.62, width: 0.23, height: 0.30, rotation: 8, opacity: 0.67, depth: 1)
+            ]
+        default:
+            return [
+                .init(id: 0, x: 0.48, y: 0.65, width: 0.21, height: 0.28, rotation: 2, opacity: 0.48, depth: 1),
+                .init(id: 1, x: 0.58, y: 0.59, width: 0.225, height: 0.29, rotation: 8, opacity: 0.68, depth: 2),
+                .init(id: 2, x: 0.60, y: 0.43, width: 0.235, height: 0.30, rotation: 5, opacity: 0.79, depth: 3),
+                .init(id: 3, x: 0.43, y: 0.49, width: 0.28, height: 0.36, rotation: -5, opacity: 0.97, depth: 4)
+            ]
+        }
     }
 }
 
@@ -68,21 +137,31 @@ struct NotchPreviewGlyph: View {
     let isArmed: Bool
     let time: TimeInterval
 
-    private var frontDiameter: CGFloat { size * 24 / 28 }
-    private var frontCenter: CGPoint {
-        CGPoint(x: size * 0.5 - size * 1.5 / 28, y: size * 0.5 + size * 1.5 / 28)
-    }
+    private var frontDiameter: CGFloat { NotchBubbleGeometry.frontDiameter(for: size) }
+    private var frontCenter: CGPoint { NotchBubbleGeometry.point(NotchBubbleGeometry.frontCenter, in: size) }
+    private var rearDiameter: CGFloat { NotchBubbleGeometry.rearDiameter(for: size) }
+    private var rearCenter: CGPoint { NotchBubbleGeometry.point(NotchBubbleGeometry.rearCenter, in: size) }
+    private var contourWidth: CGFloat { NotchBubbleGeometry.contourWidth(for: size) }
 
     var body: some View {
         ZStack {
+            Circle()
+                .fill(Color.black)
+                .overlay(Circle().stroke(Color(white: 0.56).opacity(0.48), lineWidth: contourWidth * 0.88))
+                .frame(width: rearDiameter, height: rearDiameter)
+                .position(rearCenter)
+
+            Circle()
+                .fill(Color.black)
+                .frame(width: frontDiameter, height: frontDiameter)
+                .position(frontCenter)
+
             if itemCount > 0 {
-                MiniPreviewStack(itemCount: itemCount)
+                PlainRectangleStack(itemCount: itemCount)
                     .frame(width: frontDiameter, height: frontDiameter)
                     .clipShape(Circle())
                     .position(frontCenter)
             }
-
-            DoubleBubbleMark(size: size)
 
             if isArmed {
                 CurvedReceiveGlint(size: frontDiameter, time: time)
@@ -90,9 +169,14 @@ struct NotchPreviewGlyph: View {
                     .clipShape(Circle())
                     .position(frontCenter)
             }
+
+            Circle()
+                .stroke(Color(white: 0.65).opacity(0.92), lineWidth: contourWidth)
+                .frame(width: frontDiameter, height: frontDiameter)
+                .position(frontCenter)
         }
         .frame(width: size, height: size)
-        .accessibilityLabel(itemCount == 0 ? "空泡泡" : "含内置预览的泡泡")
+        .accessibilityLabel(itemCount == 0 ? "空的双轮廓气泡" : "\(itemCount) 个矩形预览")
     }
 }
 
@@ -101,132 +185,69 @@ private struct CurvedReceiveGlint: View {
     let time: TimeInterval
 
     private var angle: Double { NotchSignalMotion.angle(at: time) }
-    private var center: CGPoint {
-        let radius = size * NotchSignalMotion.radialFraction
-        return CGPoint(
-            x: size * 0.5 + CGFloat(cos(angle)) * radius,
-            y: size * 0.5 + CGFloat(sin(angle)) * radius
-        )
-    }
-    private var barLength: CGFloat {
-        size * NotchSignalMotion.maximumBarFraction * CGFloat(0.88 + 0.12 * (0.5 + 0.5 * cos(angle)))
-    }
-    private var barThickness: CGFloat { max(0.48, size * (0.045 + 0.010 * CGFloat(0.5 + 0.5 * sin(angle)))) }
-    private var glow: Double { 0.52 + 0.28 * (0.5 + 0.5 * sin(angle + .pi / 3)) }
+    private var speedProgress: Double { NotchSignalMotion.speedProgress(at: time) }
+    private var lineWidth: CGFloat { max(0.46, size * 0.026) }
+    private var brightness: Double { 0.62 + 0.28 * speedProgress }
+    private var haloRadius: CGFloat { max(0.45, size * 0.025) }
 
     var body: some View {
-        Capsule()
-            .fill(LinearGradient(
-                colors: [
-                    Color.white.opacity(glow * 0.34),
-                    Color(red: 0.84, green: 0.95, blue: 1).opacity(glow),
-                    Color(red: 1, green: 0.91, blue: 0.82).opacity(glow * 0.70)
-                ],
-                startPoint: .leading,
-                endPoint: .trailing
-            ))
-            .frame(width: barLength, height: barThickness)
-            .rotationEffect(.radians(angle + .pi / 2))
-            .shadow(color: Color(red: 0.80, green: 0.92, blue: 1).opacity(glow * 0.50), radius: max(0.25, size * 0.07))
-            .position(center)
+        InnerReceiveArc(
+            angle: angle,
+            span: NotchSignalMotion.arcSpan,
+            radiusFraction: NotchSignalMotion.orbitRadiusFraction
+        )
+        .stroke(
+            Color.white.opacity(brightness),
+            style: StrokeStyle(lineWidth: lineWidth, lineCap: .round)
+        )
+        .shadow(color: .white.opacity(0.20 + 0.24 * speedProgress), radius: haloRadius)
     }
 }
 
-private struct MiniPreviewStack: View {
+private struct InnerReceiveArc: Shape {
+    var angle: Double
+    var span: Double
+    var radiusFraction: CGFloat
+
+    func path(in rect: CGRect) -> Path {
+        let diameter = min(rect.width, rect.height)
+        let radius = diameter * radiusFraction
+        let center = CGPoint(x: rect.midX, y: rect.midY)
+        var path = Path()
+        path.addArc(
+            center: center,
+            radius: radius,
+            startAngle: .radians(angle - span * 0.5),
+            endAngle: .radians(angle + span * 0.5),
+            clockwise: false
+        )
+        return path
+    }
+}
+
+private struct PlainRectangleStack: View {
     let itemCount: Int
 
     var body: some View {
         GeometryReader { geometry in
             let diameter = min(geometry.size.width, geometry.size.height)
             ZStack {
-                ForEach(BubbleItemLayout.placements(for: itemCount)) { placement in
-                    MiniPreviewCard(content: placement.content)
+                ForEach(NotchRectangleLayout.placements(for: itemCount)) { placement in
+                    RoundedRectangle(cornerRadius: max(0.35, diameter * 0.018), style: .continuous)
+                        .fill(Color(white: 0.78).opacity(placement.opacity))
+                        .overlay {
+                            RoundedRectangle(cornerRadius: max(0.35, diameter * 0.018), style: .continuous)
+                                .strokeBorder(.white.opacity(0.35), lineWidth: max(0.30, diameter * 0.008))
+                        }
                         .frame(width: diameter * placement.width, height: diameter * placement.height)
                         .rotationEffect(.degrees(placement.rotation))
-                        .opacity(placement.opacity)
-                        .blur(radius: placement.blur * diameter)
-                        .position(
-                            x: geometry.size.width * (0.5 + placement.x),
-                            y: geometry.size.height * (0.5 + placement.y)
-                        )
+                        .position(x: geometry.size.width * placement.x, y: geometry.size.height * placement.y)
                         .zIndex(placement.depth)
                 }
             }
         }
         .allowsHitTesting(false)
-    }
-}
-
-/// Tiny planes use the same bundled artwork identities as the large bubble,
-/// reduced to color, crop, and a few native document/chart marks.
-private struct MiniPreviewCard: View {
-    let content: BubbleDemoContent
-
-    private var paper: Color {
-        switch content {
-        case .stillLife, .stillLifeDetail: return Color(red: 0.34, green: 0.42, blue: 0.44)
-        case .document: return Color(red: 0.95, green: 0.92, blue: 0.84)
-        case .diagram: return Color(red: 0.78, green: 0.88, blue: 0.85)
-        case .report: return Color(red: 0.92, green: 0.87, blue: 0.76)
-        case .fieldNotes: return Color(red: 0.80, green: 0.86, blue: 0.75)
-        }
-    }
-
-    var body: some View {
-        GeometryReader { geometry in
-            ZStack {
-                paper
-                if content == .stillLife || content == .stillLifeDetail {
-                    if let image = DemoArtwork.stillLife {
-                        Image(nsImage: image)
-                            .resizable()
-                            .scaledToFill()
-                            .frame(width: geometry.size.width, height: geometry.size.height)
-                            .clipped()
-                    }
-                } else {
-                    Canvas { context, size in
-                        let ink = Color(red: 0.19, green: 0.30, blue: 0.31).opacity(0.65)
-                        if content == .diagram {
-                            var links = Path()
-                            links.move(to: CGPoint(x: size.width * 0.25, y: size.height * 0.55))
-                            links.addLine(to: CGPoint(x: size.width * 0.72, y: size.height * 0.32))
-                            links.addLine(to: CGPoint(x: size.width * 0.67, y: size.height * 0.75))
-                            context.stroke(links, with: .color(ink), lineWidth: max(0.35, size.width * 0.035))
-                            for (point, color) in [
-                                (CGPoint(x: size.width * 0.25, y: size.height * 0.55), Color(red: 0.31, green: 0.55, blue: 0.49)),
-                                (CGPoint(x: size.width * 0.72, y: size.height * 0.32), Color(red: 0.85, green: 0.59, blue: 0.37)),
-                                (CGPoint(x: size.width * 0.67, y: size.height * 0.75), Color(red: 0.43, green: 0.58, blue: 0.70))
-                            ] {
-                                let diameter = max(0.8, size.width * 0.13)
-                                let rect = CGRect(x: point.x - diameter / 2, y: point.y - diameter / 2, width: diameter, height: diameter)
-                                context.fill(Path(ellipseIn: rect), with: .color(color))
-                            }
-                        } else {
-                            let line = CGRect(x: size.width * 0.13, y: size.height * 0.20, width: size.width * 0.48, height: max(0.45, size.height * 0.055))
-                            context.fill(Path(roundedRect: line, cornerRadius: 1), with: .color(ink))
-                            let heights: [CGFloat] = content == .fieldNotes ? [0.26, 0.43, 0.32] : [0.28, 0.48, 0.36]
-                            let colors = [Color(red: 0.41, green: 0.61, blue: 0.56), Color(red: 0.81, green: 0.57, blue: 0.38), Color(red: 0.46, green: 0.59, blue: 0.71)]
-                            for index in heights.indices {
-                                let width = size.width * 0.15
-                                let rect = CGRect(
-                                    x: size.width * (0.18 + CGFloat(index) * 0.25),
-                                    y: size.height * (0.83 - heights[index]),
-                                    width: width,
-                                    height: size.height * heights[index]
-                                )
-                                context.fill(Path(roundedRect: rect, cornerRadius: max(0.35, width * 0.12)), with: .color(colors[index]))
-                            }
-                        }
-                    }
-                }
-            }
-            .clipShape(RoundedRectangle(cornerRadius: max(0.55, min(2.2, min(geometry.size.width, geometry.size.height) * 0.13)), style: .continuous))
-            .overlay {
-                RoundedRectangle(cornerRadius: max(0.55, min(2.2, min(geometry.size.width, geometry.size.height) * 0.13)), style: .continuous)
-                    .strokeBorder(.white.opacity(0.84), lineWidth: 0.42)
-            }
-        }
+        .accessibilityHidden(true)
     }
 }
 
@@ -250,7 +271,7 @@ struct NotchAppearanceBoard: View {
                         .font(.system(size: 17, weight: .semibold, design: .rounded))
                         .foregroundStyle(.white.opacity(0.93))
                     Spacer()
-                    Text("内置示例预览 · 有内容固定展示三张")
+                    Text("双层空心气泡 · 内侧短弧缓速旋转")
                         .font(.system(size: 10, weight: .medium, design: .rounded))
                         .foregroundStyle(.white.opacity(0.56))
                 }
@@ -304,7 +325,7 @@ private struct NotchAppearanceCell: View {
                     Text(state.shortStatus)
                         .font(.system(size: 11, weight: .semibold, design: .rounded))
                         .foregroundStyle(.white.opacity(0.92))
-                    Text(state.itemCount == 0 ? "暂无预览" : "图片 · 文档 · 图表")
+                    Text(state.itemCount == 0 ? "暂无预览" : "简化矩形预览")
                         .font(.system(size: 9, weight: .regular, design: .rounded))
                         .foregroundStyle(.white.opacity(0.60))
                 }
@@ -395,7 +416,7 @@ private struct NotchHardwareSample: View {
 
 struct NotchContentCountBoard: View {
     static let size = CGSize(width: 1040, height: 480)
-    static let counts = BubbleItemLayout.sampleCounts
+    static let counts = NotchRectangleLayout.counts
 
     let time: TimeInterval
 
@@ -408,7 +429,7 @@ struct NotchContentCountBoard: View {
                         .font(.system(size: 17, weight: .semibold, design: .rounded))
                         .foregroundStyle(.white.opacity(0.93))
                     Spacer()
-                    Text("仅为内置演示 · 数量标签在图标之外")
+                    Text("仅显示中性矩形 · 数量标注在图标之外")
                         .font(.system(size: 10, weight: .medium, design: .rounded))
                         .foregroundStyle(.white.opacity(0.56))
                 }
