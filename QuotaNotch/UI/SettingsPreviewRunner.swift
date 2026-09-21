@@ -736,7 +736,12 @@ struct SettingsPreviewRunner {
     }
 
     @MainActor private static func captureCat(output: URL, fixtures: [AgentSession]) throws {
+        let savedCat = UserDefaults.standard.object(forKey: "notchCatEnabled")
         UserDefaults.standard.set(true, forKey: "notchCatEnabled")
+        defer {
+            if let savedCat { UserDefaults.standard.set(savedCat, forKey: "notchCatEnabled") }
+            else { UserDefaults.standard.removeObject(forKey: "notchCatEnabled") }
+        }
         let vm = BoringViewModel()
         vm.hideOnClosed = false
         let coordinator = BoringViewCoordinator.shared

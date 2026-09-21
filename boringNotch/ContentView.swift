@@ -46,7 +46,7 @@ struct ContentView: View {
         return NotchModuleMetrics(widgetWidth: widget).additionalWidth / 2
     }
     @StateObject private var cat = NotchCatDirector()
-    @AppStorage("notchCatEnabled") private var catEnabled = true
+    @AppStorage("notchCatEnabled") private var catEnabled = false
     @AppStorage("notchCatTaskCues") private var catTaskCues = true
     // Deterministic poses are injected only by the isolated screenshot runner.
     var catPreviewPose: CatPose? = nil

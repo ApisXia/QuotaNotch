@@ -65,7 +65,7 @@ struct CatWingSpacesKey: PreferenceKey {
     }
     func release(_ id: UUID) { if owner == id { owner = nil } }
     func enqueue(_ cue: CatCue) {
-        guard !suspended, !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion, UserDefaults.standard.object(forKey: "notchCatEnabled") as? Bool ?? true,
+        guard !suspended, !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion, UserDefaults.standard.object(forKey: "notchCatEnabled") as? Bool ?? false,
               UserDefaults.standard.object(forKey: "notchCatTaskCues") as? Bool ?? true else { return }
         queue.enqueue(cue, now: Date())
     }
@@ -366,7 +366,7 @@ struct NotchCatDrawing: View {
     }
 }
 struct NotchCatSettings: View {
-    @AppStorage("notchCatEnabled") private var enabled = true
+    @AppStorage("notchCatEnabled") private var enabled = false
     @AppStorage("notchCatTaskCues") private var taskCues = true
     var body: some View {
         Section {
