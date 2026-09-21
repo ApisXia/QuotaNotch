@@ -776,14 +776,18 @@ struct SettingsPreviewRunner {
         let shelf = BubbleShelfStore.shared
         let fileURL = output.appendingPathComponent("collector-motion-fixture.txt")
         try Data("Collector motion fixture".utf8).write(to: fileURL)
+        let noteURL = output.appendingPathComponent("collector-motion-note.md")
+        try Data("# Collector motion fixture\n\nA second native card.".utf8).write(to: noteURL)
         shelf.configurePreview(items: [
             BubbleShelfItem(kind: .file, title: "collector-motion-fixture.txt", resourceURL: fileURL),
-            BubbleShelfItem(kind: .text, title: AgentText.t("示例文本", "Sample text"), text: "Collector motion sample")
+            BubbleShelfItem(kind: .text, title: AgentText.t("示例文本", "Sample text"), text: "Collector motion sample"),
+            BubbleShelfItem(kind: .url, title: "example.com", resourceURL: URL(string: "https://example.com/collector")!),
+            BubbleShelfItem(kind: .file, title: "collector-motion-note.md", resourceURL: noteURL)
         ])
         let payloads = Array(shelf.items.prefix(4)).map(BubbleCollectorPayload.stored)
         let controller = BubbleCollectorController.shared
         let anchor = CGPoint(x: 320, y: 320)
-        controller.showPreviewForTesting(contents: payloads, anchor: anchor)
+        controller.showPreviewForTesting(contents: [], anchor: anchor)
         defer {
             controller.hidePreviewForTesting()
             shelf.resetPreviewConfiguration()
@@ -795,7 +799,7 @@ struct SettingsPreviewRunner {
             fatalError("Collector motion panel was not created")
         }
         content.layoutSubtreeIfNeeded()
-        let movieURL = output.appendingPathComponent("Bubble-collector-motion.gif")
+        let movieURL = output.appendingPathComponent("Bubble-collector-insertion.gif")
         guard let destination = CGImageDestinationCreateWithURL(movieURL as CFURL,
                                                                   UTType.gif.identifier as CFString,
                                                                   96, nil) else {
@@ -803,7 +807,21 @@ struct SettingsPreviewRunner {
         }
         CGImageDestinationSetProperties(destination,
             [kCGImagePropertyGIFDictionary: [kCGImagePropertyGIFLoopCount: 0]] as CFDictionary)
+        let stages: [[BubbleCollectorPayload]] = [
+            [],
+            [payloads[0]],
+            [payloads[1], payloads[0]],
+            [payloads[2], payloads[1], payloads[0]],
+            [payloads[3], payloads[2], payloads[1], payloads[0]]
+        ]
         for frameIndex in 0..<96 {
+            let stageIndex = min(stages.count - 1, frameIndex / 19)
+            if frameIndex == 0 || frameIndex % 19 == 0 {
+                // Keep one panel/TimelineView alive while the stable artwork IDs
+                // reflow through 0→1→2→3→4. This is an insertion sequence, not
+                // five independently recreated fixture scenes.
+                controller.showPreviewForTesting(contents: stages[stageIndex], anchor: anchor)
+            }
             RunLoop.main.run(until: Date().addingTimeInterval(1.0 / 12.0))
             content.layoutSubtreeIfNeeded()
             guard let bitmap = content.bitmapImageRepForCachingDisplay(in: content.bounds) else {
@@ -817,10 +835,10 @@ struct SettingsPreviewRunner {
                 [kCGImagePropertyGIFDictionary: [kCGImagePropertyGIFDelayTime: 1.0 / 12.0]] as CFDictionary)
             if [0, 12, 24, 48, 72, 95].contains(frameIndex) {
                 try bitmap.representation(using: .png, properties: [:])!.write(to: output.appendingPathComponent(
-                    "Bubble-collector-motion-frame-\(frameIndex).png"))
+                    "Bubble-collector-insertion-frame-\(frameIndex).png"))
             }
         }
-        verifyPresentation(CGImageDestinationFinalize(destination), "Failed to save collector motion storyboard")
+        verifyPresentation(CGImageDestinationFinalize(destination), "Failed to save collector insertion storyboard")
 
         controller.hidePreviewForTesting()
         for (index, pointer) in [CGPoint(x: 0.28, y: 0.36), CGPoint(x: 0.50, y: 0.28), CGPoint(x: 0.72, y: 0.62)].enumerated() {
