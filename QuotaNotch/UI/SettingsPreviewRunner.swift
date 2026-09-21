@@ -778,16 +778,25 @@ struct SettingsPreviewRunner {
         try Data("Collector motion fixture".utf8).write(to: fileURL)
         let noteURL = output.appendingPathComponent("collector-motion-note.md")
         try Data("# Collector motion fixture\n\nA second native card.".utf8).write(to: noteURL)
-        shelf.configurePreview(items: [
+        let fixtureItems: [BubbleShelfItem] = [
             BubbleShelfItem(kind: .file, title: "collector-motion-fixture.txt", resourceURL: fileURL),
             BubbleShelfItem(kind: .text, title: AgentText.t("示例文本", "Sample text"), text: "Collector motion sample"),
             BubbleShelfItem(kind: .url, title: "example.com", resourceURL: URL(string: "https://example.com/collector")!),
             BubbleShelfItem(kind: .file, title: "collector-motion-note.md", resourceURL: noteURL)
-        ])
-        let payloads = Array(shelf.items.prefix(4)).map(BubbleCollectorPayload.stored)
+        ]
+        let finalURL = output.appendingPathComponent("collector-motion-final.txt")
+        try Data("The final inserted item.".utf8).write(to: finalURL)
+        let finalItem = BubbleShelfItem(kind: .file, title: "collector-motion-final.txt", resourceURL: finalURL)
+        let payloads = fixtureItems.map(BubbleCollectorPayload.stored)
+        let finalPayload = BubbleCollectorPayload.stored(finalItem)
         let controller = BubbleCollectorController.shared
         let anchor = CGPoint(x: 320, y: 320)
-        controller.showPreviewForTesting(contents: [], anchor: anchor)
+        shelf.resetPreviewConfiguration()
+        shelf.isReceiving = true
+        // Keep one selection presentation and one panel alive while the shelf
+        // itself grows. The selection payload is a distinct fifth item; it is
+        // committed only for the final gather/hold/collapse proof.
+        controller.showSelectionForTesting(contents: [finalPayload], anchor: anchor)
         defer {
             controller.hidePreviewForTesting()
             shelf.resetPreviewConfiguration()
@@ -802,25 +811,23 @@ struct SettingsPreviewRunner {
         let movieURL = output.appendingPathComponent("Bubble-collector-insertion.gif")
         guard let destination = CGImageDestinationCreateWithURL(movieURL as CFURL,
                                                                   UTType.gif.identifier as CFString,
-                                                                  96, nil) else {
+                                                                  81, nil) else {
             fatalError("Cannot create collector motion storyboard")
         }
         CGImageDestinationSetProperties(destination,
             [kCGImagePropertyGIFDictionary: [kCGImagePropertyGIFLoopCount: 0]] as CFDictionary)
-        let stages: [[BubbleCollectorPayload]] = [
-            [],
-            [payloads[0]],
-            [payloads[1], payloads[0]],
-            [payloads[2], payloads[1], payloads[0]],
-            [payloads[3], payloads[2], payloads[1], payloads[0]]
-        ]
-        for frameIndex in 0..<96 {
-            let stageIndex = min(stages.count - 1, frameIndex / 19)
-            if frameIndex == 0 || frameIndex % 19 == 0 {
+        for frameIndex in 0..<81 {
+            let stageIndex = min(fixtureItems.count, frameIndex / 14)
+            if frameIndex <= 56 && frameIndex % 14 == 0 {
                 // Keep one panel/TimelineView alive while the stable artwork IDs
                 // reflow through 0→1→2→3→4. This is an insertion sequence, not
                 // five independently recreated fixture scenes.
-                controller.showPreviewForTesting(contents: stages[stageIndex], anchor: anchor)
+                shelf.configurePreview(items: Array(fixtureItems.prefix(stageIndex)))
+            }
+            if frameIndex == 56 {
+                // The fifth item is a real capture through the controller API;
+                // its own 2.05s gather/hold/collapse follows the reflow proof.
+                controller.captureCurrentCandidate()
             }
             RunLoop.main.run(until: Date().addingTimeInterval(1.0 / 12.0))
             content.layoutSubtreeIfNeeded()
@@ -833,7 +840,7 @@ struct SettingsPreviewRunner {
             }
             CGImageDestinationAddImage(destination, cgImage,
                 [kCGImagePropertyGIFDictionary: [kCGImagePropertyGIFDelayTime: 1.0 / 12.0]] as CFDictionary)
-            if [0, 12, 24, 48, 72, 95].contains(frameIndex) {
+            if [0, 14, 28, 42, 56, 70, 80].contains(frameIndex) {
                 try bitmap.representation(using: .png, properties: [:])!.write(to: output.appendingPathComponent(
                     "Bubble-collector-insertion-frame-\(frameIndex).png"))
             }
