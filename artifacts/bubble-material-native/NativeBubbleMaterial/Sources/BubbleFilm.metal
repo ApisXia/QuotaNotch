@@ -44,21 +44,21 @@ static float gaussian(float2 point, float2 center, float2 width) {
     float3 environment = mix(float3(0.28, 0.37, 0.52), float3(0.94, 0.84, 0.78), sky);
     environment = mix(environment, float3(0.34, 0.51, 0.65), smoothstep(0.34, 0.91, rotatedDirection.z) * 0.42);
 
-    float bend = 0.045 * sin(rotated.y * 3.2 + 0.5);
-    float silkbox = gaussian(float2(rotated.x, rotated.y), float2(-0.20 + bend, 0.28), float2(0.13, 0.36));
-    float broadbox = gaussian(float2(rotated.x, rotated.y), float2(0.45, -0.18), float2(0.27, 0.21));
+    float bend = 0.070 * sin(rotated.y * 3.2 + 0.5);
+    float silkbox = gaussian(float2(rotated.x, rotated.y), float2(-0.22 + bend, 0.27), float2(0.20, 0.40));
+    float broadbox = gaussian(float2(rotated.x, rotated.y), float2(0.43, -0.18), float2(0.32, 0.25));
     float softReflection = silkbox * 0.68 + broadbox * 0.40;
-    environment += float3(0.73, 0.82, 0.91) * silkbox * 0.66;
-    environment += float3(0.93, 0.76, 0.69) * broadbox * 0.43;
+    environment += float3(0.69, 0.83, 0.97) * silkbox * 0.78;
+    environment += float3(0.98, 0.78, 0.72) * broadbox * 0.58;
 
     float3 lightDirection = normalize(float3((pointer.x - 0.5) * 0.84, (0.5 - pointer.y) * 0.60, 0.88));
     float diffuse = max(dot(normal, lightDirection), 0.0);
     float breathingTint = 0.5 + 0.5 * sin(time * 0.68);
-    float3 pearl = mix(float3(0.31, 0.48, 0.61), float3(0.77, 0.80, 0.78), 0.30 + diffuse * 0.42);
-    pearl += float3(0.055, 0.050, 0.062) * (breathingTint * (0.55 + populated * 0.30));
+    float3 pearl = mix(float3(0.27, 0.46, 0.62), float3(0.98, 0.89, 0.86), 0.32 + diffuse * 0.44);
+    pearl += float3(0.065, 0.047, 0.067) * (breathingTint * (0.55 + populated * 0.30));
 
     float3 color = mix(pearl, environment, 0.23 + fresnel * 0.58);
-    color += float3(0.78, 0.84, 0.90) * softReflection * (0.15 + fresnel * 0.31);
+    color += float3(0.78, 0.88, 0.98) * softReflection * (0.28 + fresnel * 0.42);
 
     // Thin-film interference is an angle-sensitive spectral accent confined to
     // reflected light, with no static rainbow perimeter.
@@ -73,6 +73,6 @@ static float gaussian(float2 point, float2 center, float2 width) {
     // The SwiftUI Shape clips the fill to its outline; this feather softens
     // only the final antialiased edge of the pearly shell.
     float edge = 1.0 - smoothstep(0.985, 1.012, radius * organic);
-    float alpha = (0.86 + fresnel * 0.10 + softReflection * 0.025) * edge;
+    float alpha = (0.45 + fresnel * 0.24 + softReflection * 0.12) * edge;
     return half4(half3(color * alpha), half(alpha));
 }

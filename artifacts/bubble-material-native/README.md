@@ -2,7 +2,7 @@
 
 This is an isolated macOS SwiftUI prototype for the QuotaNotch collection bubble. It uses a SwiftUI shape filled by a Metal shader, with the shader evaluating a curved pearly shell, broad reflected environment lights, Fresnel response, and restrained thin-film color. Pointer movement rotates the reflected environment. The color shift is confined to reflected light; there is no painted moving spot or fixed rainbow rim.
 
-The sample has two resting states: an empty shell and a populated shell with exactly three abstract drifting flakes. Its arrival pass gathers the flakes, holds them for 0.9 seconds, then contracts them into the bubble's own center over 0.7 seconds. The sample contains no count, text, or file glyph inside the bubble.
+The sample has two resting states: an empty shell and a populated shell with exactly three abstract drifting flakes. Its arrival pass gathers the flakes, holds them for 0.9 seconds, then contracts them into the bubble's own center over 0.7 seconds. The bubble stays free of marks and content; the small layered notch outline is shown separately in the preview window.
 
 ## Build and preview on macOS
 

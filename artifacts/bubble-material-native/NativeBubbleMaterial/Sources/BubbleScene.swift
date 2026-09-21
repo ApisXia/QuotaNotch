@@ -51,9 +51,6 @@ struct BubbleScene: View {
                 }
             }
 
-            DoubleBubbleMark()
-                .frame(width: 42, height: 42)
-                .opacity(0.72)
         }
     }
 }
@@ -119,9 +116,9 @@ private struct Flake: View {
     private let phases = [0.20, 2.25, 4.12]
 
     var body: some View {
-        let angle = angles[index] + sin(time * 0.31 + phases[index]) * 0.12
+        let angle = angles[index] + sin(time * 0.27 + phases[index]) * 0.12
         let radius = 52 * (1 - gather) + 12 * gather + CGFloat(sin(time * 0.52 + phases[index]) * 3)
-        let opacity = 0.54 + 0.23 * (0.5 + 0.5 * sin(time * 0.78 + phases[index]))
+        let opacity = 0.24 + 0.70 * (0.5 + 0.5 * sin(time * 0.34 + phases[index]))
 
         Capsule()
             .fill(
@@ -146,7 +143,7 @@ private struct Flake: View {
 
 /// A quiet two-layer notch mark: the rear loop disappears under the softly
 /// filled front loop, so the outlines never read as crossing wire circles.
-private struct DoubleBubbleMark: View {
+struct DoubleBubbleMark: View {
     var body: some View {
         ZStack {
             RearBubbleArc()

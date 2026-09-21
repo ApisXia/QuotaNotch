@@ -75,6 +75,9 @@ struct InteractiveBubbleLab: View {
             .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
 
             HStack(spacing: 14) {
+                DoubleBubbleMark()
+                    .frame(width: 28, height: 28)
+                    .accessibilityLabel("Layered bubble notch symbol")
                 Toggle("Flakes", isOn: Binding(
                     get: { populated },
                     set: { value in
