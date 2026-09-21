@@ -442,7 +442,8 @@ final class BubbleShelfStore: ObservableObject {
                 storageIssue = "The saved shelf uses an unsupported format."
                 return
             }
-            var restored = BubbleShelfRules.restoring(manifest.items)
+            let normalized = BubbleShelfRules.restoring(manifest.items)
+            var restored = normalized
             for index in restored.indices {
                 switch restored[index].kind {
                 case .file, .folder:
@@ -462,6 +463,10 @@ final class BubbleShelfStore: ObservableObject {
                 }
             }
             items = restored
+            // Preserve a decodable manifest when sanitizing malformed,
+            // duplicate, or over-cap entries before writing the repaired one.
+            // Availability/bookmark refreshes alone do not require a backup.
+            if normalized != manifest.items { preserveExistingManifest = true }
             if manifest.items != restored { _ = persist() }
             pruneUnreferencedOwnedImages()
         } catch {

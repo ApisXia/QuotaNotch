@@ -66,6 +66,18 @@ final class BubbleShelfTests: XCTestCase {
         XCTAssertEqual(result.items.count, 2)
     }
 
+    func testDuplicatePathPromotionUpdatesChangedFileKind() {
+        let path = URL(fileURLWithPath: "/tmp/shelf-kind-change")
+        let folder = BubbleShelfItem(kind: .folder, title: "Folder", resourceURL: path)
+        let file = BubbleShelfItem(kind: .file, title: "File", resourceURL: path)
+
+        let result = BubbleShelfRules.inserting(file, into: [folder])
+
+        XCTAssertEqual(result.insertion, .duplicate(folder.id))
+        XCTAssertEqual(result.items.first?.kind, .file)
+        XCTAssertEqual(result.items.first?.id, folder.id)
+    }
+
     func testFailedImportIsClearlyMarkedAndDoesNotReportSuccess() {
         var result = BubbleShelfImportResult()
         result.reject("Unsupported pasteboard format.")

@@ -168,6 +168,7 @@ enum BubbleShelfRules {
             var promoted = existing
             promoted.addedAt = candidate.addedAt
             if candidate.kind == .file || candidate.kind == .folder || candidate.kind == .url {
+                promoted.kind = candidate.kind
                 promoted.title = candidate.title
                 promoted.resourceURL = candidate.resourceURL
                 promoted.bookmarkData = candidate.bookmarkData
