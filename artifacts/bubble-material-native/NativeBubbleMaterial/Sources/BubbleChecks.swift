@@ -202,6 +202,12 @@ enum BubbleChecks {
               NotchDemoState.pausedEmpty.shortStatus == NotchDemoState.pausedPopulated.shortStatus,
               NotchDemoState.allCases.count == 4,
               NotchContentCountBoard.counts == [0, 1, 2, 3, 4],
+              NotchMinimalGeometry.width == 16,
+              NotchMinimalGeometry.filesHeight == 10,
+              NotchMinimalGeometry.gap == 2,
+              NotchMinimalGeometry.bubbleDiameter == 14,
+              NotchMinimalGeometry.totalHeight == 26,
+              NotchMinimalGeometry.totalHeight <= 28,
               NotchSignalMotion.cycleDuration == 4,
               abs(NotchSignalMotion.angle(at: 0) + 3 * .pi / 4) < 0.0001,
               abs(NotchSignalMotion.angle(at: 2) - NotchSignalMotion.angle(at: 0) - .pi) < 0.0001,
@@ -225,6 +231,22 @@ enum BubbleChecks {
                   rectangles.map(\.id) == Array(0..<count),
                   rectangles.allSatisfy({ $0.width > 0 && $0.height > 0 && (0...1).contains($0.opacity) }) else {
                 throw BubbleLabError.capture("the \(count)-item notch mark must contain exactly \(count) plain rectangles")
+            }
+            let minimalDiameter = NotchMinimalGeometry.filesHeight
+            for placement in rectangles {
+                let halfWidth = minimalDiameter * placement.width * 0.5
+                let halfHeight = minimalDiameter * placement.height * 0.5
+                let radians = CGFloat(placement.rotation * .pi / 180)
+                let extentX = abs(cos(radians)) * halfWidth + abs(sin(radians)) * halfHeight
+                let extentY = abs(sin(radians)) * halfWidth + abs(cos(radians)) * halfHeight
+                let centerX = NotchMinimalGeometry.width * placement.x
+                let centerY = minimalDiameter * placement.y
+                guard centerX - extentX >= -0.001,
+                      centerY - extentY >= -0.001,
+                      centerX + extentX <= NotchMinimalGeometry.width + 0.001,
+                      centerY + extentY <= NotchMinimalGeometry.filesHeight + 0.001 else {
+                    throw BubbleLabError.capture("the minimal presentation's \(count)-rectangle top group must stay inside its reserved 16×10pt row")
+                }
             }
             for size in [CGFloat(14), CGFloat(20), CGFloat(54), CGFloat(144)] {
                 let diameter = NotchBubbleGeometry.frontDiameter(for: size)

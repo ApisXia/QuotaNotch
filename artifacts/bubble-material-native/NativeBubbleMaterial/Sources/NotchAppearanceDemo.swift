@@ -259,6 +259,38 @@ private struct PlainRectangleStack: View {
     }
 }
 
+enum NotchMinimalGeometry {
+    static let width: CGFloat = 16
+    static let filesHeight: CGFloat = 10
+    static let gap: CGFloat = 2
+    static let bubbleDiameter: CGFloat = 14
+    static let totalHeight: CGFloat = filesHeight + gap + bubbleDiameter
+}
+
+struct MinimalStackedBubble: View {
+    let width: CGFloat
+    let itemCount: Int
+    let isArmed: Bool
+    let time: TimeInterval
+
+    private var scale: CGFloat { width / NotchMinimalGeometry.width }
+    private var filesHeight: CGFloat { NotchMinimalGeometry.filesHeight * scale }
+    private var gap: CGFloat { NotchMinimalGeometry.gap * scale }
+    private var bubbleDiameter: CGFloat { NotchMinimalGeometry.bubbleDiameter * scale }
+
+    var body: some View {
+        VStack(spacing: gap) {
+            PlainRectangleStack(itemCount: itemCount)
+                .frame(width: width, height: filesHeight)
+
+            NotchPreviewGlyph(size: bubbleDiameter, itemCount: 0, isArmed: isArmed, time: time)
+                .frame(width: bubbleDiameter, height: bubbleDiameter)
+        }
+        .frame(width: width, height: NotchMinimalGeometry.totalHeight * scale)
+        .accessibilityLabel(itemCount == 0 ? "极简气泡，无预览" : "极简气泡，上方有 \(itemCount) 个矩形预览")
+    }
+}
+
 struct NotchAppearanceBoard: View {
     static let size = CGSize(width: 1040, height: 558)
     static let movieScale: CGFloat = 0.84
@@ -328,7 +360,12 @@ private struct NotchAppearanceCell: View {
     var body: some View {
         VStack(spacing: 5) {
             HStack(spacing: 8) {
-                NotchPreviewGlyph(size: 54, itemCount: state.itemCount, isArmed: state.isArmed, time: time)
+                if presentation == .minimal {
+                    MinimalStackedBubble(width: 38, itemCount: state.itemCount, isArmed: state.isArmed, time: time)
+                        .frame(width: 38, height: NotchMinimalGeometry.totalHeight * 38 / NotchMinimalGeometry.width)
+                } else {
+                    NotchPreviewGlyph(size: 54, itemCount: state.itemCount, isArmed: state.isArmed, time: time)
+                }
                 VStack(alignment: .leading, spacing: 4) {
                     Text(state.shortStatus)
                         .font(.system(size: 11, weight: .semibold, design: .rounded))
@@ -374,8 +411,8 @@ private struct NotchHardwareSample: View {
                                 .font(.system(size: 18, weight: .medium))
                                 .foregroundStyle(.white.opacity(0.40))
                             Rectangle().fill(.white.opacity(0.22)).frame(width: 0.7, height: 16)
-                            NotchPreviewGlyph(size: 14, itemCount: displayedCount, isArmed: state.isArmed, time: time)
-                                .frame(width: 16, height: 18)
+                            MinimalStackedBubble(width: NotchMinimalGeometry.width, itemCount: displayedCount, isArmed: state.isArmed, time: time)
+                                .frame(width: NotchMinimalGeometry.width, height: NotchMinimalGeometry.totalHeight)
                         }
                     } else {
                         NotchPreviewGlyph(size: 20, itemCount: displayedCount, isArmed: state.isArmed, time: time)
@@ -423,7 +460,7 @@ private struct NotchHardwareSample: View {
 }
 
 struct NotchContentCountBoard: View {
-    static let size = CGSize(width: 1040, height: 480)
+    static let size = CGSize(width: 1040, height: 560)
     static let counts = NotchRectangleLayout.counts
 
     let time: TimeInterval
@@ -465,7 +502,12 @@ struct NotchContentCountBoard: View {
                             .frame(width: 66, alignment: .leading)
                         ForEach(NotchDemoPresentation.allCases) { presentation in
                             HStack(spacing: 11) {
-                                NotchPreviewGlyph(size: 52, itemCount: count, isArmed: true, time: time)
+                                if presentation == .minimal {
+                                    MinimalStackedBubble(width: 52, itemCount: count, isArmed: true, time: time)
+                                        .frame(width: 52, height: NotchMinimalGeometry.totalHeight * 52 / NotchMinimalGeometry.width)
+                                } else {
+                                    NotchPreviewGlyph(size: 52, itemCount: count, isArmed: true, time: time)
+                                }
                                 NotchHardwareSample(
                                     presentation: presentation,
                                     state: count == 0 ? .receivingEmpty : .receivingPopulated,
