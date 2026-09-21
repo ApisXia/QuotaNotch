@@ -9,6 +9,19 @@ static float studioLobe(float3 ray, float3 center, float angularWidth) {
     return exp(-(normalizedAngle * normalizedAngle));
 }
 
+static float studioRibbon(float3 ray, float3 center, float2 angularSize) {
+    float3 forward = normalize(center);
+    float3 across = normalize(cross(float3(0.0, 1.0, 0.0), forward));
+    float3 along = normalize(cross(forward, across));
+    float viewDepth = max(dot(normalize(ray), forward), 0.001);
+    float2 coordinates = float2(
+        atan2(dot(ray, across), viewDepth),
+        atan2(dot(ray, along), viewDepth)
+    );
+    float2 normalized = coordinates / angularSize;
+    return exp(-dot(normalized, normalized));
+}
+
 [[ stitchable ]] half4 pearlFilm(
     float2 position,
     float4 bounds,
@@ -51,19 +64,23 @@ static float studioLobe(float3 ray, float3 center, float angularWidth) {
     ));
 
     float sky = smoothstep(-0.42, 0.70, rotatedDirection.y);
-    float coolBox = studioLobe(rotatedDirection, float3(-0.70, 0.56, 0.45), 0.42);
-    float warmBox = studioLobe(rotatedDirection, float3(0.63, -0.46, 0.62), 0.45);
-    float coolCore = studioLobe(rotatedDirection, float3(-0.70, 0.56, 0.45), 0.17);
-    float warmCore = studioLobe(rotatedDirection, float3(0.63, -0.46, 0.62), 0.19);
+    // The key is a stretched studio ribbon near the reflected outer third;
+    // the opposite fill is a smaller, softer rounded source.
+    float3 coolSource = float3(-0.72, 0.68, 0.14);
+    float3 warmSource = float3(0.65, -0.54, 0.53);
+    float coolBox = studioRibbon(rotatedDirection, coolSource, float2(0.15, 0.40));
+    float warmBox = studioLobe(rotatedDirection, warmSource, 0.29);
+    float coolCore = studioRibbon(rotatedDirection, coolSource, float2(0.055, 0.19));
+    float warmCore = studioLobe(rotatedDirection, warmSource, 0.13);
     float illuminated = saturate(coolBox * 0.72 + warmBox * 0.64 + coolCore + warmCore);
     float3 environment = mix(float3(0.40, 0.49, 0.61), float3(0.82, 0.77, 0.75), sky);
     environment += float3(0.94, 1.02, 1.10) * coolBox * 2.2;
-    environment += float3(1.10, 0.88, 0.78) * warmBox * 1.8;
+    environment += float3(1.10, 0.88, 0.78) * warmBox * 1.4;
 
     float3 lightDirection = normalize(float3((pointer.x - 0.5) * 1.10, (0.5 - pointer.y) * 0.82, 0.86));
     float diffuse = max(dot(normal, lightDirection), 0.0);
     float breathingTint = 0.5 + 0.5 * sin(time * 0.68);
-    float3 pearl = mix(float3(0.78, 0.83, 0.89), float3(0.99, 0.95, 0.92), 0.28 + diffuse * 0.36);
+    float3 pearl = mix(float3(0.50, 0.63, 0.75), float3(0.88, 0.88, 0.88), 0.24 + diffuse * 0.42);
     pearl += float3(0.030, 0.024, 0.034) * (breathingTint * (0.55 + populated * 0.30));
 
     // Thin-film interference appears only inside illuminated reflections.
@@ -76,7 +93,7 @@ static float studioLobe(float3 ray, float3 center, float angularWidth) {
 
     // Keep the softly tinted transmitted body separate from Fresnel reflection
     // so the interior stays airy while edge reflections retain their own light.
-    float bodyAlpha = 0.17 + diffuse * 0.025 + breathing * 0.006;
+    float bodyAlpha = 0.12 + diffuse * 0.020 + breathing * 0.005;
     float reflectionAlpha = fresnel * 0.88;
     float baseAlpha = reflectionAlpha + bodyAlpha * (1.0 - reflectionAlpha);
     float3 basePremultiplied = pearl * bodyAlpha * (1.0 - reflectionAlpha)
@@ -86,8 +103,8 @@ static float studioLobe(float3 ray, float3 center, float angularWidth) {
     // 4% normal-incidence Fresnel level. Broad lobes carry the curved sheen;
     // their narrower cores give the surface a polished highlight. Both remain
     // attached to reflected rays, so cursor motion turns the environment.
-    float coolCoverage = coolBox * 0.16 + coolCore * 0.28;
-    float warmCoverage = warmBox * 0.14 + warmCore * 0.26;
+    float coolCoverage = coolBox * 0.20 + coolCore * 0.40;
+    float warmCoverage = warmBox * 0.10 + warmCore * 0.14;
     float softboxCoverage = saturate(coolCoverage + warmCoverage);
     float3 softboxColor = (
         float3(0.78, 0.90, 1.00) * coolCoverage
