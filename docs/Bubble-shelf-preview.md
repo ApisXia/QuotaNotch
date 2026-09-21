@@ -8,11 +8,11 @@ This guide describes how to use the QuotaNotch Shelf preview and what it support
 
 1. 安装并打开 QuotaNotch。打开刘海，在标签栏选择“收纳 / Shelf”。
 2. 在 Shelf 页面手动打开“接收 / Receiving”。它默认关闭；暂停接收会保留已经保存的内容。
-3. 如果系统要求授权，请在“系统设置 → 隐私与安全性 → 辅助功能”允许 QuotaNotch。Finder 的额外读取授权只应在你明确执行 Finder 选择读取操作后按系统提示允许；被动接收不会自行请求 Automation 授权。
+3. 如果系统要求授权，请在“系统设置 → 隐私与安全性 → 辅助功能”允许 QuotaNotch。打开接收后，在 Shelf 设置的“Finder 文件选择”行点击“允许读取 Finder”，再按系统提示允许 Automation；如果拒绝，按页面提示允许后重试。被动接收不会自行请求 Automation 授权。
 
 1. Install and open QuotaNotch. Open the notch and choose the Shelf tab.
 2. Turn on the Receiving switch in Shelf. It is off by default; pausing keeps items already saved.
-3. If macOS asks for permission, allow QuotaNotch in System Settings → Privacy & Security → Accessibility. Finder’s additional selection access should be approved only after you explicitly start a Finder selection read; passive receiving does not request Automation consent.
+3. If macOS asks for permission, allow QuotaNotch in System Settings → Privacy & Security → Accessibility. After turning on Receiving, click “Allow Finder Access” in the Shelf settings’ “Finder file selection” row, then follow the Automation prompt. If access is denied, follow the page’s retry guidance. Passive receiving does not request Automation consent.
 
 ## 使用 / Use
 
