@@ -3,6 +3,13 @@ import Foundation
 
 /// Small deterministic rules shared by the global-event collector and its tests.
 enum BubbleCollectorPolicy {
+    static func selectedText(in value: String, location: Int, length: Int) -> String? {
+        guard location >= 0, length > 0 else { return nil }
+        let nsRange = NSRange(location: location, length: length)
+        guard let range = Range(nsRange, in: value) else { return nil }
+        return String(value[range])
+    }
+
     static func shouldPersistPausedStartup(hasBeenConfigured: Bool) -> Bool {
         hasBeenConfigured
     }
@@ -13,12 +20,15 @@ enum BubbleCollectorPolicy {
         ownProcessID: Int32,
         isSecureField: Bool,
         oldFingerprint: String?,
-        newFingerprint: String?
+        newFingerprint: String?,
+        hasVisiblePresentation: Bool = false,
+        allowUnchangedSelection: Bool = false
     ) -> Bool {
         guard receiving, !isSecureField,
               let sourceProcessID, sourceProcessID != ownProcessID,
               let newFingerprint, !newFingerprint.isEmpty else { return false }
         return oldFingerprint != newFingerprint
+            || (allowUnchangedSelection && !hasVisiblePresentation)
     }
 
     static func shouldPreviewDrag(
@@ -59,8 +69,8 @@ enum BubbleCollectorGeometry {
         anchor: CGPoint,
         size: CGSize,
         visibleFrames: [CGRect],
-        cursorClearance: CGFloat = 24,
-        gap: CGFloat = 18
+        cursorClearance: CGFloat = 26,
+        gap: CGFloat = 24
     ) -> CGRect {
         let fallback = CGRect(origin: .zero, size: size)
         guard !visibleFrames.isEmpty else { return fallback }

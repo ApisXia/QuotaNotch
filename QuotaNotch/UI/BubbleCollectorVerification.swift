@@ -22,6 +22,47 @@ enum BubbleCollectorVerification {
         }
 
         let anchor = CGPoint(x: 320, y: 320)
+        controller.applySelectionSampleForTesting(
+            contents: [.text(fixtureText)], sourceProcessID: 42,
+            fingerprint: "text-fixture", anchor: anchor
+        )
+        guard case .selection(let firstSelection) = controller.presentation else {
+            throw VerificationError("Injected AX sample did not create a selection candidate")
+        }
+        let firstGeneration = firstSelection.generation
+        controller.applySelectionSampleForTesting(
+            contents: [.text(fixtureText)], sourceProcessID: 42,
+            fingerprint: "text-fixture", anchor: anchor
+        )
+        guard case .selection(let unchangedSelection) = controller.presentation,
+              unchangedSelection.generation == firstGeneration else {
+            throw VerificationError("A visible candidate was not deduplicated")
+        }
+        controller.applySelectionSampleForTesting(
+            contents: [.text(fixtureText)], sourceProcessID: 43,
+            fingerprint: "text-fixture", anchor: anchor
+        )
+        guard case .selection(let switchedSourceSelection) = controller.presentation,
+              switchedSourceSelection.generation != firstGeneration else {
+            throw VerificationError("A selection from another source was incorrectly suppressed")
+        }
+        controller.hidePreviewForTesting()
+        controller.applySelectionSampleForTesting(
+            contents: [.text(fixtureText)], sourceProcessID: 43,
+            fingerprint: "text-fixture", anchor: anchor
+        )
+        guard controller.presentation == nil else {
+            throw VerificationError("An unrelated input re-presented an unchanged selection")
+        }
+        controller.applySelectionSampleForTesting(
+            contents: [.text(fixtureText)], sourceProcessID: 43,
+            fingerprint: "text-fixture", anchor: anchor,
+            allowUnchangedSelection: true
+        )
+        guard case .selection = controller.presentation else {
+            throw VerificationError("Explicit activation did not re-present the current selection")
+        }
+        controller.hidePreviewForTesting()
         controller.showSelectionForTesting(contents: [.text(fixtureText)], anchor: anchor)
         guard let panel = collectorPanel() else {
             throw VerificationError("Collector panel was not created for an injected selection")

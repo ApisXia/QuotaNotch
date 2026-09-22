@@ -91,13 +91,16 @@ final class BubbleCollectorController: ObservableObject {
     private var pendingSelectionRead: DispatchWorkItem?
     private var expirationTask: Task<Void, Never>?
     private var generation: UInt64 = 0
-    private var previousFingerprint: String?
+    private var previousSelectionKey: String?
     private var lastDragPasteboardChangeCount: Int?
     private var panelController: BubbleCollectorFloatingPanel?
     private var isRunning = false
     private var selectionReadRevision: UInt64 = 0
+    private var selectionInputRevision: UInt64 = 0
     private var finderPermissionRevision: UInt64 = 0
     private var stationaryAnchor: CGPoint?
+    private var lastExternalProcessID: pid_t?
+    private var lastExternalBundleID: String?
 
     private init() {}
 
@@ -118,7 +121,7 @@ final class BubbleCollectorController: ObservableObject {
             statusMessage = "Allow QuotaNotch in System Settings → Privacy & Security → Accessibility, then choose Retry."
             return
         }
-        beginMonitoring()
+        beginMonitoring(sampleCurrentSelection: true)
         #endif
     }
 
@@ -144,7 +147,7 @@ final class BubbleCollectorController: ObservableObject {
             statusMessage = "Receiving is on, but Accessibility access is needed to detect selections. Choose Retry to continue."
             return
         }
-        beginMonitoring()
+        beginMonitoring(sampleCurrentSelection: false)
         #endif
     }
 
@@ -152,6 +155,8 @@ final class BubbleCollectorController: ObservableObject {
         store.isReceiving = false
         generation &+= 1
         stopMonitors(clearPresentation: true)
+        lastExternalProcessID = nil
+        lastExternalBundleID = nil
         finderAutomationState = .notRequested
         availability = .disabled
         statusMessage = nil
@@ -165,7 +170,7 @@ final class BubbleCollectorController: ObservableObject {
             statusMessage = "Accessibility access is still off. Enable QuotaNotch in System Settings, then retry."
             return
         }
-        beginMonitoring()
+        beginMonitoring(sampleCurrentSelection: true)
     }
 
     /// Explicitly tests Finder automation after the user asks for it. Passive
@@ -186,22 +191,34 @@ final class BubbleCollectorController: ObservableObject {
             permissionGranted: false
         ) else { return }
 
-        let expectedGeneration = generation
-        selectionReadRevision &+= 1
-        let revision = selectionReadRevision
+        cancelPendingSelectionRead()
+        finderPermissionRevision &+= 1
+        let permissionRevision = finderPermissionRevision
         finderAutomationState = .notRequested
         statusMessage = "Requesting Finder access…"
         axQueue.async { [weak self] in
             let result = FinderAppleEventReader.determinePermission(askUserIfNeeded: true)
             DispatchQueue.main.async { [weak self] in
                 guard let self, self.isRunning, self.store.isReceiving,
-                      self.generation == expectedGeneration,
-                      self.selectionReadRevision == revision else { return }
+                      self.finderPermissionRevision == permissionRevision else { return }
                 switch result {
                 case .succeeded:
                     self.finderAutomationState = .enabled
                     self.availability = .ready
-                    self.statusMessage = "Finder access is enabled. Select files in Finder or drag them into the bubble."
+                    self.statusMessage = "Finder access is enabled. Select files in Finder or click the nearby bubble."
+                    if let finder = NSWorkspace.shared.runningApplications.first(where: {
+                        $0.bundleIdentifier == "com.apple.finder"
+                    }) {
+                        self.previousSelectionKey = nil
+                        self.enqueueSelectionRead(
+                            for: finder.processIdentifier,
+                            bundleID: finder.bundleIdentifier,
+                            baseline: false,
+                            requireFrontmost: false,
+                            finderAutomation: .explicit,
+                            allowUnchangedSelection: true
+                        )
+                    }
                 case .failed(let message):
                     self.finderAutomationState = .denied
                     self.availability = .selectionUnavailable
@@ -275,6 +292,24 @@ final class BubbleCollectorController: ObservableObject {
         scheduleExpiration(for: selection.generation, after: 18)
     }
 
+    /// Feeds a synthetic AX sample through the same deduplication and
+    /// presentation path used by mouse/key-triggered reads.
+    func applySelectionSampleForTesting(contents: [BubbleCollectorPayload],
+                                        sourceProcessID: Int32,
+                                        fingerprint: String,
+                                        anchor: CGPoint,
+                                        allowUnchangedSelection: Bool = false) {
+        let sample = AXSelectionSample(
+            fingerprint: fingerprint,
+            payloads: Array(contents.prefix(80)),
+            omittedCount: 0,
+            anchor: anchor,
+            isSecureField: false
+        )
+        applySelectionSample(sample, from: sourceProcessID,
+                             allowUnchangedSelection: allowUnchangedSelection)
+    }
+
     func hidePreviewForTesting() {
         hideCandidate()
     }
@@ -283,39 +318,78 @@ final class BubbleCollectorController: ObservableObject {
     func shutdown() {
         generation &+= 1
         stopMonitors(clearPresentation: true)
+        lastExternalProcessID = nil
+        lastExternalBundleID = nil
         finderAutomationState = .notRequested
         availability = .disabled
     }
 
     // MARK: Event ingestion
 
-    private func beginMonitoring() {
+    private func beginMonitoring(sampleCurrentSelection: Bool) {
         guard !isRunning else {
             availability = .ready
             statusMessage = "Receiving is on. Select text or files, then click the nearby bubble to save."
+            if sampleCurrentSelection {
+                previousSelectionKey = nil
+                sampleCurrentFrontmostSelection(baseline: false, allowUnchangedSelection: true)
+            }
             return
         }
         isRunning = true
         generation &+= 1
         availability = .ready
         statusMessage = "Receiving is on. Select text or files, then click the nearby bubble to save."
-        // Establish a baseline without presenting or importing the current selection.
-        previousFingerprint = nil
+        previousSelectionKey = nil
         lastDragPasteboardChangeCount = NSPasteboard(name: .drag).changeCount
         refreshFinderAutomationPermission()
-        if let app = NSWorkspace.shared.frontmostApplication,
-           app.processIdentifier != ProcessInfo.processInfo.processIdentifier {
-            enqueueSelectionRead(for: app.processIdentifier, bundleID: app.bundleIdentifier, baseline: true)
-        }
         appActivationObserver = NSWorkspace.shared.notificationCenter.addObserver(
             forName: NSWorkspace.didActivateApplicationNotification, object: nil, queue: .main
         ) { [weak self] notification in
             guard let app = notification.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication else { return }
             Task { @MainActor [weak self] in self?.frontmostApplicationChanged(app) }
         }
-        eventMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseUp, .rightMouseUp, .keyUp, .leftMouseDragged]) { [weak self] event in
+        eventMonitor = NSEvent.addGlobalMonitorForEvents(matching: [
+            .leftMouseDown, .leftMouseUp, .rightMouseDown, .rightMouseUp,
+            .keyDown, .keyUp, .leftMouseDragged
+        ]) { [weak self] event in
             Task { @MainActor [weak self] in self?.handleGlobalEvent(event) }
         }
+        sampleCurrentFrontmostSelection(
+            baseline: !sampleCurrentSelection,
+            allowUnchangedSelection: sampleCurrentSelection
+        )
+    }
+
+    private func sampleCurrentFrontmostSelection(baseline: Bool, allowUnchangedSelection: Bool = false) {
+        let ownPID = ProcessInfo.processInfo.processIdentifier
+        let frontmost = NSWorkspace.shared.frontmostApplication
+        let app: (processID: pid_t, bundleID: String?, requireFrontmost: Bool)
+        if let frontmost, frontmost.processIdentifier != ownPID {
+            rememberExternalApplication(frontmost)
+            app = (frontmost.processIdentifier, frontmost.bundleIdentifier, true)
+        } else if let processID = lastExternalProcessID,
+                  let application = NSRunningApplication(processIdentifier: processID),
+                  !application.isTerminated {
+            app = (processID, lastExternalBundleID, false)
+        } else {
+            return
+        }
+        let explicitFinderRead = !app.requireFrontmost && app.bundleID == "com.apple.finder"
+        enqueueSelectionRead(
+            for: app.processID,
+            bundleID: app.bundleID,
+            baseline: baseline,
+            requireFrontmost: app.requireFrontmost,
+            finderAutomation: explicitFinderRead ? .explicit : nil,
+            allowUnchangedSelection: allowUnchangedSelection
+        )
+    }
+
+    private func rememberExternalApplication(_ app: NSRunningApplication) {
+        guard app.processIdentifier != ProcessInfo.processInfo.processIdentifier else { return }
+        lastExternalProcessID = app.processIdentifier
+        lastExternalBundleID = app.bundleIdentifier
     }
 
     /// Rehydrates Finder consent without prompting. The system permission is
@@ -350,8 +424,9 @@ final class BubbleCollectorController: ObservableObject {
 
     private func stopMonitors(clearPresentation: Bool) {
         isRunning = false
-        pendingSelectionRead?.cancel()
-        pendingSelectionRead = nil
+        selectionInputRevision &+= 1
+        finderPermissionRevision &+= 1
+        cancelPendingSelectionRead()
         expirationTask?.cancel()
         expirationTask = nil
         if let eventMonitor { NSEvent.removeMonitor(eventMonitor); self.eventMonitor = nil }
@@ -359,7 +434,7 @@ final class BubbleCollectorController: ObservableObject {
             NSWorkspace.shared.notificationCenter.removeObserver(appActivationObserver)
             self.appActivationObserver = nil
         }
-        previousFingerprint = nil
+        previousSelectionKey = nil
         lastDragPasteboardChangeCount = nil
         if clearPresentation {
             presentation = nil
@@ -369,14 +444,22 @@ final class BubbleCollectorController: ObservableObject {
 
     private func frontmostApplicationChanged(_ app: NSRunningApplication) {
         guard isRunning, store.isReceiving else { return }
+        rememberExternalApplication(app)
         guard app.processIdentifier != ProcessInfo.processInfo.processIdentifier else { return }
         // Never leave a preview from a prior application hanging over a new one.
         hideCandidate()
-        pendingSelectionRead?.cancel()
+        cancelPendingSelectionRead()
+        let activationInputRevision = selectionInputRevision
         let work = DispatchWorkItem { [weak self] in
             guard let self, self.isRunning,
+                  self.selectionInputRevision == activationInputRevision,
                   NSWorkspace.shared.frontmostApplication?.processIdentifier == app.processIdentifier else { return }
-            self.enqueueSelectionRead(for: app.processIdentifier, bundleID: app.bundleIdentifier, baseline: true)
+            self.enqueueSelectionRead(
+                for: app.processIdentifier,
+                bundleID: app.bundleIdentifier,
+                baseline: false,
+                allowUnchangedSelection: true
+            )
         }
         pendingSelectionRead = work
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.28, execute: work)
@@ -386,11 +469,20 @@ final class BubbleCollectorController: ObservableObject {
         guard isRunning, store.isReceiving,
               let frontmost = NSWorkspace.shared.frontmostApplication,
               frontmost.processIdentifier != ProcessInfo.processInfo.processIdentifier else { return }
+        rememberExternalApplication(frontmost)
+        selectionInputRevision &+= 1
+        cancelPendingSelectionRead()
         if event.type == .leftMouseDragged {
             handleDragPreview(from: frontmost, event: event)
             return
         }
-        pendingSelectionRead?.cancel()
+        if event.type == .leftMouseDown {
+            if presentation == nil { previousSelectionKey = nil }
+            return
+        }
+        if event.type == .rightMouseDown || event.type == .keyDown {
+            return
+        }
         let processID = frontmost.processIdentifier
         let work = DispatchWorkItem { [weak self] in
             guard let self, self.isRunning, self.store.isReceiving,
@@ -401,22 +493,35 @@ final class BubbleCollectorController: ObservableObject {
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.18, execute: work)
     }
 
-    private func enqueueSelectionRead(for processID: pid_t, bundleID: String?, baseline: Bool) {
+    private func cancelPendingSelectionRead() {
+        pendingSelectionRead?.cancel()
+        pendingSelectionRead = nil
+        selectionReadRevision &+= 1
+    }
+
+    private func enqueueSelectionRead(
+        for processID: pid_t,
+        bundleID: String?,
+        baseline: Bool,
+        requireFrontmost: Bool = true,
+        finderAutomation: FinderAutomationReadMode? = nil,
+        allowUnchangedSelection: Bool = false
+    ) {
         selectionReadRevision &+= 1
         let revision = selectionReadRevision
         let expectedGeneration = generation
         let anchor = NSEvent.mouseLocation
-        let finderAutomation: FinderAutomationReadMode = finderAutomationState == .enabled ? .enabled : .disabled
+        let readMode = finderAutomation ?? (finderAutomationState == .enabled ? .enabled : .disabled)
         axQueue.async { [weak self] in
             let result = AXSelectionReader.read(
                 processID: processID, bundleID: bundleID, fallbackAnchor: anchor,
-                finderAutomation: finderAutomation
+                finderAutomation: readMode
             )
             DispatchQueue.main.async { [weak self] in
                 guard let self, self.isRunning, self.store.isReceiving,
                       self.generation == expectedGeneration,
                       self.selectionReadRevision == revision,
-                      NSWorkspace.shared.frontmostApplication?.processIdentifier == processID else { return }
+                      !requireFrontmost || NSWorkspace.shared.frontmostApplication?.processIdentifier == processID else { return }
                 var finderFailureMessage: String?
                 switch result.finderAutomation {
                 case .notAttempted:
@@ -428,9 +533,19 @@ final class BubbleCollectorController: ObservableObject {
                     finderFailureMessage = message
                 }
                 if baseline {
-                    self.previousFingerprint = result.sample?.fingerprint
+                    self.previousSelectionKey = result.sample.map {
+                        self.selectionKey(for: $0, sourceProcessID: processID)
+                    }
+                } else if case .explicit = readMode, result.sample == nil {
+                    // Granting Finder permission is still a successful action
+                    // when Finder currently has no selection. Do not replace
+                    // the success state with a generic selection error.
                 } else {
-                    self.applySelectionSample(result.sample, from: processID)
+                    self.applySelectionSample(
+                        result.sample,
+                        from: processID,
+                        allowUnchangedSelection: allowUnchangedSelection
+                    )
                 }
                 if let finderFailureMessage {
                     self.statusMessage = finderFailureMessage
@@ -439,29 +554,36 @@ final class BubbleCollectorController: ObservableObject {
         }
     }
 
-    private func applySelectionSample(_ sample: AXSelectionSample?, from processID: pid_t) {
+    private func applySelectionSample(
+        _ sample: AXSelectionSample?,
+        from processID: pid_t,
+        allowUnchangedSelection: Bool = false
+    ) {
         guard let sample else {
-            previousFingerprint = nil
+            previousSelectionKey = nil
             if case .selection = presentation { hideCandidate() }
             availability = .selectionUnavailable
             statusMessage = "This app does not expose a readable text or file selection. Drag supported content into the bubble instead."
             return
         }
         if sample.isSecureField || sample.payloads.isEmpty {
-            previousFingerprint = sample.fingerprint
+            previousSelectionKey = nil
             if case .selection = presentation { hideCandidate() }
             return
         }
         let ownPID = ProcessInfo.processInfo.processIdentifier
         guard BubbleCollectorPolicy.shouldPresentSelection(
             receiving: store.isReceiving, sourceProcessID: processID, ownProcessID: ownPID,
-            isSecureField: sample.isSecureField, oldFingerprint: previousFingerprint,
-            newFingerprint: sample.fingerprint
+            isSecureField: sample.isSecureField,
+            oldFingerprint: previousSelectionKey,
+            newFingerprint: selectionKey(for: sample, sourceProcessID: processID),
+            hasVisiblePresentation: presentation != nil,
+            allowUnchangedSelection: allowUnchangedSelection
         ) else {
-            previousFingerprint = sample.fingerprint
+            previousSelectionKey = selectionKey(for: sample, sourceProcessID: processID)
             return
         }
-        previousFingerprint = sample.fingerprint
+        previousSelectionKey = selectionKey(for: sample, sourceProcessID: processID)
         generation &+= 1
         let snapshot = BubbleCollectorSelection(
             fingerprint: sample.fingerprint, sourceProcessID: processID,
@@ -477,6 +599,10 @@ final class BubbleCollectorController: ObservableObject {
         stationaryAnchor = snapshot.anchor
         ensurePanelController().present(anchor: snapshot.anchor)
         scheduleExpiration(for: snapshot.generation, after: 18)
+    }
+
+    private func selectionKey(for sample: AXSelectionSample, sourceProcessID: pid_t) -> String {
+        "\(sourceProcessID):\(sample.fingerprint)"
     }
 
     private func handleDragPreview(from application: NSRunningApplication, event: NSEvent) {
@@ -638,6 +764,8 @@ private enum AXSelectionReader {
     private static let maximumTraversalElements = 96
     private static let maximumChildElements = 24
     private static let maximumSelectionDepth = 8
+    private static let maximumTextHierarchyElements = 16
+    private static let maximumTextHierarchyDepth = 3
     private static let traversalBudgetSeconds = 0.20
 
     static func read(
@@ -651,7 +779,7 @@ private enum AXSelectionReader {
         }
         let application = AXUIElementCreateApplication(processID)
         if let focused = axElement(from: attribute(application, kAXFocusedUIElementAttribute)),
-           let sample = selectedText(from: focused, anchor: fallbackAnchor) {
+           let sample = selectedText(in: focused, anchor: fallbackAnchor) {
             return AXSelectionReadResult(sample: sample, finderAutomation: .notAttempted)
         }
         guard bundleID == finderBundleID else {
@@ -659,7 +787,7 @@ private enum AXSelectionReader {
         }
 
         if finderAutomation == .explicit {
-            return readFinderAutomation(processID: processID, anchor: fallbackAnchor)
+            return readFinderAutomation(processID: processID, anchor: fallbackAnchor, requireFrontmost: false)
         }
         if let sample = selectedFiles(in: application, anchor: fallbackAnchor) {
             return AXSelectionReadResult(sample: sample, finderAutomation: .notAttempted)
@@ -667,11 +795,12 @@ private enum AXSelectionReader {
         guard finderAutomation == .enabled else {
             return AXSelectionReadResult(sample: nil, finderAutomation: .notAttempted)
         }
-        return readFinderAutomation(processID: processID, anchor: fallbackAnchor)
+        return readFinderAutomation(processID: processID, anchor: fallbackAnchor, requireFrontmost: true)
     }
 
-    private static func readFinderAutomation(processID: pid_t, anchor: CGPoint) -> AXSelectionReadResult {
-        guard NSWorkspace.shared.frontmostApplication?.processIdentifier == processID else {
+    private static func readFinderAutomation(processID: pid_t, anchor: CGPoint,
+                                              requireFrontmost: Bool) -> AXSelectionReadResult {
+        guard !requireFrontmost || NSWorkspace.shared.frontmostApplication?.processIdentifier == processID else {
             return AXSelectionReadResult(sample: nil, finderAutomation: .notAttempted)
         }
         let permission = FinderAppleEventReader.determinePermission(askUserIfNeeded: false)
@@ -693,16 +822,71 @@ private enum AXSelectionReader {
         return AXSelectionReadResult(sample: sample, finderAutomation: .succeeded)
     }
 
+    private static func selectedText(in focusedElement: AXUIElement, anchor: CGPoint) -> AXSelectionSample? {
+        var queue: [(AXUIElement, Int)] = [(focusedElement, 0)]
+        var seen = Set<ObjectIdentifier>()
+        var cursor = 0
+        let deadline = Date().addingTimeInterval(traversalBudgetSeconds)
+        while cursor < queue.count, cursor < maximumTextHierarchyElements, Date() < deadline {
+            let (element, depth) = queue[cursor]
+            cursor += 1
+            guard seen.insert(ObjectIdentifier(element as AnyObject)).inserted else { continue }
+            let subrole = attribute(element, kAXSubroleAttribute) as? String
+            if subrole == kAXSecureTextFieldSubrole as String {
+                if depth == 0 {
+                    return AXSelectionSample(fingerprint: "secure", payloads: [], omittedCount: 0,
+                                             anchor: nil, isSecureField: true)
+                }
+                continue
+            }
+            if let sample = selectedText(from: element, anchor: anchor) {
+                return sample
+            }
+            guard depth < maximumTextHierarchyDepth else { continue }
+            if let parent = axElement(from: attribute(element, kAXParentAttribute)) {
+                queue.append((parent, depth + 1))
+            }
+            let children = axElements(from: attribute(element, kAXChildrenAttribute))
+            queue.append(contentsOf: children.prefix(8).map { ($0, depth + 1) })
+        }
+        return nil
+    }
+
     private static func selectedText(from element: AXUIElement, anchor: CGPoint) -> AXSelectionSample? {
         let subrole = attribute(element, kAXSubroleAttribute) as? String
         if subrole == kAXSecureTextFieldSubrole as String {
             return AXSelectionSample(fingerprint: "secure", payloads: [], omittedCount: 0, anchor: nil, isSecureField: true)
         }
-        guard let value = attribute(element, kAXSelectedTextAttribute) as? String,
+        guard let value = selectedTextValue(from: element),
               !value.isEmpty, value.utf8.count <= BubbleShelfRules.maximumTextBytes else { return nil }
         let fingerprint = "text:" + BubbleShelfItem.sha256(Data(value.utf8))
         return AXSelectionSample(fingerprint: fingerprint, payloads: [.text(value)], omittedCount: 0,
                                  anchor: anchor, isSecureField: false)
+    }
+
+    private static func selectedTextValue(from element: AXUIElement) -> String? {
+        if let value = stringValue(attribute(element, kAXSelectedTextAttribute)), !value.isEmpty {
+            return value
+        }
+        guard let rawRange = attribute(element, kAXSelectedTextRangeAttribute) else { return nil }
+        let rangeObject = rawRange as AnyObject
+        guard CFGetTypeID(rangeObject) == AXValueGetTypeID() else { return nil }
+        let rangeValue = rangeObject as! AXValue
+        guard
+              AXValueGetType(rangeValue) == .cfRange else { return nil }
+        var range = CFRange()
+        guard AXValueGetValue(rangeValue, .cfRange, &range),
+              let fullValue = stringValue(attribute(element, kAXValueAttribute)),
+              fullValue.utf8.count <= BubbleShelfRules.maximumTextBytes else { return nil }
+        return BubbleCollectorPolicy.selectedText(
+            in: fullValue, location: range.location, length: range.length
+        )
+    }
+
+    private static func stringValue(_ value: Any?) -> String? {
+        if let value = value as? String { return value }
+        if let value = value as? NSAttributedString { return value.string }
+        return nil
     }
 
     private static func selectedFiles(in application: AXUIElement, anchor: CGPoint) -> AXSelectionSample? {

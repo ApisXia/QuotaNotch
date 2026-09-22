@@ -2,6 +2,15 @@ import XCTest
 @testable import QuotaNotchCore
 
 final class BubbleCollectorPolicyTests: XCTestCase {
+    func testSelectedTextRangeExtractsOnlyTheBoundedSelection() {
+        XCTAssertEqual(BubbleCollectorPolicy.selectedText(in: "abcdef", location: 1, length: 3), "bcd")
+        XCTAssertNil(BubbleCollectorPolicy.selectedText(in: "abcdef", location: 1, length: 0))
+        XCTAssertNil(BubbleCollectorPolicy.selectedText(in: "abcdef", location: -1, length: 2))
+        XCTAssertNil(BubbleCollectorPolicy.selectedText(in: "abcdef", location: 5, length: 2))
+        XCTAssertEqual(BubbleCollectorPolicy.selectedText(in: "A😀BC", location: 1, length: 2), "😀")
+        XCTAssertNil(BubbleCollectorPolicy.selectedText(in: "A😀BC", location: 2, length: 1))
+    }
+
     func testFreshStartupDoesNotPersistPausedMode() {
         XCTAssertFalse(BubbleCollectorPolicy.shouldPersistPausedStartup(hasBeenConfigured: false))
         XCTAssertTrue(BubbleCollectorPolicy.shouldPersistPausedStartup(hasBeenConfigured: true))
@@ -27,6 +36,20 @@ final class BubbleCollectorPolicyTests: XCTestCase {
         XCTAssertFalse(BubbleCollectorPolicy.shouldPresentSelection(
             receiving: false, sourceProcessID: 42, ownProcessID: 7, isSecureField: false,
             oldFingerprint: nil, newFingerprint: "paused"
+        ))
+        XCTAssertFalse(BubbleCollectorPolicy.shouldPresentSelection(
+            receiving: true, sourceProcessID: 42, ownProcessID: 7, isSecureField: false,
+            oldFingerprint: "same", newFingerprint: "same", hasVisiblePresentation: true
+        ))
+        XCTAssertFalse(BubbleCollectorPolicy.shouldPresentSelection(
+            receiving: true, sourceProcessID: 42, ownProcessID: 7, isSecureField: false,
+            oldFingerprint: "same", newFingerprint: "same", hasVisiblePresentation: false,
+            allowUnchangedSelection: false
+        ))
+        XCTAssertTrue(BubbleCollectorPolicy.shouldPresentSelection(
+            receiving: true, sourceProcessID: 42, ownProcessID: 7, isSecureField: false,
+            oldFingerprint: "same", newFingerprint: "same", hasVisiblePresentation: false,
+            allowUnchangedSelection: true
         ))
     }
 
@@ -88,6 +111,7 @@ final class BubbleCollectorPolicyTests: XCTestCase {
         XCTAssertLessThanOrEqual(frame.maxY, right.maxY)
         XCTAssertGreaterThanOrEqual(frame.minX, right.minX)
         XCTAssertGreaterThanOrEqual(frame.minY, right.minY)
+        XCTAssertLessThanOrEqual(frame.maxY, 430 - 24)
         XCTAssertNotEqual(frame.origin, CGPoint(x: 0, y: 0))
     }
 }
