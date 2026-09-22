@@ -237,7 +237,10 @@ final class BubbleCollectorFloatingPanel {
             // alone so a Finder/file drag can enter the holder without making
             // the row disappear before performDragOperation.
             if releasedOutside && !wasDrag {
-                controller?.toggleExpanded()
+                // This monitor remains installed during the delayed reverse
+                // resize. Make the action idempotent so a second outside click
+                // cannot reopen the holder while that collapse is settling.
+                controller?.setExpanded(false)
             }
         default:
             break
@@ -467,15 +470,17 @@ struct BubbleCollectorPreview: View {
             syncPreviewGeometryIfNeeded()
         }
         .onChange(of: isExpanded) { _, expanded in
-            if !expanded, forcedPageIndex == nil {
-                // The compact stack always represents the newest shelf items;
-                // a page chosen while open must not leak into the closed ball.
-                pageIndex = 0
-            }
             withAnimation(.spring(response: 0.42, dampingFraction: 0.84)) {
                 expansionProgress = expanded ? 1 : 0
             }
             onExpansionChange?(expanded)
+        }
+        .onChange(of: expansionProgress) { _, progress in
+            guard !isExpanded, forcedPageIndex == nil, progress <= 0.02 else { return }
+            // Keep the selected page stable while cards travel back into the
+            // ball. Reset only once they are effectively hidden, so a quick
+            // reopen can cancel the collapse without swapping card identities.
+            pageIndex = 0
         }
         .onChange(of: contentIDs) { oldIDs, newIDs in
             let wasRemoval = newIDs.count < oldIDs.count
@@ -489,7 +494,7 @@ struct BubbleCollectorPreview: View {
     }
 
     private var effectivePageIndex: Int {
-        forcedPageIndex ?? pageIndex
+        forcedPageIndex ?? ((isExpanded || expansionProgress > 0.02) ? pageIndex : 0)
     }
 
     private func remove(_ payload: BubbleCollectorPayload) {
