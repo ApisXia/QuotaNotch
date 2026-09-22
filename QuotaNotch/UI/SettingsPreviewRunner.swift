@@ -19,6 +19,10 @@ struct SettingsPreviewRunner {
         try FileManager.default.createDirectory(at: output, withIntermediateDirectories: true)
         try BubbleShelfVerification.run()
         try BubbleCollectorVerification.run()
+        // Exercise the native two-wing gesture bridge before the expensive
+        // screenshot sequence. A routing failure should stop the preview job
+        // before it spends minutes producing unrelated artifacts.
+        try NotchGestureVerification.run()
         BubbleShelfStore.shared.resetPreviewConfiguration()
         let shelfPreviewFile = output.appendingPathComponent("shelf-preview.txt")
         let shelfPreviewNote = output.appendingPathComponent("shelf-preview-note.md")
@@ -128,7 +132,6 @@ struct SettingsPreviewRunner {
         try captureBubbleCollectorMotion(output: output)
         try captureBubbleClosedLayouts(output: output, fixtures: fixtures)
         try captureBubbleShelfAudioLayouts(output: output, fixtures: fixtures)
-        try NotchGestureVerification.run()
         try captureBubbleGlyphOrbit(output: output)
         try captureTaskPanel(output: output, fixtures: fixtures)
         for dark in [true, false] {
@@ -826,9 +829,22 @@ struct SettingsPreviewRunner {
                 ?? CGPoint(x: panel.frame.midX, y: panel.frame.midY)
             let ballCenter = CGPoint(x: globalCenter.x - panel.frame.minX,
                                      y: panel.frame.maxY - globalCenter.y)
-            let captureURL = output.appendingPathComponent(".holder-frame-\(UUID().uuidString).png")
+            let captureURL = output.appendingPathComponent("holder-frame-\(UUID().uuidString).png")
             defer { try? FileManager.default.removeItem(at: captureURL) }
-            let image = try captureCompositedWindow(panel, to: captureURL)
+            let image: CGImage
+            do {
+                image = try captureCompositedWindow(panel, to: captureURL)
+            } catch {
+                recordHolderCaptureFallback(output: output, context: "production holder motion", error: error)
+                guard let bitmap = content.bitmapImageRepForCachingDisplay(in: content.bounds) else {
+                    throw error
+                }
+                content.cacheDisplay(in: content.bounds, to: bitmap)
+                guard let fallbackImage = bitmap.cgImage else {
+                    throw error
+                }
+                image = fallbackImage
+            }
             return (image, content.bounds.size, ballCenter, globalCenter)
         }
 
@@ -1474,37 +1490,116 @@ struct SettingsPreviewRunner {
             window.close()
         }
         settle()
-        let captureURL = output.appendingPathComponent(".holder-static-\(UUID().uuidString).png")
+        let captureURL = output.appendingPathComponent("holder-static-\(UUID().uuidString).png")
         defer { try? FileManager.default.removeItem(at: captureURL) }
-        let image = try captureCompositedWindow(window, to: captureURL)
-        guard let png = NSBitmapImageRep(cgImage: image).representation(using: .png, properties: [:]) else {
-            fatalError("Missing composited holder PNG")
+        do {
+            let image = try captureCompositedWindow(window, to: captureURL)
+            guard let png = NSBitmapImageRep(cgImage: image).representation(using: .png, properties: [:]) else {
+                fatalError("Missing composited holder PNG")
+            }
+            try png.write(to: output.appendingPathComponent("\(name)-0.png"))
+        } catch {
+            recordHolderCaptureFallback(output: output, context: name, error: error)
+            try captureLayoutOnly(view, width: width, name: name, output: output, height: height)
         }
-        try png.write(to: output.appendingPathComponent("\(name)-0.png"))
     }
 
     @MainActor private static func captureCompositedWindow(_ window: NSWindow, to url: URL) throws -> CGImage {
         guard window.windowNumber > 0 else {
-            fatalError("Holder preview window has no WindowServer ID")
+            throw NSError(domain: "SettingsPreviewRunner", code: 2,
+                          userInfo: [NSLocalizedDescriptionKey: "Holder preview window has no WindowServer ID"])
         }
+
+        var diagnostics = ["WindowServer command-line capture requested"]
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/usr/sbin/screencapture")
         process.arguments = ["-x", "-o", "-l", String(window.windowNumber), "-t", "png", url.path]
+        let outputPipe = Pipe()
         let errorPipe = Pipe()
+        process.standardOutput = outputPipe
         process.standardError = errorPipe
         try process.run()
         process.waitUntilExit()
-        guard process.terminationStatus == 0 else {
-            let diagnostic = String(data: errorPipe.fileHandleForReading.readDataToEndOfFile(),
-                                    encoding: .utf8) ?? "unknown screencapture error"
-            throw NSError(domain: "SettingsPreviewRunner", code: 4,
-                          userInfo: [NSLocalizedDescriptionKey: "WindowServer holder capture failed: \(diagnostic)"])
+        let stdout = String(data: outputPipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
+        let stderr = String(data: errorPipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
+        let exists = FileManager.default.fileExists(atPath: url.path)
+        let byteCount = (try? Data(contentsOf: url).count) ?? 0
+        let stem = url.deletingPathExtension().lastPathComponent
+        let siblings = (try? FileManager.default.contentsOfDirectory(atPath: url.deletingLastPathComponent().path))?
+            .filter { $0.contains(stem) }
+            .sorted()
+            .joined(separator: ",") ?? ""
+        diagnostics.append("screencapture status=\(process.terminationStatus) exists=\(exists) bytes=\(byteCount)")
+        let stdoutDescription = stdout.isEmpty ? "<empty>" : stdout.trimmingCharacters(in: .whitespacesAndNewlines)
+        let stderrDescription = stderr.isEmpty ? "<empty>" : stderr.trimmingCharacters(in: .whitespacesAndNewlines)
+        let siblingsDescription = siblings.isEmpty ? "<none>" : siblings
+        diagnostics.append("stdout=\(stdoutDescription)")
+        diagnostics.append("stderr=\(stderrDescription)")
+        diagnostics.append("matching files=\(siblingsDescription)")
+        if process.terminationStatus == 0, exists,
+           let source = CGImageSourceCreateWithURL(url as CFURL, nil),
+           let image = CGImageSourceCreateImageAtIndex(source, 0, nil),
+           hasVisibleCapturePixels(image) {
+            return image
         }
-        guard let source = CGImageSourceCreateWithURL(url as CFURL, nil),
-              let image = CGImageSourceCreateImageAtIndex(source, 0, nil) else {
-            fatalError("WindowServer holder capture did not produce an image")
+        throw NSError(domain: "SettingsPreviewRunner", code: 4,
+                      userInfo: [NSLocalizedDescriptionKey: diagnostics.joined(separator: "; ")])
+    }
+
+    private static func hasVisibleCapturePixels(_ image: CGImage) -> Bool {
+        guard image.width > 1, image.height > 1,
+              let provider = image.dataProvider,
+              let data = provider.data,
+              let bytes = CFDataGetBytePtr(data) else {
+            return false
         }
-        return image
+        let length = CFDataGetLength(data)
+        for index in 0..<length where bytes[index] != 0 {
+            return true
+        }
+        return false
+    }
+
+    @MainActor private static func recordHolderCaptureFallback(output: URL,
+                                                                context: String,
+                                                                error: Error) {
+        let statusURL = output.appendingPathComponent("Bubble-holder-capture-status-layout-only.md")
+        let existing = (try? String(contentsOf: statusURL, encoding: .utf8)) ?? ""
+        guard !existing.contains("- \(context):") else { return }
+        let header = existing.isEmpty
+            ? "# Bubble holder capture status\n\n"
+                + "The WindowServer material capture was unavailable for one or more holder previews. "
+                + "Images from this run are **layout-only**; Metal reflections and SwiftUI blur were not verified.\n\n"
+            : existing
+        let line = "- \(context): \(error.localizedDescription)\n"
+        try? (header + line).write(to: statusURL, atomically: true, encoding: .utf8)
+    }
+
+    @MainActor private static func captureLayoutOnly<V: View>(_ view: V, width: CGFloat,
+                                                               name: String, output: URL,
+                                                               height: CGFloat) throws {
+        let size = NSSize(width: width, height: height)
+        let host = NSHostingView(rootView: view)
+        host.frame = NSRect(origin: .zero, size: size)
+        let window = NSWindow(contentRect: NSRect(origin: .zero, size: size),
+                              styleMask: [.borderless], backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false
+        window.contentView = host
+        window.orderFrontRegardless()
+        defer {
+            window.orderOut(nil)
+            window.contentView = nil
+            window.close()
+        }
+        settle()
+        guard let bitmap = host.bitmapImageRepForCachingDisplay(in: host.bounds) else {
+            fatalError("Missing layout-only holder bitmap")
+        }
+        host.cacheDisplay(in: host.bounds, to: bitmap)
+        guard let png = bitmap.representation(using: .png, properties: [:]) else {
+            fatalError("Missing layout-only holder PNG")
+        }
+        try png.write(to: output.appendingPathComponent("\(name)-0.png"))
     }
 
     @MainActor private static func capture<V: View>(_ view: V, width: CGFloat, name: String, output: URL, height: CGFloat = 600) throws {
