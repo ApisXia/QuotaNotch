@@ -5,7 +5,9 @@ import UniformTypeIdentifiers
 
 @MainActor
 final class BubbleCollectorFloatingPanel {
-    static let size = CGSize(width: 164, height: 164)
+    /// Keep a proportional margin around the 75pt material for its scaled
+    /// shadow while preserving the exact hit-target size of the bubble.
+    static let size = CGSize(width: 82, height: 82)
     private weak var controller: BubbleCollectorController?
     private var panel: BubbleCollectorPanel?
     private var host: NSHostingView<BubbleCollectorPreview>?
@@ -65,7 +67,7 @@ struct BubbleCollectorPreview: View {
     @State private var pointer = CGPoint(x: 0.5, y: 0.5)
     @State private var timelineStart = Date()
 
-    private let diameter: CGFloat = 150
+    private let diameter: CGFloat = 75
 
     init(controller: BubbleCollectorController, fixturePayloads: [BubbleCollectorPayload]? = nil,
          pointer: CGPoint = CGPoint(x: 0.5, y: 0.5)) {
@@ -94,11 +96,11 @@ struct BubbleCollectorPreview: View {
                 CollectorPreviewCards(payloads: payloads, diameter: diameter, store: store)
                     .opacity(Double(phase.contentOpacity))
                 shell.fill(shader)
-                    .overlay { shell.stroke(.white.opacity(0.30), lineWidth: 0.8) }
+                    .overlay { shell.stroke(.white.opacity(0.30), lineWidth: 0.4) }
             }
             .frame(width: diameter, height: diameter)
             .clipShape(shell)
-            .shadow(color: Color(red: 0.48, green: 0.70, blue: 0.84).opacity(0.24), radius: 13, y: 6)
+            .shadow(color: Color(red: 0.48, green: 0.70, blue: 0.84).opacity(0.24), radius: 6.5, y: 3)
             .scaleEffect(phase.scale)
             .opacity(Double(phase.opacity))
             .contentShape(Circle())
@@ -209,7 +211,7 @@ private struct CollectorPreviewCards: View {
                     .rotationEffect(.degrees(layout.4))
                     .opacity(layout.6)
                     .blur(radius: diameter * layout.5)
-                    .shadow(color: .black.opacity(0.18), radius: 2, y: 1)
+                    .shadow(color: .black.opacity(0.18), radius: 1, y: 0.5)
                     .position(x: diameter * (0.5 + layout.2), y: diameter * (0.5 + layout.3))
                     .zIndex(Double(3 - slot))
             }
@@ -276,7 +278,7 @@ private struct CollectorPreviewCard: View {
                 Image(nsImage: image).resizable().scaledToFill()
             } else if let text = displayText {
                 Text(text.trimmingCharacters(in: .whitespacesAndNewlines).prefix(68))
-                    .font(.system(size: max(6, diameter * 0.052), weight: .medium, design: .serif))
+                    .font(.system(size: max(3, diameter * 0.052), weight: .medium, design: .serif))
                     .foregroundStyle(Color(red: 0.18, green: 0.23, blue: 0.27))
                     .multilineTextAlignment(.leading)
                     .lineLimit(5)
@@ -291,10 +293,10 @@ private struct CollectorPreviewCard: View {
                     .background(Color(red: 0.92, green: 0.94, blue: 0.95).opacity(0.96))
             }
         }
-        .clipShape(RoundedRectangle(cornerRadius: max(3, diameter * 0.025), style: .continuous))
+        .clipShape(RoundedRectangle(cornerRadius: max(1.5, diameter * 0.025), style: .continuous))
         .overlay {
-            RoundedRectangle(cornerRadius: max(3, diameter * 0.025), style: .continuous)
-                .strokeBorder(.white.opacity(0.76), lineWidth: 0.65)
+            RoundedRectangle(cornerRadius: max(1.5, diameter * 0.025), style: .continuous)
+                .strokeBorder(.white.opacity(0.76), lineWidth: 0.325)
         }
         .task(id: payload.id) { refreshStoredImage() }
         .onReceive(store.objectWillChange) { _ in refreshStoredImage() }
