@@ -283,12 +283,42 @@ enum NotchGestureVerification {
         let dragLocal = dragHandle.convert(shelfDragPoint, from: nil)
         let downInSuperview = dragHandle.convert(downLocal, to: dragSuperview)
         let dragInSuperview = dragHandle.convert(dragLocal, to: dragSuperview)
-        let downHit = dragSuperview.hitTest(downInSuperview)
-        let dragHit = dragSuperview.hitTest(dragInSuperview)
-        let hitDiagnostic = "handleFrame=\(NSStringFromRect(dragHandle.frame)) down=\(NSStringFromPoint(downLocal)) drag=\(NSStringFromPoint(dragLocal)) downHit=\(String(describing: downHit.map { type(of: $0) })) dragHit=\(String(describing: dragHit.map { type(of: $0) })) exports=\(exportRequests)"
+        // hitTest(_:) itself receives a point in the receiver's superview
+        // coordinate system. Call the real handle directly with those
+        // translated points, then exercise the enclosing host's hit-test
+        // recursion using the equivalent window-to-host conversion.
+        let downHit = dragHandle.hitTest(downInSuperview)
+        let dragHit = dragHandle.hitTest(dragInSuperview)
+        let outsideLocal = NSPoint(x: dragHandle.bounds.maxX + 4,
+                                   y: dragHandle.bounds.midY)
+        let outsideInSuperview = dragHandle.convert(outsideLocal, to: dragSuperview)
+        let outsideHit = dragHandle.hitTest(outsideInSuperview)
+        let outsideWindowPoint = dragHandle.convert(outsideLocal, to: nil)
+        let hostHitDown: NSView?
+        let hostHitOutside: NSView?
+        if let hostSuperview = host.superview {
+            let hostDownLocal = host.convert(shelfDownPoint, from: nil)
+            let hostOutsideLocal = host.convert(outsideWindowPoint, from: nil)
+            hostHitDown = host.hitTest(host.convert(hostDownLocal, to: hostSuperview))
+            hostHitOutside = host.hitTest(host.convert(hostOutsideLocal, to: hostSuperview))
+        } else {
+            hostHitDown = host.hitTest(shelfDownPoint)
+            hostHitOutside = host.hitTest(outsideWindowPoint)
+        }
+        func typeName(_ view: NSView?) -> String {
+            view.map { String(describing: type(of: $0)) } ?? "nil"
+        }
+        func hitDiagnostic() -> String {
+            "handleFrame=\(NSStringFromRect(dragHandle.frame)) down=\(NSStringFromPoint(downLocal)) drag=\(NSStringFromPoint(dragLocal)) downHit=\(typeName(downHit)) dragHit=\(typeName(dragHit)) hostDown=\(typeName(hostHitDown)) hostOutside=\(typeName(hostHitOutside)) outside=\(NSStringFromPoint(outsideLocal)) exports=\(exportRequests)"
+        }
+        let downResolvedToHandle = downHit.map { $0 === dragHandle } ?? false
+        let dragResolvedToHandle = dragHit.map { $0 === dragHandle } ?? false
+        let hostResolvedDownToHandle = hostHitDown.map { $0 === dragHandle } ?? false
+        let hostResolvedOutsideToHandle = hostHitOutside.map { $0 === dragHandle } ?? false
         guard dragHandle.bounds.contains(downLocal), dragHandle.bounds.contains(dragLocal),
-              downHit === dragHandle, dragHit === dragHandle else {
-            throw failure("Shelf drag hit-test did not resolve to the native handle (\(hitDiagnostic))")
+              downResolvedToHandle, dragResolvedToHandle,
+              outsideHit == nil, hostResolvedDownToHandle, !hostResolvedOutsideToHandle else {
+            throw failure("Shelf drag hit-test did not resolve through the native view tree (\(hitDiagnostic()))")
         }
         if let down = mouseEvent(.leftMouseDown, location: shelfDownPoint, window: window,
                                  timestamp: 5, number: 3),
@@ -299,7 +329,7 @@ enum NotchGestureVerification {
             window.sendEvent(down); window.sendEvent(drag); window.sendEvent(up)
         }
         guard exportRequests == 1 else {
-            throw failure("Shelf mouse drag did not remain an export gesture (\(hitDiagnostic))")
+            throw failure("Shelf mouse drag did not remain an export gesture (\(hitDiagnostic()))")
         }
 
         guard activity.compactExpanded == false else {

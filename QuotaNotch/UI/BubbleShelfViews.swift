@@ -843,6 +843,7 @@ private final class BubbleInteractionView: NSView, NSDraggingSource {
         // system. Convert before checking our local bounds so the handle
         // continues to receive a click/drag when its SwiftUI stack is offset.
         let localPoint = superview.map { convert(point, from: $0) } ?? point
+        guard !isHidden, !isHiddenOrHasHiddenAncestor, alphaValue > 0 else { return nil }
         return bounds.contains(localPoint) ? self : nil
     }
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
@@ -958,6 +959,7 @@ private struct BubbleShelfDropTarget: NSViewRepresentable {
         var onImport: ((BubbleShelfImportResult) -> Void)?
         override func hitTest(_ point: NSPoint) -> NSView? {
             let localPoint = superview.map { convert(point, from: $0) } ?? point
+            guard !isHidden, !isHiddenOrHasHiddenAncestor, alphaValue > 0 else { return nil }
             return bounds.contains(localPoint) ? self : nil
         }
         override func draggingEntered(_ sender: NSDraggingInfo) -> NSDragOperation { .copy }
