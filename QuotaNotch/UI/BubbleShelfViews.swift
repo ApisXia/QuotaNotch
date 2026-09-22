@@ -575,7 +575,8 @@ private final class BubbleShelfHorizontalScrollView: NSView {
     private func installMonitor() {
         guard monitor == nil else { return }
         monitor = NSEvent.addLocalMonitorForEvents(matching: .scrollWheel) { [weak self] event in
-            guard let self, let window = self.window, event.window === window else { return event }
+            guard let self, let window = self.window, let eventWindow = event.window,
+                  eventWindow === window else { return event }
             let point = self.convert(event.locationInWindow, from: nil)
             guard self.bounds.contains(point) else { return event }
             let phase: BubbleScrollPhase
