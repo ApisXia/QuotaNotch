@@ -127,4 +127,16 @@ final class BubbleNotchLayoutTests: XCTestCase {
         XCTAssertFalse(BubbleHorizontalScrollPolicy.isDominantHorizontal(deltaX: 3, deltaY: 4))
         XCTAssertTrue(BubbleHorizontalScrollPolicy.isDominantHorizontal(deltaX: 4, deltaY: 2))
     }
+
+    func testShelfPairAxisLockDoesNotChangeAfterFirstClaim() {
+        var lock = BubbleShelfPairScrollAxisLock()
+        XCTAssertTrue(lock.claim(.horizontal))
+        XCTAssertEqual(lock.axis, .horizontal)
+        XCTAssertTrue(lock.claim(.horizontal))
+        XCTAssertFalse(lock.claim(.vertical))
+        lock.reset()
+        XCTAssertNil(lock.axis)
+        XCTAssertTrue(lock.claim(.vertical))
+        XCTAssertFalse(lock.claim(.horizontal))
+    }
 }

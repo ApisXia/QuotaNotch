@@ -128,6 +128,7 @@ struct SettingsPreviewRunner {
         try captureBubbleCollectorMotion(output: output)
         try captureBubbleClosedLayouts(output: output, fixtures: fixtures)
         try captureBubbleShelfAudioLayouts(output: output, fixtures: fixtures)
+        try captureBubbleShelfGestureRouting(output: output)
         try captureBubbleGlyphOrbit(output: output)
         try captureTaskPanel(output: output, fixtures: fixtures)
         for dark in [true, false] {
@@ -1180,6 +1181,123 @@ struct SettingsPreviewRunner {
             }
         }
         print("Verified Shelf/audio fixed-footprint swaps, outermost-left order, paused/playing audio, quota/task combinations, and heights 24/32/38")
+    }
+
+    /// Exercise the actual pair NSView and its installed local scroll monitor.
+    /// The preview feeds the production processScroll helper rather than
+    /// posting global CGEvents, so the test stays deterministic and does not
+    /// request input-monitor permission. A horizontal claim consumes its
+    /// diagonal tail; a vertical claim remains deliverable to the inner Shelf
+    /// view while blocking a later horizontal swap. Mouse events are sent to
+    /// the same window to prove the scroll monitor leaves clicks and drags
+    /// alone.
+    @MainActor private static func captureBubbleShelfGestureRouting(output: URL) throws {
+        var horizontalActions: [Bool] = []
+        var audioClicks = 0
+        var auditedFrames: [String: CGRect] = [:]
+        let state = BubbleShelfCompactState(
+            itemCount: 1,
+            isReceiving: false,
+            onOpen: {},
+            onVerticalSwipe: { _ in },
+            writers: { [] },
+            onHorizontalSwipe: { horizontalActions.append($0) })
+        let root = BubbleShelfAudioPair(
+            shelf: state,
+            arrangement: .shelfMinimalAudioWidget,
+            height: 32,
+            widgetWidth: QuotaCompactMetrics.iconSize(height: 32),
+            onAudioOpen: { audioClicks += 1 })
+            .frame(width: QuotaCompactMetrics.iconSize(height: 32) + 26, height: 32)
+            .onPreferenceChange(NotchModuleFrameAuditKey.self) { auditedFrames = $0 }
+        let size = NSSize(width: QuotaCompactMetrics.iconSize(height: 32) + 26, height: 32)
+        let host = NSHostingView(rootView: root)
+        let window = NSWindow(contentRect: NSRect(origin: .zero, size: size),
+                              styleMask: [.borderless], backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false
+        window.contentView = host
+        window.setContentSize(size)
+        window.makeKeyAndOrderFront(nil)
+        defer {
+            window.orderOut(nil); window.contentView = nil; window.close()
+        }
+        settle(); host.layoutSubtreeIfNeeded(); settle()
+        guard let router = descendants(host).compactMap({ $0 as? BubbleShelfHorizontalScrollView }).first else {
+            throw NSError(domain: "SettingsPreviewRunner", code: 1,
+                          userInfo: [NSLocalizedDescriptionKey: "Shelf/audio pair has no native local-scroll view"])
+        }
+        verifyPresentation(router.window === window && router.hasLocalMonitorForPreview,
+                           "Shelf/audio pair did not install its native local scroll monitor")
+
+        func feed(_ dx: CGFloat, _ dy: CGFloat, _ phase: BubbleScrollPhase,
+                  _ timestamp: TimeInterval, momentum: Bool = false) -> Bool {
+            router.processPreviewScroll(deltaX: dx, deltaY: dy, phase: phase,
+                                        isMomentum: momentum, timestamp: timestamp)
+        }
+
+        // Horizontal first: after the swap claim, the Y tail must be consumed
+        // and cannot reach BubbleInteractionView's receive toggle.
+        verifyPresentation(!feed(-2, 0, .began, 1.0), "Pair consumed a pre-threshold horizontal sample")
+        verifyPresentation(feed(-4, 0, .changed, 1.05), "Pair did not consume its horizontal claim")
+        verifyPresentation(feed(0, 8, .changed, 1.10), "Horizontal claim leaked a vertical tail")
+        verifyPresentation(!feed(0, 0, .ended, 1.20), "Horizontal end was not delivered for nested reset")
+        verifyPresentation(horizontalActions == [true], "Horizontal-first sequence did not swap exactly once")
+
+        // Vertical first: the inner receive action stays eligible, but a later
+        // X sample is consumed and cannot swap the pair.
+        verifyPresentation(!feed(0, 2, .began, 2.0), "Pair consumed a pre-threshold vertical sample")
+        verifyPresentation(!feed(0, 3, .changed, 2.05), "Vertical receive claim was hidden by the outer monitor")
+        verifyPresentation(feed(-8, 0, .changed, 2.10), "Vertical claim allowed a later horizontal swap")
+        verifyPresentation(!feed(0, 0, .ended, 2.20), "Vertical end was consumed instead of delivered")
+        verifyPresentation(horizontalActions == [true], "Vertical-first sequence changed horizontal arrangement")
+
+        // The opposite horizontal direction still works after the shared lock
+        // resets at the end of the previous gesture.
+        verifyPresentation(!feed(2, 0, .began, 3.0), "Pair consumed a pre-threshold reverse sample")
+        verifyPresentation(feed(4, 0, .changed, 3.05), "Pair did not claim the reverse horizontal direction")
+        verifyPresentation(!feed(0, 0, .ended, 3.20), "Reverse horizontal end was not delivered for nested reset")
+        verifyPresentation(horizontalActions == [true, false], "Pair did not support both horizontal directions")
+
+        guard let album = auditedFrames["album"] else {
+            throw NSError(domain: "SettingsPreviewRunner", code: 2,
+                          userInfo: [NSLocalizedDescriptionKey: "Shelf/audio pair did not publish its audio hit frame"])
+        }
+        var mouseEventCount = 0
+        let mouseMonitor = NSEvent.addLocalMonitorForEvents(matching: [.leftMouseDown, .leftMouseDragged, .leftMouseUp]) { event in
+            mouseEventCount += 1
+            return event
+        }
+        defer { if let mouseMonitor { NSEvent.removeMonitor(mouseMonitor) } }
+        func mouseEvent(_ type: NSEvent.EventType, location: NSPoint, timestamp: TimeInterval,
+                        number: Int, pressure: Float) throws -> NSEvent {
+            guard let event = NSEvent.mouseEvent(with: type, location: location,
+                                                 modifierFlags: [], timestamp: timestamp,
+                                                 windowNumber: window.windowNumber, context: nil,
+                                                 eventNumber: number, clickCount: 1, pressure: pressure) else {
+                throw NSError(domain: "SettingsPreviewRunner", code: 3,
+                              userInfo: [NSLocalizedDescriptionKey: "Could not synthesize Shelf/audio mouse event"])
+            }
+            return event
+        }
+        let audioPoint = NSPoint(x: album.midX, y: album.midY)
+        window.sendEvent(try mouseEvent(.leftMouseDown, location: audioPoint, timestamp: 4.0, number: 1, pressure: 1))
+        window.sendEvent(try mouseEvent(.leftMouseUp, location: audioPoint, timestamp: 4.01, number: 2, pressure: 0))
+        verifyPresentation(audioClicks == 1, "Audio click was intercepted by the Shelf scroll monitor")
+
+        // The Shelf's drag recognizer still receives mouse movement. Its test
+        // fixture has no writers, so it exercises routing without opening a
+        // real drag session or touching the user's pasteboard.
+        let shelfPoint = NSPoint(x: 7, y: size.height * 0.5)
+        let dragPoint = NSPoint(x: 18, y: size.height * 0.5 + 1)
+        window.sendEvent(try mouseEvent(.leftMouseDown, location: shelfPoint, timestamp: 5.0, number: 3, pressure: 1))
+        window.sendEvent(try mouseEvent(.leftMouseDragged, location: dragPoint, timestamp: 5.05, number: 4, pressure: 1))
+        window.sendEvent(try mouseEvent(.leftMouseUp, location: dragPoint, timestamp: 5.10, number: 5, pressure: 0))
+        verifyPresentation(mouseEventCount >= 5, "Native mouse click/drag events did not reach the full pair")
+        verifyPresentation(horizontalActions == [true, false], "Mouse drag changed Shelf/audio arrangement")
+
+        let report = "Shelf/audio local monitor: X→Y consumed, Y→X locked vertical, both horizontal directions passed; audio click and mouse drag remained deliverable.\n"
+        try Data(report.utf8).write(to: output.appendingPathComponent("Notch-shelf-audio-gesture-routing.txt"))
+        print("Verified Shelf/audio local monitor axis lock, both directions, audio click, and Shelf drag routing")
     }
 
     @MainActor private static func verifyCatRubRegion() throws {

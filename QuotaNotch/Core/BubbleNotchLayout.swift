@@ -168,6 +168,30 @@ enum BubbleHorizontalScrollPolicy {
     }
 }
 
+/// The pair-wide scroll router owns one axis for the lifetime of a gesture.
+/// The Shelf/audio pair has two nested receivers (the outer swap monitor and
+/// the inner Shelf swipe view), so keeping this lock outside either reducer
+/// prevents a diagonal tail from being interpreted twice.
+enum BubbleShelfPairScrollAxis: Equatable {
+    case horizontal
+    case vertical
+}
+
+struct BubbleShelfPairScrollAxisLock {
+    private(set) var axis: BubbleShelfPairScrollAxis?
+
+    mutating func reset() { axis = nil }
+
+    @discardableResult
+    mutating func claim(_ candidate: BubbleShelfPairScrollAxis) -> Bool {
+        guard let axis else {
+            axis = candidate
+            return true
+        }
+        return axis == candidate
+    }
+}
+
 /// Stateful horizontal scroll reducer. Mouse drags remain reserved for export;
 /// this reducer is fed only by AppKit scroll-wheel events.
 struct BubbleHorizontalScrollState {

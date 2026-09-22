@@ -561,11 +561,17 @@ private struct BubbleShelfHorizontalScrollMonitor: NSViewRepresentable {
     }
 }
 
-private final class BubbleShelfHorizontalScrollView: NSView {
+final class BubbleShelfHorizontalScrollView: NSView {
     var onSwipe: ((Bool) -> Void)?
     private var monitor: Any?
     private var lastClaimTimestamp: TimeInterval = 0
+    private var lastVerticalClaimTimestamp: TimeInterval = 0
+    private var lastEventTimestamp: TimeInterval?
     private var gesture = BubbleHorizontalScrollState()
+    private var verticalGesture = BubbleScrollGestureState()
+    private var axisLock = BubbleShelfPairScrollAxisLock()
+
+    var hasLocalMonitorForPreview: Bool { monitor != nil }
 
     override func viewDidMoveToWindow() {
         super.viewDidMoveToWindow()
@@ -575,37 +581,120 @@ private final class BubbleShelfHorizontalScrollView: NSView {
     private func installMonitor() {
         guard monitor == nil else { return }
         monitor = NSEvent.addLocalMonitorForEvents(matching: .scrollWheel) { [weak self] event in
-            guard let self, let window = self.window, let eventWindow = event.window,
-                  eventWindow === window else { return event }
-            let point = self.convert(event.locationInWindow, from: nil)
-            guard self.bounds.contains(point) else { return event }
-            let phase: BubbleScrollPhase
-            if event.phase.isEmpty { phase = .none }
-            else if event.phase.contains(.began) { phase = .began }
-            else if event.phase.contains(.ended) || event.phase.contains(.cancelled) { phase = .ended }
-            else { phase = .changed }
-            if phase == .ended {
-                _ = self.gesture.update(deltaX: 0, deltaY: 0, phase: .ended,
-                                         isMomentum: false, timestamp: event.timestamp,
-                                         lastClaimTimestamp: self.lastClaimTimestamp)
-            } else if event.momentumPhase.isEmpty,
-                      BubbleHorizontalScrollPolicy.isDominantHorizontal(deltaX: event.scrollingDeltaX,
-                                                                         deltaY: event.scrollingDeltaY),
-                      let towardLeft = self.gesture.update(deltaX: event.scrollingDeltaX,
-                                                           deltaY: event.scrollingDeltaY,
-                                                           phase: phase, isMomentum: false,
-                                                           timestamp: event.timestamp,
-                                                           lastClaimTimestamp: self.lastClaimTimestamp) {
-                self.lastClaimTimestamp = event.timestamp
-                self.onSwipe?(towardLeft)
+            guard let self, let window = self.window else { return event }
+            let phase = Self.scrollPhase(for: event)
+            guard let eventWindow = event.window, eventWindow === window else {
+                if phase == .began || phase == .ended { self.resetGesture() }
+                return event
             }
-            return event
+            let point = self.convert(event.locationInWindow, from: nil)
+            guard self.bounds.contains(point) else {
+                if phase == .began || phase == .ended { self.resetGesture() }
+                return event
+            }
+            let consumed = self.processScroll(deltaX: event.scrollingDeltaX,
+                                               deltaY: event.scrollingDeltaY,
+                                               phase: phase,
+                                               isMomentum: !event.momentumPhase.isEmpty,
+                                               timestamp: event.timestamp)
+            return consumed ? nil : event
         }
+    }
+
+    private static func scrollPhase(for event: NSEvent) -> BubbleScrollPhase {
+        if event.phase.isEmpty { return .none }
+        if event.phase.contains(.began) { return .began }
+        if event.phase.contains(.ended) || event.phase.contains(.cancelled) { return .ended }
+        return .changed
+    }
+
+    private func resetGesture() {
+        _ = gesture.update(deltaX: 0, deltaY: 0, phase: .ended,
+                           isMomentum: false, timestamp: lastEventTimestamp ?? 0,
+                           lastClaimTimestamp: lastClaimTimestamp)
+        _ = verticalGesture.update(deltaX: 0, deltaY: 0, phase: .ended,
+                                   isMomentum: false, timestamp: lastEventTimestamp ?? 0,
+                                   lastClaimTimestamp: lastVerticalClaimTimestamp)
+        axisLock.reset()
+        lastEventTimestamp = nil
+    }
+
+    /// Routes one scroll sample for both the AppKit monitor and settings
+    /// preview. The outer monitor consumes a horizontal gesture after its
+    /// claim, while a vertical claim is passed through to the inner Shelf
+    /// receiver so its existing receive toggle still fires.
+    @discardableResult
+    func processScroll(deltaX: CGFloat, deltaY: CGFloat, phase: BubbleScrollPhase,
+                       isMomentum: Bool, timestamp: TimeInterval) -> Bool {
+        if phase == .began {
+            // A new trackpad gesture is authoritative even when the previous
+            // gesture's end sample was outside this view's bounds.
+            resetGesture()
+        }
+        if phase == .ended {
+            resetGesture()
+            // Deliver the end sample so BubbleInteractionView can clear its
+            // own accumulator. It never fires an action for `.ended`.
+            return false
+        }
+
+        if phase == .none,
+           let lastEventTimestamp,
+           timestamp - lastEventTimestamp >= 0.45 {
+            resetGesture()
+        }
+        self.lastEventTimestamp = timestamp
+
+        switch axisLock.axis {
+        case .horizontal:
+            // Once the outer pair has swapped, keep the diagonal tail away
+            // from BubbleInteractionView until the gesture ends.
+            return true
+        case .vertical:
+            // The inner receiver must see vertical samples, but a later
+            // horizontal tail cannot start a second action.
+            return BubbleHorizontalScrollPolicy.isDominantHorizontal(deltaX: deltaX, deltaY: deltaY)
+        case nil:
+            break
+        }
+
+        guard !isMomentum else { return false }
+        if BubbleHorizontalScrollPolicy.isDominantHorizontal(deltaX: deltaX, deltaY: deltaY) {
+            if let towardLeft = gesture.update(deltaX: deltaX, deltaY: deltaY, phase: phase,
+                                               isMomentum: false, timestamp: timestamp,
+                                               lastClaimTimestamp: lastClaimTimestamp) {
+                axisLock.claim(.horizontal)
+                lastClaimTimestamp = timestamp
+                onSwipe?(towardLeft)
+                return true
+            }
+            return false
+        }
+        guard BubbleScrollPolicy.isDominantVertical(deltaX: deltaX, deltaY: deltaY) else {
+            return false
+        }
+        if verticalGesture.update(deltaX: deltaX, deltaY: deltaY, phase: phase,
+                                  isMomentum: false, timestamp: timestamp,
+                                  lastClaimTimestamp: lastVerticalClaimTimestamp) != nil {
+            axisLock.claim(.vertical)
+            lastVerticalClaimTimestamp = timestamp
+        }
+        return false
+    }
+
+    /// Settings-preview hook that drives the same reducer as the AppKit local
+    /// monitor without posting synthetic global events or requiring a desktop
+    /// input permission.
+    @discardableResult
+    func processPreviewScroll(deltaX: CGFloat, deltaY: CGFloat, phase: BubbleScrollPhase,
+                              isMomentum: Bool = false, timestamp: TimeInterval) -> Bool {
+        processScroll(deltaX: deltaX, deltaY: deltaY, phase: phase,
+                      isMomentum: isMomentum, timestamp: timestamp)
     }
 
     private func removeMonitor() {
         if let monitor { NSEvent.removeMonitor(monitor); self.monitor = nil }
-        gesture = BubbleHorizontalScrollState()
+        resetGesture()
     }
 
     // Deinitializers are nonisolated in Swift 6; remove the AppKit observer
