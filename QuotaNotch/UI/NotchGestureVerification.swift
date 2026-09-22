@@ -92,42 +92,80 @@ enum NotchGestureVerification {
         }
 
         // Derive event points from the actual bridge bounds rather than from
-        // fixture constants. This catches a transparent overlay or a shifted
-        // full-wing frame that would otherwise make the reducer appear valid.
-        let leftPoint = shelfBridge.convert(NSPoint(x: shelfBridge.bounds.midX,
-                                                    y: shelfBridge.bounds.midY), to: nil)
-        let rightPoint = rightBridge.convert(NSPoint(x: rightBridge.bounds.midX,
-                                                     y: rightBridge.bounds.midY), to: nil)
+        // fixture constants. Use both ends of each real wing: a transparent
+        // overlay or shifted frame must not make the reducer appear valid at
+        // only one convenient midpoint.
+        let leftLeadingPoint = shelfBridge.convert(NSPoint(x: shelfBridge.bounds.width * 0.18,
+                                                           y: shelfBridge.bounds.midY), to: nil)
+        let leftTrailingPoint = shelfBridge.convert(NSPoint(x: shelfBridge.bounds.width * 0.82,
+                                                            y: shelfBridge.bounds.midY), to: nil)
+        let rightLeadingPoint = rightBridge.convert(NSPoint(x: rightBridge.bounds.width * 0.18,
+                                                            y: rightBridge.bounds.midY), to: nil)
+        let rightTrailingPoint = rightBridge.convert(NSPoint(x: rightBridge.bounds.width * 0.82,
+                                                             y: rightBridge.bounds.midY), to: nil)
+
+        // AppKit sends the same local scroll event through every installed
+        // monitor. Offer each sample to both production bridges so only the
+        // bridge whose actual bounds contain the event can consume or act.
+        func routeBoth(x: CGFloat, y: CGFloat, at time: TimeInterval,
+                       phase: BubbleScrollPhase, momentum: Bool = false,
+                       location: NSPoint) -> (left: Bool, right: Bool) {
+            let left = shelfBridge.handleScroll(x: x, y: y, at: time, phase: phase,
+                                                momentum: momentum, eventWindow: window,
+                                                location: location)
+            let right = rightBridge.handleScroll(x: x, y: y, at: time, phase: phase,
+                                                 momentum: momentum, eventWindow: window,
+                                                 location: location)
+            return (left, right)
+        }
         var timestamp = 1.0
 
         // Slow trackpad samples must accumulate across the gesture. A second
         // pair of samples in the opposite direction proves the bridge is not
         // hard-coded to one side.
-        _ = shelfBridge.handleScroll(x: -2, y: 0, at: timestamp, phase: .none,
-                                     eventWindow: window, location: leftPoint)
+        var routed = routeBoth(x: -2, y: 0, at: timestamp, phase: .none,
+                               location: leftLeadingPoint)
+        guard routed.left, !routed.right else {
+            throw failure("Left-wing event was consumed by the wrong bridge")
+        }
         timestamp += 0.05
-        _ = shelfBridge.handleScroll(x: -2, y: 0, at: timestamp, phase: .none,
-                                     eventWindow: window, location: leftPoint)
+        routed = routeBoth(x: -2, y: 0, at: timestamp, phase: .none,
+                           location: leftLeadingPoint)
+        guard routed.left, !routed.right else {
+            throw failure("Left-wing event was consumed by the wrong bridge")
+        }
         timestamp += 0.05
-        _ = shelfBridge.handleScroll(x: -2, y: 0, at: timestamp, phase: .none,
-                                     eventWindow: window, location: leftPoint)
+        routed = routeBoth(x: -2, y: 0, at: timestamp, phase: .none,
+                           location: leftLeadingPoint)
+        guard routed.left, !routed.right else {
+            throw failure("Left-wing event was consumed by the wrong bridge")
+        }
         timestamp += 0.05
-        _ = shelfBridge.handleScroll(x: 0, y: 0, at: timestamp, phase: .ended,
-                                     eventWindow: window, location: leftPoint)
+        _ = routeBoth(x: 0, y: 0, at: timestamp, phase: .ended,
+                      location: leftLeadingPoint)
 
         let leftCountBeforeRight = leftActions.count
         timestamp = 2.0
-        _ = rightBridge.handleScroll(x: 2, y: 0, at: timestamp, phase: .none,
-                                     eventWindow: window, location: rightPoint)
+        routed = routeBoth(x: 2, y: 0, at: timestamp, phase: .none,
+                           location: rightTrailingPoint)
+        guard !routed.left, routed.right else {
+            throw failure("Right-wing event was consumed by the wrong bridge")
+        }
         timestamp += 0.05
-        _ = rightBridge.handleScroll(x: 2, y: 0, at: timestamp, phase: .none,
-                                     eventWindow: window, location: rightPoint)
+        routed = routeBoth(x: 2, y: 0, at: timestamp, phase: .none,
+                           location: rightTrailingPoint)
+        guard !routed.left, routed.right else {
+            throw failure("Right-wing event was consumed by the wrong bridge")
+        }
         timestamp += 0.05
-        _ = rightBridge.handleScroll(x: 2, y: 0, at: timestamp, phase: .none,
-                                     eventWindow: window, location: rightPoint)
+        routed = routeBoth(x: 2, y: 0, at: timestamp, phase: .none,
+                           location: rightTrailingPoint)
+        guard !routed.left, routed.right else {
+            throw failure("Right-wing event was consumed by the wrong bridge")
+        }
         timestamp += 0.05
-        _ = rightBridge.handleScroll(x: 0, y: 0, at: timestamp, phase: .ended,
-                                     eventWindow: window, location: rightPoint)
+        _ = routeBoth(x: 0, y: 0, at: timestamp, phase: .ended,
+                      location: rightTrailingPoint)
         guard activity.compactExpanded else {
             throw failure("Right-wing production dock did not expand after a rightward scroll")
         }
@@ -140,12 +178,15 @@ enum NotchGestureVerification {
         // action belongs to the point's pair, never to both bridges at once.
         timestamp = 1.8
         for delta in [CGFloat(2), CGFloat(2), CGFloat(2)] {
-            _ = shelfBridge.handleScroll(x: delta, y: 0, at: timestamp, phase: .none,
-                                         eventWindow: window, location: leftPoint)
+            routed = routeBoth(x: delta, y: 0, at: timestamp, phase: .none,
+                               location: leftTrailingPoint)
+            guard routed.left, !routed.right else {
+                throw failure("Left reverse event was consumed by the wrong bridge")
+            }
             timestamp += 0.05
         }
-        _ = shelfBridge.handleScroll(x: 0, y: 0, at: timestamp, phase: .ended,
-                                     eventWindow: window, location: leftPoint)
+        _ = routeBoth(x: 0, y: 0, at: timestamp, phase: .ended,
+                      location: leftTrailingPoint)
         guard activity.compactExpanded else {
             throw failure("Left-wing scroll changed the right quota/task layout")
         }
@@ -153,12 +194,15 @@ enum NotchGestureVerification {
         let leftCountBeforeFinalRight = leftActions.count
         timestamp = 2.8
         for delta in [CGFloat(-2), CGFloat(-2), CGFloat(-2)] {
-            _ = rightBridge.handleScroll(x: delta, y: 0, at: timestamp, phase: .none,
-                                         eventWindow: window, location: rightPoint)
+            routed = routeBoth(x: delta, y: 0, at: timestamp, phase: .none,
+                               location: rightLeadingPoint)
+            guard !routed.left, routed.right else {
+                throw failure("Right reverse event was consumed by the wrong bridge")
+            }
             timestamp += 0.05
         }
-        _ = rightBridge.handleScroll(x: 0, y: 0, at: timestamp, phase: .ended,
-                                     eventWindow: window, location: rightPoint)
+        _ = routeBoth(x: 0, y: 0, at: timestamp, phase: .ended,
+                      location: rightLeadingPoint)
         guard !activity.compactExpanded else {
             throw failure("Right-wing production dock did not compact after a leftward scroll")
         }
@@ -177,17 +221,29 @@ enum NotchGestureVerification {
         // create a second pair swap.
         let leftCountBeforeVertical = leftActions.count
         timestamp = 3.0
-        let verticalFirst = shelfBridge.handleScroll(x: 0, y: 2, at: timestamp, phase: .began,
-                                                     eventWindow: window, location: leftPoint)
+        routed = routeBoth(x: 0, y: 2, at: timestamp, phase: .began,
+                           location: leftTrailingPoint)
+        let verticalFirst = routed.left
+        guard !routed.right else {
+            throw failure("Right bridge consumed a left-wing vertical event")
+        }
         timestamp += 0.05
-        let verticalSecond = shelfBridge.handleScroll(x: 0, y: 3, at: timestamp, phase: .changed,
-                                                      eventWindow: window, location: leftPoint)
+        routed = routeBoth(x: 0, y: 3, at: timestamp, phase: .changed,
+                           location: leftTrailingPoint)
+        let verticalSecond = routed.left
+        guard !routed.right else {
+            throw failure("Right bridge consumed a left-wing vertical event")
+        }
         timestamp += 0.05
-        let horizontalTail = shelfBridge.handleScroll(x: -9, y: 0, at: timestamp, phase: .changed,
-                                                      eventWindow: window, location: leftPoint)
+        routed = routeBoth(x: -9, y: 0, at: timestamp, phase: .changed,
+                           location: leftTrailingPoint)
+        let horizontalTail = routed.left
+        guard !routed.right else {
+            throw failure("Right bridge consumed a left-wing diagonal tail")
+        }
         timestamp += 0.05
-        _ = shelfBridge.handleScroll(x: 0, y: 0, at: timestamp, phase: .ended,
-                                     eventWindow: window, location: leftPoint)
+        _ = routeBoth(x: 0, y: 0, at: timestamp, phase: .ended,
+                      location: leftTrailingPoint)
         guard !verticalFirst, !verticalSecond, horizontalTail,
               shelfBridge.currentAxisForPreview == nil,
               leftActions.count == leftCountBeforeVertical else {
