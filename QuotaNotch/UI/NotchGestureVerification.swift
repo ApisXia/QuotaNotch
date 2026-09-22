@@ -273,6 +273,23 @@ enum NotchGestureVerification {
         // real 54pt pair and therefore exercised a click, not a drag.
         let shelfDragPoint = shelfBridge.convert(NSPoint(x: shelfBridge.bounds.width * 0.28,
                                                          y: shelfBridge.bounds.midY + 1), to: nil)
+        let dragHandle = descendants(of: host).first {
+            String(describing: type(of: $0)).contains("BubbleInteractionView")
+        }
+        guard let dragHandle, let dragSuperview = dragHandle.superview else {
+            throw failure("Shelf drag handle was not present in the native view tree")
+        }
+        let downLocal = dragHandle.convert(shelfDownPoint, from: nil)
+        let dragLocal = dragHandle.convert(shelfDragPoint, from: nil)
+        let downInSuperview = dragHandle.convert(downLocal, to: dragSuperview)
+        let dragInSuperview = dragHandle.convert(dragLocal, to: dragSuperview)
+        let downHit = dragSuperview.hitTest(downInSuperview)
+        let dragHit = dragSuperview.hitTest(dragInSuperview)
+        let hitDiagnostic = "handleFrame=\(NSStringFromRect(dragHandle.frame)) down=\(NSStringFromPoint(downLocal)) drag=\(NSStringFromPoint(dragLocal)) downHit=\(String(describing: downHit.map { type(of: $0) })) dragHit=\(String(describing: dragHit.map { type(of: $0) })) exports=\(exportRequests)"
+        guard dragHandle.bounds.contains(downLocal), dragHandle.bounds.contains(dragLocal),
+              downHit === dragHandle, dragHit === dragHandle else {
+            throw failure("Shelf drag hit-test did not resolve to the native handle (\(hitDiagnostic))")
+        }
         if let down = mouseEvent(.leftMouseDown, location: shelfDownPoint, window: window,
                                  timestamp: 5, number: 3),
            let drag = mouseEvent(.leftMouseDragged, location: shelfDragPoint, window: window,
@@ -282,7 +299,7 @@ enum NotchGestureVerification {
             window.sendEvent(down); window.sendEvent(drag); window.sendEvent(up)
         }
         guard exportRequests == 1 else {
-            throw failure("Shelf mouse drag did not remain an export gesture")
+            throw failure("Shelf mouse drag did not remain an export gesture (\(hitDiagnostic))")
         }
 
         guard activity.compactExpanded == false else {

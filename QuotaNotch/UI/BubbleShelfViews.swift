@@ -838,14 +838,20 @@ private final class BubbleInteractionView: NSView, NSDraggingSource {
     private enum Interaction { case idle, tracking, dragging }
 
     override var isFlipped: Bool { true }
-    override func hitTest(_ point: NSPoint) -> NSView? { bounds.contains(point) ? self : nil }
+    override func hitTest(_ point: NSPoint) -> NSView? {
+        // AppKit supplies hitTest's point in the superview's coordinate
+        // system. Convert before checking our local bounds so the handle
+        // continues to receive a click/drag when its SwiftUI stack is offset.
+        let localPoint = superview.map { convert(point, from: $0) } ?? point
+        return bounds.contains(localPoint) ? self : nil
+    }
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
 
     override func updateTrackingAreas() {
         super.updateTrackingAreas()
         trackingAreas.forEach(removeTrackingArea)
         addTrackingArea(NSTrackingArea(rect: bounds,
-                                       options: [.activeInKeyWindow, .mouseEnteredAndExited, .inVisibleRect],
+                                       options: [.activeAlways, .mouseEnteredAndExited, .inVisibleRect],
                                        owner: self))
     }
 
@@ -950,7 +956,10 @@ private struct BubbleShelfDropTarget: NSViewRepresentable {
 
     @MainActor final class BubbleShelfDropView: NSView {
         var onImport: ((BubbleShelfImportResult) -> Void)?
-        override func hitTest(_ point: NSPoint) -> NSView? { bounds.contains(point) ? self : nil }
+        override func hitTest(_ point: NSPoint) -> NSView? {
+            let localPoint = superview.map { convert(point, from: $0) } ?? point
+            return bounds.contains(localPoint) ? self : nil
+        }
         override func draggingEntered(_ sender: NSDraggingInfo) -> NSDragOperation { .copy }
         override func draggingUpdated(_ sender: NSDraggingInfo) -> NSDragOperation { .copy }
         override func prepareForDragOperation(_ sender: NSDraggingInfo) -> Bool { true }
