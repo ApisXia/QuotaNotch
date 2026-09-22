@@ -1194,13 +1194,18 @@ struct SettingsPreviewRunner {
     @MainActor private static func captureBubbleShelfGestureRouting(output: URL) throws {
         var horizontalActions: [Bool] = []
         var audioClicks = 0
+        var shelfClicks = 0
+        var exportRequests = 0
         var auditedFrames: [String: CGRect] = [:]
         let state = BubbleShelfCompactState(
             itemCount: 1,
             isReceiving: false,
-            onOpen: {},
+            onOpen: { shelfClicks += 1 },
             onVerticalSwipe: { _ in },
-            writers: { [] },
+            writers: {
+                exportRequests += 1
+                return []
+            },
             onHorizontalSwipe: { horizontalActions.append($0) })
         let root = BubbleShelfAudioPair(
             shelf: state,
@@ -1262,12 +1267,6 @@ struct SettingsPreviewRunner {
             throw NSError(domain: "SettingsPreviewRunner", code: 2,
                           userInfo: [NSLocalizedDescriptionKey: "Shelf/audio pair did not publish its audio hit frame"])
         }
-        var mouseEventCount = 0
-        let mouseMonitor = NSEvent.addLocalMonitorForEvents(matching: [.leftMouseDown, .leftMouseDragged, .leftMouseUp]) { event in
-            mouseEventCount += 1
-            return event
-        }
-        defer { if let mouseMonitor { NSEvent.removeMonitor(mouseMonitor) } }
         func mouseEvent(_ type: NSEvent.EventType, location: NSPoint, timestamp: TimeInterval,
                         number: Int, pressure: Float) throws -> NSEvent {
             guard let event = NSEvent.mouseEvent(with: type, location: location,
@@ -1284,15 +1283,17 @@ struct SettingsPreviewRunner {
         window.sendEvent(try mouseEvent(.leftMouseUp, location: audioPoint, timestamp: 4.01, number: 2, pressure: 0))
         verifyPresentation(audioClicks == 1, "Audio click was intercepted by the Shelf scroll monitor")
 
-        // The Shelf's drag recognizer still receives mouse movement. Its test
-        // fixture has no writers, so it exercises routing without opening a
-        // real drag session or touching the user's pasteboard.
+        // The Shelf's drag recognizer still receives mouse movement. The
+        // fixture records the export request but returns no pasteboard writer,
+        // so it exercises routing without opening a real drag session or
+        // touching the user's pasteboard.
         let shelfPoint = NSPoint(x: 7, y: size.height * 0.5)
         let dragPoint = NSPoint(x: 18, y: size.height * 0.5 + 1)
         window.sendEvent(try mouseEvent(.leftMouseDown, location: shelfPoint, timestamp: 5.0, number: 3, pressure: 1))
         window.sendEvent(try mouseEvent(.leftMouseDragged, location: dragPoint, timestamp: 5.05, number: 4, pressure: 1))
         window.sendEvent(try mouseEvent(.leftMouseUp, location: dragPoint, timestamp: 5.10, number: 5, pressure: 0))
-        verifyPresentation(mouseEventCount >= 5, "Native mouse click/drag events did not reach the full pair")
+        verifyPresentation(exportRequests == 1, "Shelf drag did not request an export exactly once")
+        verifyPresentation(shelfClicks == 0, "Shelf drag or audio click was misread as a Shelf click")
         verifyPresentation(horizontalActions == [true, false], "Mouse drag changed Shelf/audio arrangement")
 
         let report = "Shelf/audio local monitor: X→Y consumed, Y→X locked vertical, both horizontal directions passed; audio click and mouse drag remained deliverable.\n"
