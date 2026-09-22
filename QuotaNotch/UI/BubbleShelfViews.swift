@@ -547,7 +547,6 @@ struct BubbleShelfAudioPair: View {
     }
 }
 
-@MainActor
 private struct BubbleShelfHorizontalScrollMonitor: NSViewRepresentable {
     let onSwipe: (Bool) -> Void
 
@@ -562,7 +561,6 @@ private struct BubbleShelfHorizontalScrollMonitor: NSViewRepresentable {
     }
 }
 
-@MainActor
 private final class BubbleShelfHorizontalScrollView: NSView {
     var onSwipe: ((Bool) -> Void)?
     private var monitor: Any?
