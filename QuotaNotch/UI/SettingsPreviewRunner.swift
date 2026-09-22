@@ -888,6 +888,11 @@ struct SettingsPreviewRunner {
             waitFrame()
             frames.append(try captureFrame())
         }
+        guard let collapsedFrame = frames.last else {
+            fatalError("Holder demo did not capture a post-collapse frame")
+        }
+        verifyPresentation(hasVisibleCapturePixels(collapsedFrame.image),
+                           "Holder demo collapsed frame was blank before the edge move")
 
         controller.moveHolder(to: CGPoint(x: 42, y: 42))
         waitFrame()
