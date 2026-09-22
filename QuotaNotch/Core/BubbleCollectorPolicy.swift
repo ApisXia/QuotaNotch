@@ -5,12 +5,15 @@ import Foundation
 enum BubbleCollectorPolicy {
     static func selectedText(in value: String, location: Int, length: Int) -> String? {
         guard location >= 0, length > 0 else { return nil }
-        let utf16Count = value.utf16.count
+        let utf16 = value.utf16
+        let utf16Count = utf16.count
         guard location <= utf16Count, length <= utf16Count - location else { return nil }
-        let nsRange = NSRange(location: location, length: length)
-        guard let range = Range(nsRange, in: value),
-              NSRange(range, in: value) == nsRange else { return nil }
-        return String(value[range])
+        let start = utf16.index(utf16.startIndex, offsetBy: location)
+        let end = utf16.index(start, offsetBy: length)
+        let isLowSurrogate: (UInt16) -> Bool = { $0 >= 0xDC00 && $0 <= 0xDFFF }
+        guard !isLowSurrogate(utf16[start]),
+              end == utf16.endIndex || !isLowSurrogate(utf16[end]) else { return nil }
+        return String(decoding: utf16[start..<end], as: UTF16.self)
     }
 
     static func shouldPersistPausedStartup(hasBeenConfigured: Bool) -> Bool {
