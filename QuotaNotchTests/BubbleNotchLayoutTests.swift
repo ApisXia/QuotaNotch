@@ -6,6 +6,8 @@ final class BubbleNotchLayoutTests: XCTestCase {
         XCTAssertFalse(BubbleNotchLayout.shouldShowClosedGlyph(hasConfiguredReceiving: false, itemCount: 0))
         XCTAssertTrue(BubbleNotchLayout.shouldShowClosedGlyph(hasConfiguredReceiving: true, itemCount: 0))
         XCTAssertTrue(BubbleNotchLayout.shouldShowClosedGlyph(hasConfiguredReceiving: false, itemCount: 1))
+        XCTAssertFalse(BubbleNotchLayout.shouldShowPinnedGlyph(isPinnedToNotch: false))
+        XCTAssertTrue(BubbleNotchLayout.shouldShowPinnedGlyph(isPinnedToNotch: true))
         XCTAssertEqual(BubbleNotchLayout.visibleCount(for: 0), 0)
         XCTAssertEqual(BubbleNotchLayout.visibleCount(for: 5), 4)
     }
@@ -138,5 +140,44 @@ final class BubbleNotchLayoutTests: XCTestCase {
         XCTAssertNil(lock.axis)
         XCTAssertTrue(lock.claim(.vertical))
         XCTAssertFalse(lock.claim(.horizontal))
+    }
+
+    func testSharedNotchRouterAccumulatesSlowHorizontalAndConsumesDiagonalTail() {
+        var router = NotchScrollRouter()
+        XCTAssertEqual(router.update(deltaX: -2, deltaY: 0, phase: .none,
+                                     isMomentum: false, timestamp: 1), .consume)
+        XCTAssertEqual(router.update(deltaX: -2, deltaY: 0, phase: .none,
+                                     isMomentum: false, timestamp: 1.05), .consume)
+        XCTAssertEqual(router.update(deltaX: -2, deltaY: 0, phase: .none,
+                                     isMomentum: false, timestamp: 1.10),
+                       .horizontal(towardLeft: true))
+        XCTAssertEqual(router.update(deltaX: 0, deltaY: 9, phase: .none,
+                                     isMomentum: false, timestamp: 1.15), .consume)
+        XCTAssertEqual(router.update(deltaX: 0, deltaY: 8, phase: .none,
+                                     isMomentum: true, timestamp: 1.20), .consume)
+        XCTAssertEqual(router.update(deltaX: 0, deltaY: 0, phase: .ended,
+                                     isMomentum: false, timestamp: 1.25), .ended)
+    }
+
+    func testSharedNotchRouterKeepsVerticalFirstGestureOutOfHorizontalSwitch() {
+        var router = NotchScrollRouter()
+        XCTAssertEqual(router.update(deltaX: 0, deltaY: 2, phase: .began,
+                                     isMomentum: false, timestamp: 2), .vertical)
+        XCTAssertEqual(router.update(deltaX: 0, deltaY: 3, phase: .changed,
+                                     isMomentum: false, timestamp: 2.05), .vertical)
+        XCTAssertEqual(router.update(deltaX: -10, deltaY: 0, phase: .changed,
+                                     isMomentum: false, timestamp: 2.10), .consume)
+
+        var rightRouter = NotchScrollRouter()
+        XCTAssertEqual(rightRouter.update(deltaX: 0, deltaY: 3, phase: .none,
+                                          isMomentum: false, timestamp: 3,
+                                          allowVertical: false), .vertical)
+        XCTAssertEqual(rightRouter.update(deltaX: 2, deltaY: 0, phase: .none,
+                                          isMomentum: false, timestamp: 4), .consume)
+        XCTAssertEqual(rightRouter.update(deltaX: 2, deltaY: 0, phase: .none,
+                                          isMomentum: false, timestamp: 4.05), .consume)
+        XCTAssertEqual(rightRouter.update(deltaX: 2, deltaY: 0, phase: .none,
+                                          isMomentum: false, timestamp: 4.10),
+                       .horizontal(towardLeft: false))
     }
 }

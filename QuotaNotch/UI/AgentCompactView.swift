@@ -331,39 +331,14 @@ struct AgentModuleSwitchGesture: ViewModifier {
     }
     func body(content: Content) -> some View {
         content
-            .simultaneousGesture(DragGesture(minimumDistance: 12).onEnded { value in
-                guard abs(value.translation.width) > abs(value.translation.height) else { return }
-                select(value.translation.width > 0)
-            }, including: enabled ? .all : .none)
             .background {
-                if enabled { AgentHorizontalScroll { right in select(right) } }
+                if enabled {
+                    // Trackpad scroll is the module-switch gesture. Mouse
+                    // drags remain available to Shelf export and never
+                    // toggle the quota/task pair.
+                    NotchHorizontalScrollBridge { towardLeft in select(!towardLeft) }
+                }
             }
-    }
-}
-
-/// A local event monitor only observes horizontal gestures inside its own window rectangle.
-private struct AgentHorizontalScroll: NSViewRepresentable {
-    let action: (Bool) -> Void
-    func makeNSView(context: Context) -> ScrollRegion { let view = ScrollRegion(); view.action = action; return view }
-    func updateNSView(_ view: ScrollRegion, context: Context) { view.action = action }
-    final class ScrollRegion: NSView {
-        var action: ((Bool) -> Void)?
-        var monitor: Any?
-        var last: TimeInterval = 0
-        override func hitTest(_ point: NSPoint) -> NSView? { nil }
-        override func viewDidMoveToWindow() {
-            super.viewDidMoveToWindow()
-            if let monitor { NSEvent.removeMonitor(monitor); self.monitor = nil }
-            guard window != nil else { return }
-            monitor = NSEvent.addLocalMonitorForEvents(matching: .scrollWheel) { [weak self] event in
-                guard let self, self.window === event.window,
-                      self.bounds.contains(self.convert(event.locationInWindow, from: nil)),
-                      abs(event.scrollingDeltaX) > abs(event.scrollingDeltaY), abs(event.scrollingDeltaX) > 4 else { return event }
-                if event.timestamp - self.last > 0.45 { self.last = event.timestamp; self.action?(event.scrollingDeltaX < 0) }
-                return nil
-            }
-        }
-        deinit { if let monitor { NSEvent.removeMonitor(monitor) } }
     }
 }
 

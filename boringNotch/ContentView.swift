@@ -80,9 +80,8 @@ struct ContentView: View {
         guard vm.effectiveClosedNotchHeight > 0,
               !vm.hideOnClosed,
               !eventPresentation.replacesPrimary,
-              BubbleNotchLayout.shouldShowClosedGlyph(
-                hasConfiguredReceiving: bubbleShelfStore.hasBeenConfigured,
-                itemCount: bubbleShelfStore.items.count
+              BubbleNotchLayout.shouldShowPinnedGlyph(
+                isPinnedToNotch: bubbleShelfStore.isPinnedToNotch
               ) else { return nil }
         return BubbleShelfCompactState(
             itemCount: bubbleShelfStore.items.count,
@@ -248,7 +247,11 @@ struct ContentView: View {
                 }
             }
             if vm.notchState == .closed {
-                Color.clear.frame(width: vm.closedNotchSize.width, height: vm.effectiveClosedNotchHeight)
+                // The camera overlay is only the physical cutout. Keeping it
+                // inside the corner-inset gap leaves both wings available for
+                // scroll routing, clicks, and Shelf drags.
+                Color.clear.frame(width: max(0, vm.closedNotchSize.width - cornerRadiusInsets.closed.top),
+                                 height: vm.effectiveClosedNotchHeight)
                     .contentShape(Rectangle())
                     .onHover { cat.pointer($0, source: "camera"); handleHover($0) }
                     .onTapGesture { openFromPointer(explicit: true) }

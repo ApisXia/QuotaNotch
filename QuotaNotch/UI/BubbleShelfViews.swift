@@ -41,6 +41,7 @@ struct BubbleShelfView: View {
                 Spacer(minLength: 8)
                 BubbleReceivingToggle()
                     .frame(width: 150)
+                BubbleShelfPinButton()
                 if !store.items.isEmpty {
                     Button { store.clear() } label: {
                         Image(systemName: "trash")
@@ -63,20 +64,6 @@ struct BubbleShelfView: View {
                     .foregroundStyle(.white.opacity(0.70))
                     .lineLimit(1)
                 Spacer(minLength: 8)
-                if collector.availability == .accessibilityRequired {
-                    Button(AgentText.t("允许访问", "Allow Access")) {
-                        collector.requestAccessibilityFromUserAction()
-                    }
-                    .buttonStyle(.bordered)
-                    .controlSize(.small)
-                }
-                if store.isReceiving && collector.finderAutomationState != .enabled {
-                    Button(AgentText.t("允许 Finder", "Allow Finder")) {
-                        collector.requestFinderAutomationFromUserAction()
-                    }
-                    .buttonStyle(.borderless)
-                    .font(.system(size: 9, weight: .medium))
-                }
             }
             .frame(height: 16)
 
@@ -91,7 +78,7 @@ struct BubbleShelfView: View {
                         Text(AgentText.t("暂无内容", "Nothing saved yet"))
                             .font(.system(size: 11, weight: .medium))
                             .foregroundStyle(.white.opacity(0.82))
-                        Text(AgentText.t("拖入文件，或开启接收后点击附近的气泡预览。", "Drop files here, or enable receiving and click a nearby preview."))
+                        Text(AgentText.t("显示悬浮球，再把文件、图片或文字拖进去。", "Show the floating bubble, then drag files, images, or text into it."))
                             .font(.system(size: 9))
                             .foregroundStyle(.white.opacity(0.55))
                             .lineLimit(1)
@@ -132,25 +119,21 @@ struct BubbleShelfView: View {
            result.succeeded || result.skippedCount > 0 || !result.errors.isEmpty {
             return Self.summary(for: result)
         }
-        if store.isReceiving && collector.finderAutomationState == .denied {
-            return AgentText.t("Finder 访问未开启，请在系统设置的自动化中允许后重试。",
-                               "Finder access is off. Allow QuotaNotch in Automation settings, then retry.")
-        }
         switch collector.availability {
         case .disabled:
             return store.isReceiving
-                ? AgentText.t("等待接收所选内容", "Ready to capture selected content")
-                : AgentText.t("接收已暂停；已保存内容仍可查看和拖出。", "Receiving is paused. Saved items remain available.")
+                ? AgentText.t("悬浮球已显示，可拖入内容", "Floating bubble is visible; drop content into it")
+                : AgentText.t("悬浮球已隐藏，收纳内容仍保留。", "Floating bubble is hidden; saved content remains.")
         case .ready:
-            return AgentText.t("等待接收所选内容", "Ready to capture selected content")
+            return AgentText.t("悬浮球已显示，可拖入内容", "Floating bubble is visible; drop content into it")
         case .accessibilityRequired:
-            return AgentText.t("需要辅助功能访问才能读取所选内容。", "Accessibility access is needed to preview selected content.")
+            return AgentText.t("悬浮球可手动接收内容。", "The floating bubble can receive content manually.")
         case .selectionUnavailable:
-            return AgentText.t("当前应用没有可读取的所选内容。", "There is no readable selection in the current app.")
+            return AgentText.t("请将内容拖入悬浮球。", "Drop content into the floating bubble.")
         case .captured:
-            return AgentText.t("预览已捕获。", "Preview captured.")
+            return AgentText.t("内容已收纳。", "Content saved to Shelf.")
         case .error:
-            return AgentText.t("暂时无法读取所选内容。", "Selected content is temporarily unavailable.")
+            return AgentText.t("暂时无法收纳内容。", "Content could not be saved right now.")
         }
     }
 
@@ -197,7 +180,7 @@ struct BubbleReceivingToggle: View {
     var body: some View {
         Toggle(isOn: receiving) {
             Label(
-                store.isReceiving ? AgentText.t("等待接收", "Receiving") : AgentText.t("暂停接收", "Paused"),
+                AgentText.t("悬浮球", "Floating bubble"),
                 systemImage: store.isReceiving ? "arrow.down.to.line.compact" : "pause.circle"
             )
             .font(.system(size: 11, weight: .medium))
@@ -206,52 +189,56 @@ struct BubbleReceivingToggle: View {
         .toggleStyle(.switch)
         .tint(.mint)
         .accessibilityIdentifier("bubble-receiving-toggle")
+        .accessibilityValue(store.isReceiving
+                            ? AgentText.t("开启", "On")
+                            : AgentText.t("关闭", "Off"))
+    }
+}
+
+@MainActor
+struct BubbleShelfPinButton: View {
+    @ObservedObject private var store = BubbleShelfStore.shared
+
+    var body: some View {
+        Button {
+            store.isPinnedToNotch.toggle()
+        } label: {
+            Image(systemName: store.isPinnedToNotch ? "pin.fill" : "pin")
+                .font(.system(size: 10, weight: .medium))
+                .foregroundStyle(.white.opacity(store.isPinnedToNotch ? 0.9 : 0.56))
+                .frame(width: 22, height: 22)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .help(store.isPinnedToNotch
+              ? AgentText.t("从刘海取消固定", "Unpin Shelf from notch")
+              : AgentText.t("固定到刘海", "Pin to notch"))
+        .accessibilityLabel(store.isPinnedToNotch
+                            ? AgentText.t("已固定到刘海", "Shelf pinned to notch")
+                            : AgentText.t("固定到刘海", "Pin to notch"))
+        .accessibilityValue(store.isPinnedToNotch
+                            ? AgentText.t("已开启", "On")
+                            : AgentText.t("已关闭", "Off"))
     }
 }
 
 @MainActor
 struct BubbleShelfSettingsView: View {
     @ObservedObject private var store = BubbleShelfStore.shared
-    @ObservedObject private var collector = BubbleCollectorController.shared
 
     var body: some View {
         Form {
             Section(AgentText.t("接收与收纳", "Receiving and Shelf")) {
                 BubbleReceivingToggle()
-                Text(AgentText.t("开启后，所选内容会在附近显示预览；点击预览才会保存。暂停只停止接收，不会删除已保存内容。", "When enabled, a nearby preview follows supported selections. Click it to save. Pausing stops capture without deleting saved items."))
+                Toggle(isOn: Binding(get: { store.isPinnedToNotch },
+                                     set: { store.isPinnedToNotch = $0 })) {
+                    Label(AgentText.t("固定到刘海", "Pin to notch"),
+                          systemImage: store.isPinnedToNotch ? "pin.fill" : "pin")
+                }
+                Text(AgentText.t("悬浮球用于手动拖入和查看内容；固定只控制它是否留在刘海。暂停或取消固定都不会删除已保存内容。",
+                                  "The floating bubble is for manual drop and viewing; pinning only controls whether it stays in the notch. Pausing or unpinning never deletes saved content."))
                     .font(.callout)
                     .foregroundStyle(.secondary)
-                if collector.availability == .accessibilityRequired {
-                    Text(AgentText.t("需要辅助功能访问才能显示其他应用中的所选内容。", "Accessibility access is needed to preview selections in other apps."))
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
-                    Button(AgentText.t("打开访问设置", "Allow Access")) {
-                        collector.requestAccessibilityFromUserAction()
-                    }
-                }
-                if store.isReceiving {
-                    HStack(spacing: 8) {
-                        Text(AgentText.t("Finder 文件选择", "Finder file selection"))
-                            .font(.footnote)
-                            .foregroundStyle(.secondary)
-                        Spacer()
-                        if collector.finderAutomationState == .enabled {
-                            Label(AgentText.t("已允许", "Allowed"), systemImage: "checkmark.circle")
-                                .font(.footnote)
-                                .foregroundStyle(.secondary)
-                        } else {
-                            Button(AgentText.t("允许读取 Finder", "Allow Finder Access")) {
-                                collector.requestFinderAutomationFromUserAction()
-                            }
-                        }
-                    }
-                    if collector.finderAutomationState == .denied {
-                        Text(AgentText.t("Finder 自动化访问未开启，请允许后重试。",
-                                         "Finder Automation access is off. Allow it, then retry."))
-                            .font(.footnote)
-                            .foregroundStyle(.orange)
-                    }
-                }
                 LabeledContent(AgentText.t("已保存", "Saved")) {
                     Text(AgentText.t("\(store.items.count) / 80", "\(store.items.count) / 80"))
                         .monospacedDigit()
@@ -393,9 +380,10 @@ struct BubbleShelfClosedControl: View {
         .auditNotchModule("bubble", mode: presentation.rawValue)
         .contentShape(Rectangle())
         .accessibilityElement()
-        .accessibilityLabel(state.isReceiving
-            ? AgentText.t("等待接收", "Receiving") : AgentText.t("暂停接收", "Receiving paused"))
-        .accessibilityValue(AgentText.t("\(state.itemCount) 项", "\(state.itemCount) items"))
+        .accessibilityLabel(AgentText.t("悬浮球", "Floating bubble"))
+        .accessibilityValue(AgentText.t(
+            state.isReceiving ? "开启，\(state.itemCount) 项" : "关闭，\(state.itemCount) 项",
+            state.isReceiving ? "On, \(state.itemCount) items" : "Off, \(state.itemCount) items"))
         .accessibilityHint(AgentText.t("点击打开收纳；向上滑动开始接收，向下滑动暂停；向左或向右拖动可拖出已保存内容。", "Click to open Shelf. Swipe up to receive or down to pause. Drag sideways to export saved items."))
         .accessibilityAction(.default, state.onOpen)
         .help(AgentText.t("点击打开收纳 · 上滑接收 · 下滑暂停 · 横向拖出", "Click for Shelf · swipe up to receive · swipe down to pause · drag sideways to export"))
@@ -408,18 +396,57 @@ struct BubbleShelfCompanion: View {
     let state: BubbleShelfCompactState
     let height: CGFloat
     let widgetWidth: CGFloat
+    var onToggle: (() -> Void)? = nil
 
     var body: some View {
         HStack(spacing: 0) {
             BubbleShelfClosedControl(state: state, presentation: .minimal, height: height, widgetWidth: widgetWidth)
                 .frame(width: 16, height: height)
-            Rectangle()
-                .fill(.white.opacity(0.14))
-                .frame(width: 1, height: min(14, max(8, height * 0.45)))
-                .frame(width: 10, height: height)
+            BubbleShelfPairDivider(height: height, onToggle: onToggle)
         }
         .frame(height: height)
         .accessibilityElement(children: .contain)
+    }
+}
+
+/// A small explicit affordance beside the compact Shelf mark. Horizontal
+/// two-finger scrolling remains the primary interaction; this button gives a
+/// visible, keyboard/mouse-accessible way to make the same pair swap.
+private struct BubbleShelfPairDivider: View {
+    let height: CGFloat
+    let onToggle: (() -> Void)?
+    @State private var hovering = false
+
+    var body: some View {
+        Group {
+            if let onToggle {
+                Button(action: onToggle) {
+                    dividerMark
+                }
+                .buttonStyle(.plain)
+            } else {
+                dividerMark
+            }
+        }
+        .onHover { hovering = $0 }
+        .help(onToggle == nil ? "" : AgentText.t("切换收纳与音乐的大小", "Swap Shelf and Music sizes"))
+        .accessibilityLabel(onToggle == nil ? "" : AgentText.t("切换收纳与音乐布局", "Swap Shelf and Music layout"))
+    }
+
+    private var dividerMark: some View {
+        ZStack {
+            Rectangle()
+                .fill(.white.opacity(hovering ? 0.28 : 0.14))
+                .frame(width: 1, height: 14)
+            if onToggle != nil {
+                Image(systemName: "chevron.left.chevron.right")
+                    .font(.system(size: 5.5, weight: .semibold))
+                    .foregroundStyle(.white.opacity(hovering ? 0.84 : 0.46))
+                    .offset(y: 0.2)
+            }
+        }
+        .frame(width: 10, height: height)
+        .contentShape(Rectangle())
     }
 }
 
@@ -430,6 +457,7 @@ struct BubbleShelfAudioMinimal: View {
     let height: CGFloat
     let widgetWidth: CGFloat
     let onOpen: () -> Void
+    var onDividerToggle: (() -> Void)? = nil
     @ObservedObject private var music = MusicManager.shared
 
     private var markSize: CGFloat { min(14, max(10, widgetWidth * 0.7)) }
@@ -439,10 +467,14 @@ struct BubbleShelfAudioMinimal: View {
         let spectrumHeight = max(4, min(7, height * 0.22))
         let spectrumScale = min(spectrumWidth / 16, spectrumHeight / 14)
         HStack(spacing: 0) {
-            Rectangle()
-                .fill(.white.opacity(0.14))
-                .frame(width: 1, height: min(14, max(8, height * 0.45)))
-                .frame(width: 10, height: height)
+            if let onDividerToggle {
+                BubbleShelfPairDivider(height: height, onToggle: onDividerToggle)
+            } else {
+                Rectangle()
+                    .fill(.white.opacity(0.14))
+                    .frame(width: 1, height: min(14, max(8, height * 0.45)))
+                    .frame(width: 10, height: height)
+            }
             Button(action: onOpen) {
                 VStack(spacing: 1) {
                     Image(nsImage: music.albumArt)
@@ -525,6 +557,12 @@ struct BubbleShelfAudioPair: View {
                                 writers: shelf.writers)
     }
 
+    private var toggleArrangement: () -> Void {
+        {
+            shelf.onHorizontalSwipe(arrangement == .shelfMinimalAudioWidget)
+        }
+    }
+
     var body: some View {
         HStack(spacing: 0) {
             switch arrangement {
@@ -532,9 +570,11 @@ struct BubbleShelfAudioPair: View {
                 BubbleShelfClosedControl(state: shelfWithoutPairScroll, presentation: .widget,
                                          height: height, widgetWidth: widgetWidth)
                     .frame(width: widgetWidth, height: height)
-                BubbleShelfAudioMinimal(height: height, widgetWidth: widgetWidth, onOpen: onAudioOpen)
+                BubbleShelfAudioMinimal(height: height, widgetWidth: widgetWidth,
+                                        onOpen: onAudioOpen, onDividerToggle: toggleArrangement)
             case .shelfMinimalAudioWidget:
-                BubbleShelfCompanion(state: shelfWithoutPairScroll, height: height, widgetWidth: widgetWidth)
+                BubbleShelfCompanion(state: shelfWithoutPairScroll, height: height,
+                                     widgetWidth: widgetWidth, onToggle: toggleArrangement)
                 BubbleShelfAudioWidget(height: height, widgetWidth: widgetWidth, onOpen: onAudioOpen)
             }
         }
@@ -561,146 +601,45 @@ private struct BubbleShelfHorizontalScrollMonitor: NSViewRepresentable {
     }
 }
 
-final class BubbleShelfHorizontalScrollView: NSView {
-    var onSwipe: ((Bool) -> Void)?
-    private var monitor: Any?
-    private var lastClaimTimestamp: TimeInterval = 0
-    private var lastVerticalClaimTimestamp: TimeInterval = 0
-    private var lastEventTimestamp: TimeInterval?
-    private var gesture = BubbleHorizontalScrollState()
-    private var verticalGesture = BubbleScrollGestureState()
-    private var axisLock = BubbleShelfPairScrollAxisLock()
-
-    var hasLocalMonitorForPreview: Bool { monitor != nil }
-
-    override func viewDidMoveToWindow() {
-        super.viewDidMoveToWindow()
-        if window == nil { removeMonitor() } else { installMonitor() }
+final class BubbleShelfHorizontalScrollView: NotchScrollEventView {
+    var onSwipe: ((Bool) -> Void)? {
+        didSet { onHorizontalSwipe = onSwipe }
     }
 
-    private func installMonitor() {
-        guard monitor == nil else { return }
-        monitor = NSEvent.addLocalMonitorForEvents(matching: .scrollWheel) { [weak self] event in
-            guard let self, let window = self.window else { return event }
-            let phase = Self.scrollPhase(for: event)
-            guard let eventWindow = event.window, eventWindow === window else {
-                if phase == .began || phase == .ended { self.resetGesture() }
-                return event
-            }
-            let point = self.convert(event.locationInWindow, from: nil)
-            guard self.bounds.contains(point) else {
-                if phase == .began || phase == .ended { self.resetGesture() }
-                return event
-            }
-            let consumed = self.processScroll(deltaX: event.scrollingDeltaX,
-                                               deltaY: event.scrollingDeltaY,
-                                               phase: phase,
-                                               isMomentum: !event.momentumPhase.isEmpty,
-                                               timestamp: event.timestamp)
-            return consumed ? nil : event
-        }
+    override init(frame frameRect: NSRect) {
+        super.init(frame: frameRect, allowsVerticalPassthrough: true)
     }
 
-    private static func scrollPhase(for event: NSEvent) -> BubbleScrollPhase {
-        if event.phase.isEmpty { return .none }
-        if event.phase.contains(.began) { return .began }
-        if event.phase.contains(.ended) || event.phase.contains(.cancelled) { return .ended }
-        return .changed
-    }
+    convenience init() { self.init(frame: .zero) }
 
-    private func resetGesture() {
-        _ = gesture.update(deltaX: 0, deltaY: 0, phase: .ended,
-                           isMomentum: false, timestamp: lastEventTimestamp ?? 0,
-                           lastClaimTimestamp: lastClaimTimestamp)
-        _ = verticalGesture.update(deltaX: 0, deltaY: 0, phase: .ended,
-                                   isMomentum: false, timestamp: lastEventTimestamp ?? 0,
-                                   lastClaimTimestamp: lastVerticalClaimTimestamp)
-        axisLock.reset()
-        lastEventTimestamp = nil
-    }
-
-    /// Routes one scroll sample for both the AppKit monitor and settings
-    /// preview. The outer monitor consumes a horizontal gesture after its
-    /// claim, while a vertical claim is passed through to the inner Shelf
-    /// receiver so its existing receive toggle still fires.
-    @discardableResult
-    func processScroll(deltaX: CGFloat, deltaY: CGFloat, phase: BubbleScrollPhase,
-                       isMomentum: Bool, timestamp: TimeInterval) -> Bool {
-        if phase == .began {
-            // A new trackpad gesture is authoritative even when the previous
-            // gesture's end sample was outside this view's bounds.
-            resetGesture()
-        }
-        if phase == .ended {
-            resetGesture()
-            // Deliver the end sample so BubbleInteractionView can clear its
-            // own accumulator. It never fires an action for `.ended`.
-            return false
-        }
-
-        if phase == .none,
-           let lastEventTimestamp,
-           timestamp - lastEventTimestamp >= 0.45 {
-            resetGesture()
-        }
-        self.lastEventTimestamp = timestamp
-
-        switch axisLock.axis {
-        case .horizontal:
-            // Once the outer pair has swapped, keep the diagonal tail away
-            // from BubbleInteractionView until the gesture ends.
-            return true
-        case .vertical:
-            // The inner receiver must see vertical samples, but a later
-            // horizontal tail cannot start a second action.
-            return BubbleHorizontalScrollPolicy.isDominantHorizontal(deltaX: deltaX, deltaY: deltaY)
-        case nil:
-            break
-        }
-
-        guard !isMomentum else { return false }
-        if BubbleHorizontalScrollPolicy.isDominantHorizontal(deltaX: deltaX, deltaY: deltaY) {
-            if let towardLeft = gesture.update(deltaX: deltaX, deltaY: deltaY, phase: phase,
-                                               isMomentum: false, timestamp: timestamp,
-                                               lastClaimTimestamp: lastClaimTimestamp) {
-                axisLock.claim(.horizontal)
-                lastClaimTimestamp = timestamp
-                onSwipe?(towardLeft)
-                return true
-            }
-            return false
-        }
-        guard BubbleScrollPolicy.isDominantVertical(deltaX: deltaX, deltaY: deltaY) else {
-            return false
-        }
-        if verticalGesture.update(deltaX: deltaX, deltaY: deltaY, phase: phase,
-                                  isMomentum: false, timestamp: timestamp,
-                                  lastClaimTimestamp: lastVerticalClaimTimestamp) != nil {
-            axisLock.claim(.vertical)
-            lastVerticalClaimTimestamp = timestamp
-        }
-        return false
+    required init?(coder: NSCoder) {
+        super.init(coder: coder)
+        allowsVerticalPassthrough = true
     }
 
     /// Settings-preview hook that drives the same reducer as the AppKit local
-    /// monitor without posting synthetic global events or requiring a desktop
-    /// input permission.
+    /// monitor without posting a synthetic global event or requiring input
+    /// permission. The returned Bool tells the caller whether the outer pair
+    /// consumed this sample; vertical samples remain available to Shelf.
+    @discardableResult
+    func processScroll(deltaX: CGFloat, deltaY: CGFloat, phase: BubbleScrollPhase,
+                       isMomentum: Bool, timestamp: TimeInterval) -> Bool {
+        let decision = routePreviewScroll(deltaX: deltaX, deltaY: deltaY,
+                                          phase: phase, isMomentum: isMomentum,
+                                          timestamp: timestamp)
+        switch decision {
+        case .horizontal, .consume:
+            return true
+        case .passthrough, .vertical, .ended:
+            return false
+        }
+    }
+
     @discardableResult
     func processPreviewScroll(deltaX: CGFloat, deltaY: CGFloat, phase: BubbleScrollPhase,
                               isMomentum: Bool = false, timestamp: TimeInterval) -> Bool {
         processScroll(deltaX: deltaX, deltaY: deltaY, phase: phase,
                       isMomentum: isMomentum, timestamp: timestamp)
-    }
-
-    private func removeMonitor() {
-        if let monitor { NSEvent.removeMonitor(monitor); self.monitor = nil }
-        resetGesture()
-    }
-
-    // Deinitializers are nonisolated in Swift 6; remove the AppKit observer
-    // directly, matching the other local event bridges in this target.
-    deinit {
-        if let monitor { NSEvent.removeMonitor(monitor) }
     }
 }
 
