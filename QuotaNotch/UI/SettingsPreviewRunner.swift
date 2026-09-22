@@ -816,6 +816,7 @@ struct SettingsPreviewRunner {
         }
 
         func captureFrame() throws -> (image: CGImage, canvasSize: CGSize,
+                                       panelFrame: CGRect, hostBounds: CGRect,
                                        ballCenter: CGPoint, globalCenter: CGPoint) {
             guard let content = panel.contentView else {
                 fatalError("Holder demo panel lost its content view")
@@ -845,7 +846,8 @@ struct SettingsPreviewRunner {
                 }
                 image = fallbackImage
             }
-            return (image, content.bounds.size, ballCenter, globalCenter)
+            return (image, panel.frame.size, panel.frame, content.bounds,
+                    ballCenter, globalCenter)
         }
 
         func waitFrame() {
@@ -853,6 +855,7 @@ struct SettingsPreviewRunner {
         }
 
         var frames: [(image: CGImage, canvasSize: CGSize,
+                      panelFrame: CGRect, hostBounds: CGRect,
                       ballCenter: CGPoint, globalCenter: CGPoint)] = []
         for _ in 0..<8 {
             waitFrame()
@@ -893,6 +896,10 @@ struct SettingsPreviewRunner {
         }
         verifyPresentation(hasVisibleHolderContent(collapsedFrame.image),
                            "Holder demo collapsed frame was blank before the edge move")
+        if let png = NSBitmapImageRep(cgImage: collapsedFrame.image)
+            .representation(using: .png, properties: [:]) {
+            try png.write(to: output.appendingPathComponent("Bubble-holder-raw-collapsed.png"))
+        }
 
         controller.moveHolder(to: CGPoint(x: 42, y: 42))
         waitFrame()
@@ -900,29 +907,57 @@ struct SettingsPreviewRunner {
         try NSBitmapImageRep(cgImage: edgeFrame.image).representation(using: .png, properties: [:])!.write(
             to: output.appendingPathComponent("Bubble-holder-edge-clamped.png"))
 
+        func describe(_ rect: CGRect) -> String {
+            String(format: "(%.2f,%.2f,%.2f,%.2f)",
+                   rect.origin.x, rect.origin.y, rect.width, rect.height)
+        }
+        func describe(_ point: CGPoint) -> String {
+            String(format: "(%.2f,%.2f)", point.x, point.y)
+        }
+        let metadata = frames.enumerated().map { index, frame in
+            "\(index) imagePx=\(frame.image.width)x\(frame.image.height)"
+                + " panelFrame=\(describe(frame.panelFrame))"
+                + " hostBounds=\(describe(frame.hostBounds))"
+                + " localBall=\(describe(frame.ballCenter))"
+                + " global=\(describe(frame.globalCenter))"
+        }.joined(separator: "\n")
+        try Data((metadata + "\n").utf8).write(
+            to: output.appendingPathComponent("Bubble-holder-demo-metadata.txt"))
+
         guard let reference = frames.first(where: {
             $0.canvasSize.width > BubbleHolderLayout.collapsedSize.width + 1
         }) else {
             fatalError("Holder demo did not capture an expanded canvas")
         }
         let margin = BubbleHolderLayout.panelMargin
-        let fixedPointSize = CGSize(
-            width: (frames.map { $0.canvasSize.width }.max() ?? reference.canvasSize.width) + margin * 2,
-            height: (frames.map { $0.canvasSize.height }.max() ?? reference.canvasSize.height) + margin * 2)
-        let targetBallCenter = CGPoint(x: reference.ballCenter.x + margin,
-                                       y: reference.ballCenter.y + margin)
+        var minRelativeX: CGFloat = 0
+        var minRelativeY: CGFloat = 0
+        var maxRelativeX: CGFloat = 0
+        var maxRelativeY: CGFloat = 0
+        for frame in frames {
+            minRelativeX = min(minRelativeX, -frame.ballCenter.x)
+            minRelativeY = min(minRelativeY, -frame.ballCenter.y)
+            maxRelativeX = max(maxRelativeX, frame.canvasSize.width - frame.ballCenter.x)
+            maxRelativeY = max(maxRelativeY, frame.canvasSize.height - frame.ballCenter.y)
+        }
+        let fixedPointSize = CGSize(width: maxRelativeX - minRelativeX + margin * 2,
+                                    height: maxRelativeY - minRelativeY + margin * 2)
+        let targetBallCenter = CGPoint(x: margin - minRelativeX,
+                                       y: margin - minRelativeY)
         let referenceGlobalCenter = reference.globalCenter
         verifyPresentation(frames.allSatisfy {
             abs($0.globalCenter.x - referenceGlobalCenter.x) <= 1
                 && abs($0.globalCenter.y - referenceGlobalCenter.y) <= 1
         }, "Holder ball center moved during the native expand/collapse capture")
         let pixelScale = max(1, frames.map {
-            CGFloat($0.image.width) / max($0.canvasSize.width, 1)
+            max(CGFloat($0.image.width) / max($0.canvasSize.width, 1),
+                CGFloat($0.image.height) / max($0.canvasSize.height, 1))
         }.max() ?? 1)
         let pixelWidth = max(1, Int((fixedPointSize.width * pixelScale).rounded()))
         let pixelHeight = max(1, Int((fixedPointSize.height * pixelScale).rounded()))
 
         func composite(_ frame: (image: CGImage, canvasSize: CGSize,
+                                 panelFrame: CGRect, hostBounds: CGRect,
                                  ballCenter: CGPoint, globalCenter: CGPoint)) -> CGImage {
             guard let context = CGContext(data: nil, width: pixelWidth, height: pixelHeight,
                                           bitsPerComponent: 8, bytesPerRow: pixelWidth * 4,
