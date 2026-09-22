@@ -129,6 +129,7 @@ struct SettingsPreviewRunner {
         try captureBubbleClosedLayouts(output: output, fixtures: fixtures)
         try captureBubbleShelfAudioLayouts(output: output, fixtures: fixtures)
         try captureBubbleShelfGestureRouting(output: output)
+        try NotchGestureVerification.run()
         try captureBubbleGlyphOrbit(output: output)
         try captureTaskPanel(output: output, fixtures: fixtures)
         for dark in [true, false] {
@@ -687,9 +688,16 @@ struct SettingsPreviewRunner {
         }
         for count in 0...4 {
             let payloads = Array(shelf.items.prefix(count)).map(BubbleCollectorPayload.stored)
-            try capture(BubbleCollectorFixtureView(payloads: payloads)
+            try capture(BubbleCollectorFixtureView(payloads: payloads, expanded: false)
                 .background(Color.black).preferredColorScheme(.dark), width: 220,
-                name: "Shelf-collector-count-\(count)", output: output, height: 190)
+                name: "Bubble-holder-collapsed-count-\(count)", output: output, height: 190)
+            let pageCount = BubbleHolderLayout.page(for: count, index: 0).pageCount
+            for page in 0..<pageCount {
+                try capture(BubbleCollectorFixtureView(payloads: payloads, expanded: true,
+                                                       pageIndex: page)
+                    .background(Color.black).preferredColorScheme(.dark), width: 320,
+                    name: "Bubble-holder-expanded-count-\(count)-page\(page)", output: output, height: 220)
+            }
         }
     }
 
@@ -772,149 +780,120 @@ struct SettingsPreviewRunner {
         }
     }
 
-    /// Capture the real floating collector panel so the cloud artifact includes the
-    /// gather/hold/collapse cycle, plus a small pointer-light storyboard from the same
-    /// native SwiftUI/Metal view. No Accessibility or external selection is involved.
+    /// Capture the persistent holder through the production panel. The movie
+    /// contains a real collapse/expand cycle, a retained five-item page, a
+    /// deletion update, and a clamped edge position. Frames are collected
+    /// before GIF encoding so encoding cannot disturb the live animation.
     @MainActor private static func captureBubbleCollectorMotion(output: URL) throws {
         let shelf = BubbleShelfStore.shared
-        let fileURL = output.appendingPathComponent("collector-motion-fixture.txt")
-        try Data("Collector motion fixture".utf8).write(to: fileURL)
-        let noteURL = output.appendingPathComponent("collector-motion-note.md")
-        try Data("# Collector motion fixture\n\nA second native card.".utf8).write(to: noteURL)
         let fixtureDate = Date()
-        let fixtureItems: [BubbleShelfItem] = [
-            BubbleShelfItem(kind: .file, title: "collector-motion-fixture.txt", addedAt: fixtureDate, resourceURL: fileURL),
-            BubbleShelfItem(kind: .text, title: AgentText.t("示例文本", "Sample text"), addedAt: fixtureDate.addingTimeInterval(1), text: "Collector motion sample"),
-            BubbleShelfItem(kind: .url, title: "example.com", addedAt: fixtureDate.addingTimeInterval(2), resourceURL: URL(string: "https://example.com/collector")!),
-            BubbleShelfItem(kind: .file, title: "collector-motion-note.md", addedAt: fixtureDate.addingTimeInterval(3), resourceURL: noteURL)
-        ]
-        let finalURL = output.appendingPathComponent("collector-motion-final.txt")
-        try Data("The final inserted item.".utf8).write(to: finalURL)
-        let finalItem = BubbleShelfItem(kind: .file, title: "collector-motion-final.txt", resourceURL: finalURL)
-        let payloads = fixtureItems.map(BubbleCollectorPayload.stored)
-        let finalPayload = BubbleCollectorPayload.stored(finalItem)
+        let fixtureURLs = (0..<5).map { index in
+            output.appendingPathComponent("holder-demo-\(index).txt")
+        }
+        for (index, url) in fixtureURLs.enumerated() {
+            try Data("Holder demo item \(index + 1)".utf8).write(to: url)
+        }
+        let fixtureItems: [BubbleShelfItem] = fixtureURLs.enumerated().map { index, url in
+            BubbleShelfItem(kind: .file, title: "holder-demo-\(index + 1).txt",
+                            addedAt: fixtureDate.addingTimeInterval(Double(index)),
+                            resourceURL: url)
+        }
         let controller = BubbleCollectorController.shared
-        let anchor = CGPoint(x: 320, y: 320)
         shelf.resetPreviewConfiguration()
-        shelf.isReceiving = true
-        // Keep one selection presentation and one panel alive while the shelf
-        // itself grows. The selection payload is a distinct fifth item; it is
-        // committed only for the final gather/hold/collapse proof.
-        controller.showSelectionForTesting(contents: [finalPayload], anchor: anchor)
+        shelf.configurePreview(items: fixtureItems)
         defer {
-            controller.hidePreviewForTesting()
+            controller.pauseReceiving()
             shelf.resetPreviewConfiguration()
         }
 
+        controller.startReceivingFromUser()
         guard let panel = NSApp.windows.compactMap({ $0 as? NSPanel }).first(where: {
             $0.identifier == NSUserInterfaceItemIdentifier("bubble-collector-preview-panel")
-        }), let content = panel.contentView else {
-            fatalError("Collector motion panel was not created")
+        }) else {
+            fatalError("Holder demo panel was not created")
         }
-        content.layoutSubtreeIfNeeded()
-        // Capture timed frames first and encode the GIF afterward. GIF encoding and
-        // thumbnail work can take longer than one frame interval and would otherwise
-        // let the live 2.05s gather/hold/collapse animation expire between snapshots.
-        var motionFrames: [CGImage] = []
-        let captureStart = Date()
-        var candidateCaptureStart: Date?
-        var observedCollapsedEnd = false
-        for frameIndex in 0..<81 {
-            let stageIndex = min(fixtureItems.count, frameIndex / 14)
-            if frameIndex <= 56 && frameIndex % 14 == 0 {
-                // Keep one panel/TimelineView alive while the stable artwork IDs
-                // reflow through 0→1→2→3→4. This is an insertion sequence, not
-                // five independently recreated fixture scenes.
-                shelf.configurePreview(items: Array(fixtureItems.prefix(stageIndex)))
+
+        func captureFrame() throws -> CGImage {
+            guard let content = panel.contentView else {
+                fatalError("Holder demo panel lost its content view")
             }
-            if frameIndex == 56 {
-                // Refresh the injected candidate immediately before capture so a
-                // slow CI render cannot cross its 18s fixture expiration. Reusing
-                // the existing panel keeps this a real insertion, not a new scene.
-                controller.showSelectionForTesting(contents: [finalPayload], anchor: anchor)
-                controller.captureCurrentCandidate()
-                guard shelf.items.count == 5,
-                      case .captured(let captured, _, _, _) = controller.presentation,
-                      captured.count == 4 else {
-                    fatalError("Collector candidate capture did not produce the fifth shelf item")
-                }
-                candidateCaptureStart = Date()
+            content.layoutSubtreeIfNeeded()
+            guard let bitmap = content.bitmapImageRepForCachingDisplay(in: content.bounds) else {
+                fatalError("Missing holder demo bitmap")
             }
-            let frameDeadline = captureStart.addingTimeInterval(Double(frameIndex + 1) / 12.0)
-            while Date() < frameDeadline {
-                RunLoop.main.run(mode: .default,
-                                 before: min(frameDeadline, Date().addingTimeInterval(0.01)))
+            content.cacheDisplay(in: content.bounds, to: bitmap)
+            guard let image = bitmap.cgImage else {
+                fatalError("Missing holder demo image")
             }
-            // The panel may replace its hosting view during a real capture. Always
-            // cache the current view instead of retaining a detached NSHostingView.
-            guard let liveContent = panel.contentView else {
-                let elapsed = candidateCaptureStart.map { Date().timeIntervalSince($0) } ?? 0
-                guard candidateCaptureStart != nil, elapsed >= BubbleCollectorMotion.totalDuration else {
-                    fatalError("Collector motion panel lost its content view at frame \(frameIndex)")
-                }
-                // The scheduled expiration is the real collapsed endpoint. Keep
-                // the movie's timing grid intact with transparent frames after
-                // the native panel has correctly disappeared.
-                let collapsed = clearCollectorFrame(width: Int(BubbleCollectorFloatingPanel.size.width),
-                                                     height: Int(BubbleCollectorFloatingPanel.size.height))
-                motionFrames.append(collapsed)
-                observedCollapsedEnd = true
-                if [0, 14, 28, 42, 56, 70, 80].contains(frameIndex) {
-                    try NSBitmapImageRep(cgImage: collapsed).representation(using: .png, properties: [:])!.write(to: output.appendingPathComponent(
-                        "Bubble-collector-insertion-frame-\(frameIndex).png"))
-                }
-                continue
-            }
-            liveContent.layoutSubtreeIfNeeded()
-            guard let bitmap = liveContent.bitmapImageRepForCachingDisplay(in: liveContent.bounds) else {
-                fatalError("Missing collector motion frame \(frameIndex)")
-            }
-            liveContent.cacheDisplay(in: liveContent.bounds, to: bitmap)
-            guard let cgImage = bitmap.cgImage else {
-                fatalError("Missing collector motion image \(frameIndex)")
-            }
-            motionFrames.append(cgImage)
-            if [0, 14, 28, 42, 56, 70, 80].contains(frameIndex) {
-                try bitmap.representation(using: .png, properties: [:])!.write(to: output.appendingPathComponent(
-                    "Bubble-collector-insertion-frame-\(frameIndex).png"))
-            }
+            return image
         }
-        if !observedCollapsedEnd, let candidateCaptureStart {
-            let expirationDeadline = Date().addingTimeInterval(0.35)
-            while controller.presentation != nil && Date() < expirationDeadline {
-                RunLoop.main.run(mode: .default,
-                                 before: min(expirationDeadline, Date().addingTimeInterval(0.01)))
-            }
-            observedCollapsedEnd = controller.presentation == nil
-                && Date().timeIntervalSince(candidateCaptureStart) >= BubbleCollectorMotion.totalDuration
+
+        func waitFrame() {
+            RunLoop.main.run(until: Date().addingTimeInterval(1.0 / 12.0))
         }
-        guard shelf.items.count == 5,
-              candidateCaptureStart != nil,
-              observedCollapsedEnd,
-              motionFrames.count == 81,
-              controller.presentation == nil else {
-            fatalError("Collector motion capture lost its final captured presentation")
+
+        var frames: [CGImage] = []
+        for _ in 0..<8 {
+            waitFrame()
+            frames.append(try captureFrame())
         }
-        let movieURL = output.appendingPathComponent("Bubble-collector-insertion.gif")
+        controller.toggleExpanded()
+        waitFrame()
+        guard let content = panel.contentView else {
+            fatalError("Holder demo panel lost its expanded content view")
+        }
+        let rowBridges = descendants(content).compactMap { $0 as? NotchScrollEventView }
+        let expectedRowWidth = BubbleHolderLayout.rowWidth(
+            for: BubbleHolderLayout.page(for: shelf.items.count, index: 0))
+        verifyPresentation(rowBridges.contains { $0.bounds.width >= expectedRowWidth - 1
+                                  && $0.bounds.height >= BubbleHolderLayout.rowHeight - 1 },
+                           "Expanded holder row did not install a native horizontal-scroll bridge")
+        for _ in 0..<24 {
+            waitFrame()
+            frames.append(try captureFrame())
+        }
+
+        // Exercise a real store deletion while the expanded holder remains
+        // visible. The row updates in place and no source file is touched.
+        guard let removedID = shelf.items.last?.id else {
+            fatalError("Holder demo has no removable item")
+        }
+        shelf.remove(id: removedID)
+        waitFrame()
+        frames.append(try captureFrame())
+
+        controller.toggleExpanded()
+        for _ in 0..<24 {
+            waitFrame()
+            frames.append(try captureFrame())
+        }
+
+        controller.moveHolder(to: CGPoint(x: 42, y: 42))
+        waitFrame()
+        let edgeFrame = try captureFrame()
+        try NSBitmapImageRep(cgImage: edgeFrame).representation(using: .png, properties: [:])!.write(
+            to: output.appendingPathComponent("Bubble-holder-edge-clamped.png"))
+
+        for index in [0, 7, 15, 31, 40, frames.count - 1] where frames.indices.contains(index) {
+            try NSBitmapImageRep(cgImage: frames[index]).representation(using: .png, properties: [:])!.write(
+                to: output.appendingPathComponent("Bubble-holder-demo-frame-\(index).png"))
+        }
+
+        let movieURL = output.appendingPathComponent("Bubble-holder-demo.gif")
         guard let destination = CGImageDestinationCreateWithURL(movieURL as CFURL,
                                                                   UTType.gif.identifier as CFString,
-                                                                  motionFrames.count, nil) else {
-            fatalError("Cannot create collector motion storyboard")
+                                                                  frames.count, nil) else {
+            fatalError("Cannot create holder demo storyboard")
         }
         CGImageDestinationSetProperties(destination,
             [kCGImagePropertyGIFDictionary: [kCGImagePropertyGIFLoopCount: 0]] as CFDictionary)
-        for frame in motionFrames {
+        for frame in frames {
             CGImageDestinationAddImage(destination, frame,
-                [kCGImagePropertyGIFDictionary: [kCGImagePropertyGIFDelayTime: 1.0 / 12.0]] as CFDictionary)
+                [kCGImagePropertyGIFDictionary:
+                    [kCGImagePropertyGIFDelayTime: 1.0 / 12.0]] as CFDictionary)
         }
-        verifyPresentation(CGImageDestinationFinalize(destination), "Failed to save collector insertion storyboard")
-
-        controller.hidePreviewForTesting()
-        for (index, pointer) in [CGPoint(x: 0.28, y: 0.36), CGPoint(x: 0.50, y: 0.28), CGPoint(x: 0.72, y: 0.62)].enumerated() {
-            try capture(BubbleCollectorFixtureView(payloads: payloads, pointer: pointer)
-                .background(Color.black).preferredColorScheme(.dark), width: 190,
-                name: "Bubble-collector-pointer-\(index)", output: output, height: 190)
-        }
+        verifyPresentation(CGImageDestinationFinalize(destination),
+                           "Failed to save holder demo storyboard")
     }
 
     private static func clearCollectorFrame(width: Int, height: Int) -> CGImage {
@@ -993,8 +972,11 @@ struct SettingsPreviewRunner {
         let shelfFile = output.appendingPathComponent("shelf-closed-fixture.txt")
         try Data("Closed-notch shelf fixture".utf8).write(to: shelfFile)
         let savedReceiving = shelf.isReceiving
+        let savedPinned = shelf.isPinnedToNotch
+        shelf.isPinnedToNotch = true
         defer {
             shelf.isReceiving = savedReceiving
+            shelf.isPinnedToNotch = savedPinned
             shelf.resetPreviewConfiguration()
         }
 
@@ -1068,6 +1050,8 @@ struct SettingsPreviewRunner {
     /// left module; quota/task stay in their existing right-side positions.
     @MainActor private static func captureBubbleShelfAudioLayouts(output: URL, fixtures: [AgentSession]) throws {
         let shelf = BubbleShelfStore.shared
+        let savedPinned = shelf.isPinnedToNotch
+        shelf.isPinnedToNotch = true
         let fixtureURL = output.appendingPathComponent("shelf-audio-fixture.txt")
         try Data("Shelf audio layout fixture".utf8).write(to: fixtureURL)
         let items = [BubbleShelfItem(kind: .file, title: "shelf-audio-fixture.txt", resourceURL: fixtureURL)]
@@ -1086,6 +1070,7 @@ struct SettingsPreviewRunner {
         window.isReleasedWhenClosed = false
         window.orderFront(nil)
         defer {
+            shelf.isPinnedToNotch = savedPinned
             shelf.resetPreviewConfiguration()
             quota.configureSettingsPreview(paused: false)
             music.isPlaying = false
