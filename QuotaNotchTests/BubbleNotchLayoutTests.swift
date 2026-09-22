@@ -98,4 +98,33 @@ final class BubbleNotchLayoutTests: XCTestCase {
         XCTAssertEqual(gesture.update(deltaX: 0, deltaY: -5, phase: .none, isMomentum: false,
                                       timestamp: 2, lastClaimTimestamp: 1.1), false)
     }
+
+    func testShelfAudioArrangementSwapsOnlyOnHorizontalDirection() {
+        XCTAssertEqual(BubbleShelfAudioArrangement.shelfMinimalAudioWidget.switched(towardLeft: true),
+                       .shelfWidgetAudioMinimal)
+        XCTAssertEqual(BubbleShelfAudioArrangement.shelfWidgetAudioMinimal.switched(towardLeft: false),
+                       .shelfMinimalAudioWidget)
+        let metrics = NotchModuleMetrics(widgetWidth: QuotaCompactMetrics.iconSize(height: 32))
+        XCTAssertEqual(metrics.additionalWidth, 26)
+        XCTAssertEqual(metrics.widgetWidth + metrics.additionalWidth,
+                       QuotaCompactMetrics.iconSize(height: 32) + 26)
+    }
+
+    func testHorizontalScrollReducerClaimsOnceAndIgnoresVerticalAndMomentum() {
+        var gesture = BubbleHorizontalScrollState()
+        XCTAssertNil(gesture.update(deltaX: 0, deltaY: 2, phase: .began, isMomentum: false,
+                                    timestamp: 1, lastClaimTimestamp: 0))
+        XCTAssertNil(gesture.update(deltaX: -2, deltaY: 0, phase: .changed, isMomentum: false,
+                                    timestamp: 1.05, lastClaimTimestamp: 0))
+        XCTAssertEqual(gesture.update(deltaX: -3, deltaY: 0, phase: .changed, isMomentum: false,
+                                      timestamp: 1.1, lastClaimTimestamp: 0), true)
+        XCTAssertNil(gesture.update(deltaX: -8, deltaY: 0, phase: .changed, isMomentum: false,
+                                    timestamp: 1.2, lastClaimTimestamp: 1.1))
+        XCTAssertNil(gesture.update(deltaX: -8, deltaY: 0, phase: .changed, isMomentum: true,
+                                    timestamp: 1.3, lastClaimTimestamp: 1.1))
+        _ = gesture.update(deltaX: 0, deltaY: 0, phase: .ended, isMomentum: false,
+                           timestamp: 1.4, lastClaimTimestamp: 1.1)
+        XCTAssertFalse(BubbleHorizontalScrollPolicy.isDominantHorizontal(deltaX: 3, deltaY: 4))
+        XCTAssertTrue(BubbleHorizontalScrollPolicy.isDominantHorizontal(deltaX: 4, deltaY: 2))
+    }
 }

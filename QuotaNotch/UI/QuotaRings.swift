@@ -230,6 +230,7 @@ struct QuotaPinnedWings: View {
     let showsMusic: Bool
     let albumArtNamespace: Namespace.ID
     var shelf: BubbleShelfCompactState? = nil
+    var shelfAudioArrangement: BubbleShelfAudioArrangement = .shelfMinimalAudioWidget
     let onSelect: (QuotaProvider) -> Void
     let onMusic: () -> Void
     @AppStorage("quotaComfortable") private var comfortable = false
@@ -246,28 +247,43 @@ struct QuotaPinnedWings: View {
     var body: some View {
         if let pin = store.activePin, let provider = pin.provider {
             HStack(spacing: QuotaCompactMetrics.spacing) {
-                HStack(spacing: 0) {
-                    Button {
-                        if showsMusic { onMusic() }
-                        else { onSelect(provider) }
-                    } label: {
-                        Group {
-                            if showsMusic { albumWithActivity }
-                            else if activity.showAccessory { quotaIndicator(pin, provider: provider) }
-                            else {
-                                QuotaBrandMark(brand: provider.brand)
-                                    .frame(width: iconSize, height: iconSize)
-                                    .auditNotchModule("quota")
+                Group {
+                    if showsMusic, let shelf {
+                        // Shelf owns the outermost left edge. Moving the audio
+                        // control into this fixed-width pair removes the old
+                        // duplicate right spectrum while leaving quota/task on
+                        // their established right wing.
+                        BubbleShelfAudioPair(shelf: shelf,
+                                             arrangement: shelfAudioArrangement,
+                                             height: height,
+                                             widgetWidth: iconSize,
+                                             onAudioOpen: onMusic)
+                            .frame(width: leftWidth + metrics.additionalWidth, height: height)
+                    } else {
+                        HStack(spacing: 0) {
+                            if let shelf {
+                                BubbleShelfCompanion(state: shelf, height: height, widgetWidth: iconSize)
                             }
+                            Button {
+                                if showsMusic { onMusic() }
+                                else { onSelect(provider) }
+                            } label: {
+                                Group {
+                                    if showsMusic { albumWithActivity }
+                                    else if activity.showAccessory { quotaIndicator(pin, provider: provider) }
+                                    else {
+                                        QuotaBrandMark(brand: provider.brand)
+                                            .frame(width: iconSize, height: iconSize)
+                                            .auditNotchModule("quota")
+                                    }
+                                }
+                                .frame(width: leftWidth, height: height)
+                                .contentShape(Rectangle())
+                            }
+                            .buttonStyle(.plain)
+                            .help(showsMusic ? QuotaText.localized("打开音乐") : QuotaText.format("打开 %@ 额度", provider.title))
+                            .accessibilityLabel(showsMusic ? QuotaText.localized("打开音乐") : QuotaText.format("打开 %@ 额度", provider.title))
                         }
-                        .frame(width: leftWidth, height: height)
-                        .contentShape(Rectangle())
-                    }
-                    .buttonStyle(.plain)
-                    .help(showsMusic ? QuotaText.localized("打开音乐") : QuotaText.format("打开 %@ 额度", provider.title))
-                    .accessibilityLabel(showsMusic ? QuotaText.localized("打开音乐") : QuotaText.format("打开 %@ 额度", provider.title))
-                    if let shelf {
-                        BubbleShelfCompanion(state: shelf, height: height, widgetWidth: iconSize)
                     }
                 }
                 .catWing(.left,

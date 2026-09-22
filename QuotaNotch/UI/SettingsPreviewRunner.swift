@@ -127,6 +127,7 @@ struct SettingsPreviewRunner {
         try captureBubbleShelfOpenLayouts(output: output)
         try captureBubbleCollectorMotion(output: output)
         try captureBubbleClosedLayouts(output: output, fixtures: fixtures)
+        try captureBubbleShelfAudioLayouts(output: output, fixtures: fixtures)
         try captureBubbleGlyphOrbit(output: output)
         try captureTaskPanel(output: output, fixtures: fixtures)
         for dark in [true, false] {
@@ -853,7 +854,8 @@ struct SettingsPreviewRunner {
                 // The scheduled expiration is the real collapsed endpoint. Keep
                 // the movie's timing grid intact with transparent frames after
                 // the native panel has correctly disappeared.
-                let collapsed = clearCollectorFrame(width: 150, height: 150)
+                let collapsed = clearCollectorFrame(width: Int(BubbleCollectorFloatingPanel.size.width),
+                                                     height: Int(BubbleCollectorFloatingPanel.size.height))
                 motionFrames.append(collapsed)
                 observedCollapsedEnd = true
                 if [0, 14, 28, 42, 56, 70, 80].contains(frameIndex) {
@@ -1058,6 +1060,126 @@ struct SettingsPreviewRunner {
         music.isPlaying = false; music.isPlayerIdle = true
         activity.configurePreview(fixtures)
         print("Verified closed Shelf states across \(masks.count) module masks, counts 0/1, and heights 24/32/38")
+    }
+
+    /// Capture the real closed notch for the two Shelf/audio arrangements. The
+    /// pair keeps one fixed footprint while the Shelf remains the outermost
+    /// left module; quota/task stay in their existing right-side positions.
+    @MainActor private static func captureBubbleShelfAudioLayouts(output: URL, fixtures: [AgentSession]) throws {
+        let shelf = BubbleShelfStore.shared
+        let fixtureURL = output.appendingPathComponent("shelf-audio-fixture.txt")
+        try Data("Shelf audio layout fixture".utf8).write(to: fixtureURL)
+        let items = [BubbleShelfItem(kind: .file, title: "shelf-audio-fixture.txt", resourceURL: fixtureURL)]
+        let vm = BoringViewModel()
+        vm.hideOnClosed = false
+        let coordinator = BoringViewCoordinator.shared
+        coordinator.helloAnimationRunning = false
+        coordinator.expandingView.show = false
+        coordinator.sneakPeek.show = false
+        coordinator.musicLiveActivityEnabled = true
+        let quota = QuotaNotchStore.shared
+        let music = MusicManager.shared
+        let activity = AgentActivityStore.shared
+        let window = NSWindow(contentRect: NSRect(origin: .zero, size: windowSize),
+                              styleMask: [.borderless], backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false
+        window.orderFront(nil)
+        defer {
+            shelf.resetPreviewConfiguration()
+            quota.configureSettingsPreview(paused: false)
+            music.isPlaying = false
+            music.isPlayerIdle = true
+            activity.configurePreview(fixtures)
+            activity.compactExpanded = false
+            window.orderOut(nil); window.contentView = nil; window.close(); vm.destroy()
+        }
+
+        let scenarios: [(name: String, quota: Bool, audio: Bool, tasks: Bool, receiving: Bool)] = [
+            ("shelf-only-paused", false, false, false, false),
+            ("audio-paused", false, true, false, false),
+            ("audio-playing", false, true, false, true),
+            ("quota-audio", true, true, false, true),
+            ("audio-tasks", false, true, true, true),
+            ("quota-audio-tasks", true, true, true, true),
+            ("quota-tasks-no-audio", true, false, true, false)
+        ]
+        for scenario in scenarios {
+            let arrangements: [BubbleShelfAudioArrangement?] = scenario.audio
+                ? [.shelfMinimalAudioWidget, .shelfWidgetAudioMinimal]
+                : [nil]
+            for arrangement in arrangements {
+                for height in [CGFloat(24), 32, 38] {
+                    shelf.configurePreview(items: items)
+                    shelf.isReceiving = scenario.receiving
+                    quota.configureSettingsPreview(paused: !scenario.quota)
+                    music.isPlaying = scenario.audio && scenario.name == "audio-playing"
+                    music.isPlayerIdle = !scenario.audio || scenario.name == "audio-playing"
+                    if scenario.audio && scenario.name == "audio-paused" {
+                        // An idle player has no compact music module. Keep the
+                        // media session active but paused for this fixture.
+                        music.isPlaying = false
+                        music.isPlayerIdle = false
+                    }
+                    activity.configurePreview(scenario.tasks ? fixtures : [])
+                    activity.compactExpanded = false
+                    coordinator.currentView = .home
+                    vm.close()
+                    vm.closedNotchSize.height = height
+
+                    var modules: [String: String] = [:]
+                    var frames: [String: CGRect] = [:]
+                    let host = NSHostingView(rootView: ContentView(shelfAudioArrangementPreview: arrangement)
+                        .environmentObject(vm)
+                        .onPreferenceChange(NotchModuleAuditKey.self) { modules = $0 }
+                        .onPreferenceChange(NotchModuleFrameAuditKey.self) { frames = $0 }
+                        .transaction { $0.animation = nil; $0.disablesAnimations = true }
+                        .background(Color.black))
+                    window.contentView = host
+                    window.setContentSize(windowSize)
+                    settle(); host.layoutSubtreeIfNeeded(); settle()
+                    guard let camera = frames["camera"] else {
+                        fatalError("Shelf/audio fixture did not publish camera geometry: \(scenario.name)")
+                    }
+                    verifyPresentation(abs(camera.midX - host.bounds.midX) <= 1,
+                                       "Shelf/audio shifted the physical notch in \(scenario.name), height \(height)")
+                    verifyPresentation(modules["bubble"] != nil,
+                                       "Shelf glyph missing in \(scenario.name), height \(height)")
+                    if let arrangement {
+                        let expectedBubble = arrangement == .shelfWidgetAudioMinimal ? "widget" : "minimal"
+                        let expectedMusic = arrangement == .shelfWidgetAudioMinimal ? "minimal" : "widget"
+                        verifyPresentation(modules["bubble"] == expectedBubble,
+                                           "Shelf was not outermost arrangement \(arrangement) in \(scenario.name): \(modules)")
+                        verifyPresentation(modules["music"] == expectedMusic,
+                                           "Audio mode did not swap with Shelf in \(scenario.name): \(modules)")
+                        guard let bubble = frames["bubble"], let album = frames["album"] else {
+                            fatalError("Shelf/audio pair omitted audited frames in \(scenario.name)")
+                        }
+                        verifyPresentation(bubble.minX <= album.minX + 1,
+                                           "Shelf was not left of audio in \(scenario.name): \(bubble), \(album)")
+                        let pairWidth = max(bubble.maxX, album.maxX) - min(bubble.minX, album.minX)
+                        let expectedPairWidth = QuotaCompactMetrics.iconSize(height: height) + 26
+                        verifyPresentation(abs(pairWidth - expectedPairWidth) <= 2,
+                                           "Shelf/audio pair changed footprint in \(scenario.name), height \(height): \(pairWidth) vs \(expectedPairWidth)")
+                    } else if let bubble = frames["bubble"] {
+                        for name in ["quota", "task"] {
+                            if let other = frames[name] {
+                                verifyPresentation(bubble.minX <= other.minX + 1,
+                                                   "Shelf was not the outermost left module in \(scenario.name): \(bubble), \(other)")
+                            }
+                        }
+                    }
+                    let arrangementName = arrangement?.rawValue ?? "none"
+                    guard let bitmap = host.bitmapImageRepForCachingDisplay(in: host.bounds) else {
+                        fatalError("Missing Shelf/audio fixture bitmap")
+                    }
+                    host.cacheDisplay(in: host.bounds, to: bitmap)
+                    try bitmap.representation(using: .png, properties: [:])!.write(to: output.appendingPathComponent(
+                        "Notch-shelf-audio-\(scenario.name)-h\(Int(height))-\(arrangementName).png"))
+                    window.contentView = nil
+                }
+            }
+        }
+        print("Verified Shelf/audio fixed-footprint swaps, outermost-left order, paused/playing audio, quota/task combinations, and heights 24/32/38")
     }
 
     @MainActor private static func verifyCatRubRegion() throws {

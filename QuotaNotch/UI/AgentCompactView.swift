@@ -422,6 +422,11 @@ struct AgentTaskOnlyWings: View {
     var body: some View {
         HStack(spacing: QuotaCompactMetrics.spacing) {
             HStack(spacing: 0) {
+                // Shelf is the outermost left module; the task mark remains
+                // the same widget/minimal size immediately beside it.
+                if let shelf {
+                    BubbleShelfCompanion(state: shelf, height: height, widgetWidth: iconWidth)
+                }
                 Button(action: open) {
                     Group {
                         if let session = emphasis {
@@ -433,9 +438,6 @@ struct AgentTaskOnlyWings: View {
                     .auditNotchModule("task")
                 }.buttonStyle(.plain)
                     .accessibilityLabel(AgentText.t("任务", "Tasks") + " · " + AgentText.state(emphasis?.state ?? .unknown))
-                if let shelf {
-                    BubbleShelfCompanion(state: shelf, height: height, widgetWidth: iconWidth)
-                }
             }
             .catWing(.left,
                      occupied: iconWidth + (shelf == nil ? 0 : metrics.additionalWidth),

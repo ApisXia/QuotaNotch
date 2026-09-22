@@ -12,6 +12,20 @@ struct BubbleNotchRectangle: Equatable, Identifiable {
     let depth: Double
 }
 
+/// The two fixed-footprint arrangements used when Shelf shares the left audio
+/// wing. The horizontal gesture only swaps these arrangements; it never changes
+/// the physical notch width.
+enum BubbleShelfAudioArrangement: String, Equatable, CaseIterable {
+    case shelfMinimalAudioWidget
+    case shelfWidgetAudioMinimal
+
+    func switched(towardLeft: Bool) -> Self {
+        // A leftward scroll brings the larger Shelf widget toward the leading
+        // edge; the opposite direction restores the compact Shelf mark.
+        towardLeft ? .shelfWidgetAudioMinimal : .shelfMinimalAudioWidget
+    }
+}
+
 /// Shared, content-free page silhouettes for the shelf mark. Coordinates use one square
 /// source plane in every size so Minimal never distorts the file stack.
 enum BubbleNotchLayout {
@@ -143,6 +157,46 @@ enum BubbleScrollPolicy {
 
 enum BubbleScrollPhase {
     case none, began, changed, ended
+}
+
+enum BubbleHorizontalScrollPolicy {
+    static let axisRatio: CGFloat = 1.2
+    static let minimumDelta: CGFloat = 5
+
+    static func isDominantHorizontal(deltaX: CGFloat, deltaY: CGFloat) -> Bool {
+        abs(deltaX) > abs(deltaY) * axisRatio
+    }
+}
+
+/// Stateful horizontal scroll reducer. Mouse drags remain reserved for export;
+/// this reducer is fed only by AppKit scroll-wheel events.
+struct BubbleHorizontalScrollState {
+    private(set) var accumulatedDeltaX: CGFloat = 0
+    private(set) var claimed = false
+
+    mutating func update(deltaX: CGFloat, deltaY: CGFloat, phase: BubbleScrollPhase,
+                         isMomentum: Bool, timestamp: TimeInterval,
+                         lastClaimTimestamp: TimeInterval) -> Bool? {
+        guard !isMomentum else { return nil }
+        if phase == .ended {
+            accumulatedDeltaX = 0
+            claimed = false
+            return nil
+        }
+        guard BubbleHorizontalScrollPolicy.isDominantHorizontal(deltaX: deltaX, deltaY: deltaY) else { return nil }
+        if phase == .began || (phase == .none && timestamp - lastClaimTimestamp >= 0.45) {
+            accumulatedDeltaX = 0
+            claimed = false
+        }
+        accumulatedDeltaX += deltaX
+        guard !claimed,
+              abs(accumulatedDeltaX) >= BubbleHorizontalScrollPolicy.minimumDelta,
+              timestamp - lastClaimTimestamp >= 0.45 else { return nil }
+        claimed = true
+        let towardLeft = accumulatedDeltaX < 0
+        accumulatedDeltaX = 0
+        return towardLeft
+    }
 }
 
 /// Stateful gesture reducer used by the AppKit event view. Keeping the

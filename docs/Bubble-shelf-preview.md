@@ -42,5 +42,5 @@ This guide describes how to use the QuotaNotch Shelf preview and what it support
 - 粘贴板和拖放支持实际文件/文件夹 URL、文本、网页 URL，以及可解码的 PNG/TIFF 图像。文件承诺（file promise）目前会明确拒绝；不会伪造一个已经完成的文件。
 - Pasteboard and drag-and-drop accept real file/folder URLs, text, web URLs, and decodable PNG/TIFF images. File promises are explicitly rejected for now; the preview does not pretend a promised file has arrived.
 
-- 这份预览不轮询全局剪贴板；可读取的内容取决于应用提供的选择接口。它没有音频或音乐控制手势；上下滚动只切换 Shelf 接收模式，拖动任意方向都可导出。
-- The preview reads only selections exposed by the current app and does not poll the global clipboard. It has no audio or music gestures: vertical scrolling toggles Shelf receiving, and dragging in any direction exports saved items.
+- 这份预览不轮询全局剪贴板；可读取的内容取决于应用提供的选择接口。Shelf 与音乐同时显示时，Shelf 永远在左翼最外侧；默认是“Shelf 极简 + 音频小组件”，明确的水平滚动只在这两种固定足迹之间切换到“Shelf 小组件 + 音频极简”（专辑图在上、短频谱在下）。上下滚动仍只切换 Shelf 接收模式，鼠标拖动仍用于导出，不会触发排列切换；音频原有点击打开控制保持不变。
+- The preview reads only selections exposed by the current app and does not poll the global clipboard. When Shelf and music share the notch, Shelf stays at the outermost left edge. The default is “Shelf minimal + audio widget”; an explicit horizontal scroll swaps to “Shelf widget + audio minimal” (album art above a short spectrum) while keeping the same total footprint. Vertical scrolling still toggles Shelf receiving, and mouse dragging still exports content rather than switching layouts; the existing audio click-to-open control remains unchanged.

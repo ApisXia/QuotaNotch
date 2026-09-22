@@ -9,6 +9,19 @@ struct BubbleShelfCompactState {
     let onOpen: () -> Void
     let onVerticalSwipe: (Bool) -> Void
     let writers: () -> [NSPasteboardWriting]
+    let onHorizontalSwipe: (Bool) -> Void
+
+    init(itemCount: Int, isReceiving: Bool, onOpen: @escaping () -> Void,
+         onVerticalSwipe: @escaping (Bool) -> Void,
+         writers: @escaping () -> [NSPasteboardWriting],
+         onHorizontalSwipe: @escaping (Bool) -> Void = { _ in }) {
+        self.itemCount = itemCount
+        self.isReceiving = isReceiving
+        self.onOpen = onOpen
+        self.onVerticalSwipe = onVerticalSwipe
+        self.writers = writers
+        self.onHorizontalSwipe = onHorizontalSwipe
+    }
 }
 
 @MainActor
@@ -373,6 +386,7 @@ struct BubbleShelfClosedControl: View {
                 preview: { BubbleDragPreview.mark(itemCount: state.itemCount) },
                 click: state.onOpen,
                 verticalSwipe: state.onVerticalSwipe,
+                horizontalSwipe: state.onHorizontalSwipe,
                 hover: { isHovering = $0 }
             )
         }
@@ -397,16 +411,205 @@ struct BubbleShelfCompanion: View {
 
     var body: some View {
         HStack(spacing: 0) {
+            BubbleShelfClosedControl(state: state, presentation: .minimal, height: height, widgetWidth: widgetWidth)
+                .frame(width: 16, height: height)
             Rectangle()
                 .fill(.white.opacity(0.14))
                 .frame(width: 1, height: min(14, max(8, height * 0.45)))
                 .frame(width: 10, height: height)
-            BubbleShelfClosedControl(state: state, presentation: .minimal, height: height, widgetWidth: widgetWidth)
-                .frame(width: 16, height: height)
         }
         .frame(height: height)
         .accessibilityElement(children: .contain)
     }
+}
+
+/// A compact audio mark for the shared left wing: album art above a short live
+/// spectrum. It intentionally occupies the same divider-plus-16pt footprint as
+/// the Shelf minimal companion.
+struct BubbleShelfAudioMinimal: View {
+    let height: CGFloat
+    let widgetWidth: CGFloat
+    let onOpen: () -> Void
+    @ObservedObject private var music = MusicManager.shared
+
+    private var markSize: CGFloat { min(14, max(10, widgetWidth * 0.7)) }
+
+    var body: some View {
+        let spectrumWidth = min(13, max(10, widgetWidth * 0.7))
+        let spectrumHeight = max(4, min(7, height * 0.22))
+        let spectrumScale = min(spectrumWidth / 16, spectrumHeight / 14)
+        HStack(spacing: 0) {
+            Rectangle()
+                .fill(.white.opacity(0.14))
+                .frame(width: 1, height: min(14, max(8, height * 0.45)))
+                .frame(width: 10, height: height)
+            Button(action: onOpen) {
+                VStack(spacing: 1) {
+                    Image(nsImage: music.albumArt)
+                        .resizable()
+                        .scaledToFill()
+                        .frame(width: markSize, height: markSize)
+                        .clipShape(RoundedRectangle(cornerRadius: 2))
+                    AudioSpectrumView(isPlaying: $music.isPlaying)
+                        // MusicVisualizer draws its bars in a fixed 16×14
+                        // layer. Scale that source frame uniformly before
+                        // placing it in the compact row; a smaller SwiftUI
+                        // frame alone would not clip the AppKit paths.
+                        .frame(width: 16, height: 14)
+                        .scaleEffect(spectrumScale)
+                        .frame(width: spectrumWidth, height: spectrumHeight)
+                }
+                .frame(width: 16, height: height, alignment: .center)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .auditNotchFrame("album")
+            .accessibilityLabel(AgentText.t("音乐", "Music"))
+        }
+        .frame(width: 26, height: height)
+        .auditNotchModule("music", mode: "minimal")
+    }
+}
+
+/// The normal single-slot audio control used beside a compact Shelf mark.
+/// The whole album remains the existing click target while a small spectrum
+/// keeps playback state visible without restoring the old second right wing.
+struct BubbleShelfAudioWidget: View {
+    let height: CGFloat
+    let widgetWidth: CGFloat
+    let onOpen: () -> Void
+    @ObservedObject private var music = MusicManager.shared
+
+    var body: some View {
+        let spectrumWidth = min(10, max(7, widgetWidth * 0.42))
+        let spectrumHeight: CGFloat = 8
+        let spectrumScale = min(spectrumWidth / 16, spectrumHeight / 14)
+        Button(action: onOpen) {
+            Image(nsImage: music.albumArt)
+                .resizable()
+                .scaledToFill()
+                .frame(width: widgetWidth, height: widgetWidth)
+                .clipShape(RoundedRectangle(cornerRadius: MusicPlayerImageSizes.cornerRadiusInset.closed))
+                .overlay(alignment: .bottomTrailing) {
+                    AudioSpectrumView(isPlaying: $music.isPlaying)
+                        .frame(width: 16, height: 14)
+                        .scaleEffect(spectrumScale)
+                        .frame(width: spectrumWidth, height: spectrumHeight)
+                        .padding(1)
+                        .background(.black.opacity(0.75), in: RoundedRectangle(cornerRadius: 2))
+                        .allowsHitTesting(false)
+                }
+                .frame(width: widgetWidth, height: height)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .auditNotchModule("music")
+        .auditNotchFrame("album")
+        .accessibilityLabel(AgentText.t("音乐", "Music"))
+    }
+}
+
+/// Shelf-first pair with a fixed `widget + minimal` width in either order.
+struct BubbleShelfAudioPair: View {
+    let shelf: BubbleShelfCompactState
+    let arrangement: BubbleShelfAudioArrangement
+    let height: CGFloat
+    let widgetWidth: CGFloat
+    let onAudioOpen: () -> Void
+
+    private var shelfWithoutPairScroll: BubbleShelfCompactState {
+        BubbleShelfCompactState(itemCount: shelf.itemCount,
+                                isReceiving: shelf.isReceiving,
+                                onOpen: shelf.onOpen,
+                                onVerticalSwipe: shelf.onVerticalSwipe,
+                                writers: shelf.writers)
+    }
+
+    var body: some View {
+        HStack(spacing: 0) {
+            switch arrangement {
+            case .shelfWidgetAudioMinimal:
+                BubbleShelfClosedControl(state: shelfWithoutPairScroll, presentation: .widget,
+                                         height: height, widgetWidth: widgetWidth)
+                    .frame(width: widgetWidth, height: height)
+                BubbleShelfAudioMinimal(height: height, widgetWidth: widgetWidth, onOpen: onAudioOpen)
+            case .shelfMinimalAudioWidget:
+                BubbleShelfCompanion(state: shelfWithoutPairScroll, height: height, widgetWidth: widgetWidth)
+                BubbleShelfAudioWidget(height: height, widgetWidth: widgetWidth, onOpen: onAudioOpen)
+            }
+        }
+        .frame(height: height)
+        // A local scroll monitor covers the entire pair while returning the
+        // original event to the underlying SwiftUI Buttons. Thus horizontal
+        // scrolling can swap either side, without swallowing audio clicks or
+        // turning mouse drags into layout switches.
+        .background(BubbleShelfHorizontalScrollMonitor(onSwipe: shelf.onHorizontalSwipe))
+    }
+}
+
+@MainActor
+private struct BubbleShelfHorizontalScrollMonitor: NSViewRepresentable {
+    let onSwipe: (Bool) -> Void
+
+    func makeNSView(context: Context) -> BubbleShelfHorizontalScrollView {
+        let view = BubbleShelfHorizontalScrollView()
+        view.onSwipe = onSwipe
+        return view
+    }
+
+    func updateNSView(_ view: BubbleShelfHorizontalScrollView, context: Context) {
+        view.onSwipe = onSwipe
+    }
+}
+
+@MainActor
+private final class BubbleShelfHorizontalScrollView: NSView {
+    var onSwipe: ((Bool) -> Void)?
+    private var monitor: Any?
+    private var lastClaimTimestamp: TimeInterval = 0
+    private var gesture = BubbleHorizontalScrollState()
+
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        if window == nil { removeMonitor() } else { installMonitor() }
+    }
+
+    private func installMonitor() {
+        guard monitor == nil else { return }
+        monitor = NSEvent.addLocalMonitorForEvents(matching: .scrollWheel) { [weak self] event in
+            guard let self, let window = self.window, event.window === window else { return event }
+            let point = self.convert(event.locationInWindow, from: nil)
+            guard self.bounds.contains(point) else { return event }
+            let phase: BubbleScrollPhase
+            if event.phase.isEmpty { phase = .none }
+            else if event.phase.contains(.began) { phase = .began }
+            else if event.phase.contains(.ended) || event.phase.contains(.cancelled) { phase = .ended }
+            else { phase = .changed }
+            if phase == .ended {
+                _ = self.gesture.update(deltaX: 0, deltaY: 0, phase: .ended,
+                                         isMomentum: false, timestamp: event.timestamp,
+                                         lastClaimTimestamp: self.lastClaimTimestamp)
+            } else if event.momentumPhase.isEmpty,
+                      BubbleHorizontalScrollPolicy.isDominantHorizontal(deltaX: event.scrollingDeltaX,
+                                                                         deltaY: event.scrollingDeltaY),
+                      let towardLeft = self.gesture.update(deltaX: event.scrollingDeltaX,
+                                                           deltaY: event.scrollingDeltaY,
+                                                           phase: phase, isMomentum: false,
+                                                           timestamp: event.timestamp,
+                                                           lastClaimTimestamp: self.lastClaimTimestamp) {
+                self.lastClaimTimestamp = event.timestamp
+                self.onSwipe?(towardLeft)
+            }
+            return event
+        }
+    }
+
+    private func removeMonitor() {
+        if let monitor { NSEvent.removeMonitor(monitor); self.monitor = nil }
+        gesture = BubbleHorizontalScrollState()
+    }
+
+    deinit { removeMonitor() }
 }
 
 struct BubbleNotchGlyph: View {
@@ -565,6 +768,7 @@ private struct BubbleShelfDragHandle: NSViewRepresentable {
     var preview: () -> NSImage? = { nil }
     var click: (() -> Void)? = nil
     var verticalSwipe: ((Bool) -> Void)? = nil
+    var horizontalSwipe: ((Bool) -> Void)? = nil
     var hover: ((Bool) -> Void)? = nil
 
     func makeNSView(context: Context) -> BubbleInteractionView {
@@ -580,6 +784,7 @@ private struct BubbleShelfDragHandle: NSViewRepresentable {
         view.preview = preview
         view.activate = click
         view.swipe = verticalSwipe
+        view.horizontalSwipe = horizontalSwipe
         view.hover = hover
     }
 }
@@ -590,11 +795,14 @@ private final class BubbleInteractionView: NSView, NSDraggingSource {
     var preview: (() -> NSImage?)?
     var activate: (() -> Void)?
     var swipe: ((Bool) -> Void)?
+    var horizontalSwipe: ((Bool) -> Void)?
     var hover: ((Bool) -> Void)?
     private var downPoint: NSPoint?
     private var state: Interaction = .idle
     private var lastVerticalToggle: TimeInterval = 0
+    private var lastHorizontalToggle: TimeInterval = 0
     private var verticalGesture = BubbleScrollGestureState()
+    private var horizontalGesture = BubbleHorizontalScrollState()
 
     private enum Interaction { case idle, tracking, dragging }
 
@@ -652,11 +860,27 @@ private final class BubbleInteractionView: NSView, NSDraggingSource {
             _ = verticalGesture.update(deltaX: 0, deltaY: 0, phase: .ended,
                                        isMomentum: false, timestamp: event.timestamp,
                                        lastClaimTimestamp: lastVerticalToggle)
+            _ = horizontalGesture.update(deltaX: 0, deltaY: 0, phase: .ended,
+                                         isMomentum: false, timestamp: event.timestamp,
+                                         lastClaimTimestamp: lastHorizontalToggle)
             super.scrollWheel(with: event)
             return
         }
-        guard event.momentumPhase.isEmpty,
-              BubbleScrollPolicy.isDominantVertical(deltaX: event.scrollingDeltaX, deltaY: vertical) else {
+        guard event.momentumPhase.isEmpty else {
+            super.scrollWheel(with: event)
+            return
+        }
+        if BubbleHorizontalScrollPolicy.isDominantHorizontal(deltaX: event.scrollingDeltaX, deltaY: vertical) {
+            if let towardLeft = horizontalGesture.update(deltaX: event.scrollingDeltaX, deltaY: vertical,
+                                                         phase: phase, isMomentum: false,
+                                                         timestamp: event.timestamp,
+                                                         lastClaimTimestamp: lastHorizontalToggle) {
+                lastHorizontalToggle = event.timestamp
+                horizontalSwipe?(towardLeft)
+            }
+            return
+        }
+        guard BubbleScrollPolicy.isDominantVertical(deltaX: event.scrollingDeltaX, deltaY: vertical) else {
             super.scrollWheel(with: event)
             return
         }
