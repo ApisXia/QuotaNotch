@@ -891,22 +891,6 @@ struct SettingsPreviewRunner {
             waitFrame()
             frames.append(try captureFrame())
         }
-        guard let collapsedFrame = frames.last else {
-            fatalError("Holder demo did not capture a post-collapse frame")
-        }
-        verifyPresentation(hasVisibleHolderContent(collapsedFrame.image),
-                           "Holder demo collapsed frame was blank before the edge move")
-        if let png = NSBitmapImageRep(cgImage: collapsedFrame.image)
-            .representation(using: .png, properties: [:]) {
-            try png.write(to: output.appendingPathComponent("Bubble-holder-raw-collapsed.png"))
-        }
-
-        controller.moveHolder(to: CGPoint(x: 42, y: 42))
-        waitFrame()
-        let edgeFrame = try captureFrame()
-        try NSBitmapImageRep(cgImage: edgeFrame.image).representation(using: .png, properties: [:])!.write(
-            to: output.appendingPathComponent("Bubble-holder-edge-clamped.png"))
-
         func describe(_ rect: CGRect) -> String {
             String(format: "(%.2f,%.2f,%.2f,%.2f)",
                    rect.origin.x, rect.origin.y, rect.width, rect.height)
@@ -923,6 +907,33 @@ struct SettingsPreviewRunner {
         }.joined(separator: "\n")
         try Data((metadata + "\n").utf8).write(
             to: output.appendingPathComponent("Bubble-holder-demo-metadata.txt"))
+        guard let collapsedFrame = frames.last else {
+            fatalError("Holder demo did not capture a post-collapse frame")
+        }
+        if let png = NSBitmapImageRep(cgImage: collapsedFrame.image)
+            .representation(using: .png, properties: [:]) {
+            try png.write(to: output.appendingPathComponent("Bubble-holder-raw-collapsed.png"))
+        }
+        verifyPresentation(hasVisibleHolderContent(collapsedFrame.image),
+                           "Holder demo collapsed frame was blank before the edge move")
+        verifyPresentation(abs(collapsedFrame.panelFrame.width - BubbleHolderLayout.collapsedSize.width) <= 1
+                               && abs(collapsedFrame.panelFrame.height - BubbleHolderLayout.collapsedSize.height) <= 1,
+                           "Holder demo panel did not return to the collapsed 82pt frame")
+        verifyPresentation(abs(collapsedFrame.hostBounds.width - BubbleHolderLayout.collapsedSize.width) <= 1
+                               && abs(collapsedFrame.hostBounds.height - BubbleHolderLayout.collapsedSize.height) <= 1,
+                           "Holder demo host did not return to the collapsed 82pt frame")
+        guard let holderLocation = controller.holderLocation else {
+            fatalError("Holder demo lost its persisted holder center after collapse")
+        }
+        verifyPresentation(abs(collapsedFrame.panelFrame.midX - holderLocation.x) <= 1
+                               && abs(collapsedFrame.panelFrame.midY - holderLocation.y) <= 1,
+                           "Holder demo collapsed panel center moved away from the holder")
+
+        controller.moveHolder(to: CGPoint(x: 42, y: 42))
+        waitFrame()
+        let edgeFrame = try captureFrame()
+        try NSBitmapImageRep(cgImage: edgeFrame.image).representation(using: .png, properties: [:])!.write(
+            to: output.appendingPathComponent("Bubble-holder-edge-clamped.png"))
 
         guard let reference = frames.first(where: {
             $0.canvasSize.width > BubbleHolderLayout.collapsedSize.width + 1

@@ -58,11 +58,19 @@ final class BubbleCollectorFloatingPanel {
         panel.hidesOnDeactivate = false
         panel.isMovableByWindowBackground = false
         panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .ignoresCycle]
+        panel.contentMinSize = .zero
+        panel.contentMaxSize = NSSize(width: 10_000, height: 10_000)
         self.panel = panel
 
-        geometryObservation = frameState.$geometry.sink { [weak self] geometry in
-            self?.apply(geometry)
-        }
+        // Let SwiftUI finish publishing the new geometry before AppKit applies
+        // the matching window frame. Applying synchronously from the publisher
+        // can resize the parent while the hosting view still reports its old
+        // intrinsic bounds.
+        geometryObservation = frameState.$geometry
+            .receive(on: RunLoop.main)
+            .sink { [weak self] geometry in
+                self?.apply(geometry)
+            }
     }
 
     func present(anchor: CGPoint) {
@@ -167,8 +175,13 @@ final class BubbleCollectorFloatingPanel {
             onExpansionChange: { [weak self] expanded in self?.setExpanded(expanded) }
         )
         let host = NSHostingView(rootView: root)
+        // The holder owns its explicit frame; the SwiftUI intrinsic size must
+        // not update the panel's content constraints during collapse.
+        host.sizingOptions = []
         host.frame = CGRect(origin: .zero, size: frameState.geometry.canvasSize)
         host.autoresizingMask = [.width, .height]
+        panel?.contentMinSize = .zero
+        panel?.contentMaxSize = NSSize(width: 10_000, height: 10_000)
         panel?.contentView = host
         self.host = host
         apply(frameState.geometry)
