@@ -5,8 +5,11 @@ import Foundation
 enum BubbleCollectorPolicy {
     static func selectedText(in value: String, location: Int, length: Int) -> String? {
         guard location >= 0, length > 0 else { return nil }
+        let utf16Count = value.utf16.count
+        guard location <= utf16Count, length <= utf16Count - location else { return nil }
         let nsRange = NSRange(location: location, length: length)
-        guard let range = Range(nsRange, in: value) else { return nil }
+        guard let range = Range(nsRange, in: value),
+              NSRange(range, in: value) == nsRange else { return nil }
         return String(value[range])
     }
 
