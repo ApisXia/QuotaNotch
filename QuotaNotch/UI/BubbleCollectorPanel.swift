@@ -751,6 +751,8 @@ private struct CollectorPreviewCard: View {
                         .background(Color(red: 0.92, green: 0.94, blue: 0.95).opacity(0.96))
                 }
             }
+            .frame(width: size.width, height: size.height)
+            .clipped()
             VStack(spacing: 0) {
                 Spacer(minLength: 0)
                 Text(payload.title.prefix(22))
@@ -775,6 +777,7 @@ private struct CollectorPreviewCard: View {
                 .contentShape(Rectangle())
             }
         }
+        .frame(width: size.width, height: size.height)
         .clipShape(RoundedRectangle(cornerRadius: max(2, size.width * 0.06), style: .continuous))
         .overlay {
             RoundedRectangle(cornerRadius: max(2, size.width * 0.06), style: .continuous)
