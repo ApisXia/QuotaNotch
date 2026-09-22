@@ -687,13 +687,13 @@ struct SettingsPreviewRunner {
         }
         for count in 0...4 {
             let payloads = Array(shelf.items.prefix(count)).map(BubbleCollectorPayload.stored)
-            try capture(BubbleCollectorFixtureView(payloads: payloads, expanded: false)
+            try captureComposited(BubbleCollectorFixtureView(payloads: payloads, expanded: false)
                 .background(Color.black).preferredColorScheme(.dark), width: 220,
                 name: "Bubble-holder-collapsed-count-\(count)", output: output, height: 190)
             let pageCount = BubbleHolderLayout.page(for: count, index: 0).pageCount
             for page in 0..<pageCount {
-                try capture(BubbleCollectorFixtureView(payloads: payloads, expanded: true,
-                                                       pageIndex: page)
+                try captureComposited(BubbleCollectorFixtureView(payloads: payloads, expanded: true,
+                                                                 pageIndex: page)
                     .background(Color.black).preferredColorScheme(.dark), width: 320,
                     name: "Bubble-holder-expanded-count-\(count)-page\(page)", output: output, height: 220)
             }
@@ -818,13 +818,6 @@ struct SettingsPreviewRunner {
                 fatalError("Holder demo panel lost its content view")
             }
             content.layoutSubtreeIfNeeded()
-            guard let bitmap = content.bitmapImageRepForCachingDisplay(in: content.bounds) else {
-                fatalError("Missing holder demo bitmap")
-            }
-            content.cacheDisplay(in: content.bounds, to: bitmap)
-            guard let image = bitmap.cgImage else {
-                fatalError("Missing holder demo image")
-            }
             // Convert the persisted AppKit screen-space holder center back to
             // the panel's top-down content coordinates. This remains correct
             // while the native panel resizes and moves its frame around the
@@ -833,6 +826,9 @@ struct SettingsPreviewRunner {
                 ?? CGPoint(x: panel.frame.midX, y: panel.frame.midY)
             let ballCenter = CGPoint(x: globalCenter.x - panel.frame.minX,
                                      y: panel.frame.maxY - globalCenter.y)
+            let captureURL = output.appendingPathComponent(".holder-frame-\(UUID().uuidString).png")
+            defer { try? FileManager.default.removeItem(at: captureURL) }
+            let image = try captureCompositedWindow(panel, to: captureURL)
             return (image, content.bounds.size, ballCenter, globalCenter)
         }
 
@@ -917,17 +913,18 @@ struct SettingsPreviewRunner {
             let origin = CGPoint(x: targetBallCenter.x - frame.ballCenter.x,
                                  y: targetBallCenter.y - frame.ballCenter.y)
             let drawRect = CGRect(x: origin.x * pixelScale,
-                                  y: origin.y * pixelScale,
+                                  // CGContext's default coordinate system is
+                                  // bottom-up, while the panel geometry above
+                                  // is measured from the screenshot's top edge.
+                                  // Convert only the placement; drawing the
+                                  // WindowServer CGImage itself stays upright.
+                                  y: (fixedPointSize.height - origin.y - frame.canvasSize.height) * pixelScale,
                                   width: frame.canvasSize.width * pixelScale,
                                   height: frame.canvasSize.height * pixelScale)
-            // NSHostingView captures use a top-down SwiftUI coordinate space;
-            // flip the Quartz canvas once so every variable-size source keeps
-            // its original orientation when placed by the actual ball center.
-            context.saveGState()
-            context.translateBy(x: 0, y: CGFloat(pixelHeight))
-            context.scaleBy(x: 1, y: -1)
+            // The window screenshot already has the compositor's display
+            // orientation. Do not apply a second Quartz flip: it would put
+            // the row below the ball and invert every thumbnail.
             context.draw(frame.image, in: drawRect)
-            context.restoreGState()
             guard let image = context.makeImage() else {
                 fatalError("Could not finalize fixed holder demo canvas")
             }
@@ -1450,6 +1447,64 @@ struct SettingsPreviewRunner {
         quota.configureSettingsPreview(paused: false); activity.configurePreview(fixtures)
         music.isPlaying = false; music.isPlayerIdle = true
         print("Verified \(records.count) cat layouts with physical-notch anchoring")
+    }
+
+    /// Captures a holder fixture through WindowServer so Metal layers, SwiftUI
+    /// blur, and the nonactivating panel compositor are present in the artifact.
+    /// The ordinary host bitmap path is retained for the rest of the settings
+    /// previews, where a CPU snapshot is sufficient.
+    @MainActor private static func captureComposited<V: View>(_ view: V, width: CGFloat,
+                                                               name: String, output: URL,
+                                                               height: CGFloat = 600) throws {
+        let size = NSSize(width: width, height: height)
+        let host = NSHostingView(rootView: view)
+        host.frame = NSRect(origin: .zero, size: size)
+        host.autoresizingMask = [.width, .height]
+        let window = NSWindow(contentRect: NSRect(origin: .zero, size: size),
+                              styleMask: [.borderless], backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false
+        window.isOpaque = false
+        window.backgroundColor = .clear
+        window.contentView = host
+        window.setContentSize(size)
+        window.orderFrontRegardless()
+        defer {
+            window.orderOut(nil)
+            window.contentView = nil
+            window.close()
+        }
+        settle()
+        let captureURL = output.appendingPathComponent(".holder-static-\(UUID().uuidString).png")
+        defer { try? FileManager.default.removeItem(at: captureURL) }
+        let image = try captureCompositedWindow(window, to: captureURL)
+        guard let png = NSBitmapImageRep(cgImage: image).representation(using: .png, properties: [:]) else {
+            fatalError("Missing composited holder PNG")
+        }
+        try png.write(to: output.appendingPathComponent("\(name)-0.png"))
+    }
+
+    @MainActor private static func captureCompositedWindow(_ window: NSWindow, to url: URL) throws -> CGImage {
+        guard window.windowNumber > 0 else {
+            fatalError("Holder preview window has no WindowServer ID")
+        }
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/usr/sbin/screencapture")
+        process.arguments = ["-x", "-o", "-l", String(window.windowNumber), "-t", "png", url.path]
+        let errorPipe = Pipe()
+        process.standardError = errorPipe
+        try process.run()
+        process.waitUntilExit()
+        guard process.terminationStatus == 0 else {
+            let diagnostic = String(data: errorPipe.fileHandleForReading.readDataToEndOfFile(),
+                                    encoding: .utf8) ?? "unknown screencapture error"
+            throw NSError(domain: "SettingsPreviewRunner", code: 4,
+                          userInfo: [NSLocalizedDescriptionKey: "WindowServer holder capture failed: \(diagnostic)"])
+        }
+        guard let source = CGImageSourceCreateWithURL(url as CFURL, nil),
+              let image = CGImageSourceCreateImageAtIndex(source, 0, nil) else {
+            fatalError("WindowServer holder capture did not produce an image")
+        }
+        return image
     }
 
     @MainActor private static func capture<V: View>(_ view: V, width: CGFloat, name: String, output: URL, height: CGFloat = 600) throws {
