@@ -475,11 +475,15 @@ struct BubbleCollectorPreview: View {
             }
             onExpansionChange?(expanded)
         }
-        .onChange(of: expansionProgress) { _, progress in
-            guard !isExpanded, forcedPageIndex == nil, progress <= 0.02 else { return }
-            // Keep the selected page stable while cards travel back into the
-            // ball. Reset only once they are effectively hidden, so a quick
-            // reopen can cancel the collapse without swapping card identities.
+        .task(id: isExpanded) {
+            guard !isExpanded, forcedPageIndex == nil else { return }
+            // @State receives the target value immediately even when its
+            // transaction is animated. Keep the departing page through the
+            // reverse animation, then reset after the same delay as the
+            // native panel shrink. SwiftUI cancels this task when the holder
+            // reopens or the view disappears.
+            try? await Task.sleep(nanoseconds: 460_000_000)
+            guard !Task.isCancelled else { return }
             pageIndex = 0
         }
         .onChange(of: contentIDs) { oldIDs, newIDs in
@@ -494,7 +498,7 @@ struct BubbleCollectorPreview: View {
     }
 
     private var effectivePageIndex: Int {
-        forcedPageIndex ?? ((isExpanded || expansionProgress > 0.02) ? pageIndex : 0)
+        forcedPageIndex ?? pageIndex
     }
 
     private func remove(_ payload: BubbleCollectorPayload) {

@@ -812,7 +812,8 @@ struct SettingsPreviewRunner {
             fatalError("Holder demo panel was not created")
         }
 
-        func captureFrame() throws -> CGImage {
+        func captureFrame() throws -> (image: CGImage, canvasSize: CGSize,
+                                       ballCenter: CGPoint, globalCenter: CGPoint) {
             guard let content = panel.contentView else {
                 fatalError("Holder demo panel lost its content view")
             }
@@ -824,14 +825,23 @@ struct SettingsPreviewRunner {
             guard let image = bitmap.cgImage else {
                 fatalError("Missing holder demo image")
             }
-            return image
+            // Convert the persisted AppKit screen-space holder center back to
+            // the panel's top-down content coordinates. This remains correct
+            // while the native panel resizes and moves its frame around the
+            // fixed ball during the expand/collapse transition.
+            let globalCenter = controller.holderLocation
+                ?? CGPoint(x: panel.frame.midX, y: panel.frame.midY)
+            let ballCenter = CGPoint(x: globalCenter.x - panel.frame.minX,
+                                     y: panel.frame.maxY - globalCenter.y)
+            return (image, content.bounds.size, ballCenter, globalCenter)
         }
 
         func waitFrame() {
             RunLoop.main.run(until: Date().addingTimeInterval(1.0 / 12.0))
         }
 
-        var frames: [CGImage] = []
+        var frames: [(image: CGImage, canvasSize: CGSize,
+                      ballCenter: CGPoint, globalCenter: CGPoint)] = []
         for _ in 0..<8 {
             waitFrame()
             frames.append(try captureFrame())
@@ -870,23 +880,75 @@ struct SettingsPreviewRunner {
         controller.moveHolder(to: CGPoint(x: 42, y: 42))
         waitFrame()
         let edgeFrame = try captureFrame()
-        try NSBitmapImageRep(cgImage: edgeFrame).representation(using: .png, properties: [:])!.write(
+        try NSBitmapImageRep(cgImage: edgeFrame.image).representation(using: .png, properties: [:])!.write(
             to: output.appendingPathComponent("Bubble-holder-edge-clamped.png"))
 
-        for index in [0, 7, 15, 31, 40, frames.count - 1] where frames.indices.contains(index) {
-            try NSBitmapImageRep(cgImage: frames[index]).representation(using: .png, properties: [:])!.write(
+        guard let reference = frames.first(where: {
+            $0.canvasSize.width > BubbleHolderLayout.collapsedSize.width + 1
+        }) else {
+            fatalError("Holder demo did not capture an expanded canvas")
+        }
+        let margin = BubbleHolderLayout.panelMargin
+        let fixedPointSize = CGSize(
+            width: (frames.map { $0.canvasSize.width }.max() ?? reference.canvasSize.width) + margin * 2,
+            height: (frames.map { $0.canvasSize.height }.max() ?? reference.canvasSize.height) + margin * 2)
+        let targetBallCenter = CGPoint(x: reference.ballCenter.x + margin,
+                                       y: reference.ballCenter.y + margin)
+        let referenceGlobalCenter = reference.globalCenter
+        verifyPresentation(frames.allSatisfy {
+            abs($0.globalCenter.x - referenceGlobalCenter.x) <= 1
+                && abs($0.globalCenter.y - referenceGlobalCenter.y) <= 1
+        }, "Holder ball center moved during the native expand/collapse capture")
+        let pixelScale = max(1, frames.map {
+            CGFloat($0.image.width) / max($0.canvasSize.width, 1)
+        }.max() ?? 1)
+        let pixelWidth = max(1, Int((fixedPointSize.width * pixelScale).rounded()))
+        let pixelHeight = max(1, Int((fixedPointSize.height * pixelScale).rounded()))
+
+        func composite(_ frame: (image: CGImage, canvasSize: CGSize,
+                                 ballCenter: CGPoint, globalCenter: CGPoint)) -> CGImage {
+            guard let context = CGContext(data: nil, width: pixelWidth, height: pixelHeight,
+                                          bitsPerComponent: 8, bytesPerRow: pixelWidth * 4,
+                                          space: CGColorSpaceCreateDeviceRGB(),
+                                          bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else {
+                fatalError("Could not create fixed holder demo canvas")
+            }
+            context.clear(CGRect(x: 0, y: 0, width: pixelWidth, height: pixelHeight))
+            let origin = CGPoint(x: targetBallCenter.x - frame.ballCenter.x,
+                                 y: targetBallCenter.y - frame.ballCenter.y)
+            let drawRect = CGRect(x: origin.x * pixelScale,
+                                  y: origin.y * pixelScale,
+                                  width: frame.canvasSize.width * pixelScale,
+                                  height: frame.canvasSize.height * pixelScale)
+            // NSHostingView captures use a top-down SwiftUI coordinate space;
+            // flip the Quartz canvas once so every variable-size source keeps
+            // its original orientation when placed by the actual ball center.
+            context.saveGState()
+            context.translateBy(x: 0, y: CGFloat(pixelHeight))
+            context.scaleBy(x: 1, y: -1)
+            context.draw(frame.image, in: drawRect)
+            context.restoreGState()
+            guard let image = context.makeImage() else {
+                fatalError("Could not finalize fixed holder demo canvas")
+            }
+            return image
+        }
+
+        let movieFrames = frames.map(composite)
+        for index in [0, 7, 15, 31, 40, movieFrames.count - 1] where movieFrames.indices.contains(index) {
+            try NSBitmapImageRep(cgImage: movieFrames[index]).representation(using: .png, properties: [:])!.write(
                 to: output.appendingPathComponent("Bubble-holder-demo-frame-\(index).png"))
         }
 
         let movieURL = output.appendingPathComponent("Bubble-holder-demo.gif")
         guard let destination = CGImageDestinationCreateWithURL(movieURL as CFURL,
                                                                   UTType.gif.identifier as CFString,
-                                                                  frames.count, nil) else {
+                                                                  movieFrames.count, nil) else {
             fatalError("Cannot create holder demo storyboard")
         }
         CGImageDestinationSetProperties(destination,
             [kCGImagePropertyGIFDictionary: [kCGImagePropertyGIFLoopCount: 0]] as CFDictionary)
-        for frame in frames {
+        for frame in movieFrames {
             CGImageDestinationAddImage(destination, frame,
                 [kCGImagePropertyGIFDictionary:
                     [kCGImagePropertyGIFDelayTime: 1.0 / 12.0]] as CFDictionary)
