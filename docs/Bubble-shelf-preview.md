@@ -1,32 +1,38 @@
 # Bubble Shelf 预览指南 / Preview Guide
 
-本指南说明如何使用 QuotaNotch 的固定收纳球（Shelf holder）。
+本指南说明如何使用 QuotaNotch 的悬浮收纳球（Floating bubble）。
 
-This guide explains the fixed, movable Shelf holder in QuotaNotch.
+This guide explains the Floating bubble and Shelf tab in QuotaNotch.
 
 ## 开始使用 / Start
 
 1. 安装并打开 QuotaNotch，打开刘海后选择“收纳 / Shelf”。
-2. 在 Shelf 页面手动打开“接收 / Receiving”。它默认关闭；打开后会显示收纳球。暂停接收会隐藏收纳球，但会保留已经保存的内容。
-3. 收纳球可以拖到屏幕上的其他位置，位置会被保存并在下次启动时恢复。使用 Shelf 的固定选项可将它与刘海关联；该选项默认关闭。
+2. 在 Shelf 页面打开“接收 / Receiving”。它默认关闭；打开后会显示桌面悬浮球。暂停接收会隐藏悬浮球，但会保留已经保存的内容。
+3. “固定到刘海 / Pin to notch”独立控制刘海中的收纳标记，默认关闭。它不会自动显示悬浮球，也不会改变已保存内容。
 
 1. Install and open QuotaNotch, open the notch, and choose Shelf.
-2. Turn on Receiving in Shelf. It is off by default; turning it on shows the holder. Pausing hides the holder while keeping saved items.
-3. Drag the holder to another place on the screen when needed. Its position is saved and restored at the next launch. The Shelf pin option keeps it associated with the notch and is off by default.
+2. Turn on Receiving in Shelf. It is off by default; turning it on shows the desktop Floating bubble. Pausing hides the bubble while keeping saved items.
+3. “Pin to notch” is independent and off by default. It controls the compact Shelf mark in the notch; it does not show the Floating bubble or change saved content.
 
 ## 使用 / Use
 
-- 把文件、文件夹、文本、网页链接或图像直接拖进收纳球。导入成功后，收纳球会留在原来的位置并继续显示。
-- Drag a file, folder, text, web link, or image directly into the holder. After a successful import, the holder stays where it was and remains visible.
+- 把文件、文件夹、文本、网页链接或图像直接拖进桌面悬浮球。导入成功后，悬浮球会留在原来的位置并继续显示。
+- Drag a file, folder, text, web link, or image directly into the desktop Floating bubble. After a successful import, the bubble stays where it was and remains visible.
 
-- 点击收纳球展开 Shelf，查看已保存项目。项目按最新加入的顺序排列；点击单项的移除按钮可删除 Shelf 条目。
-- Click the holder to expand Shelf and view saved items. Items are listed newest first; use an item's Remove button to delete that Shelf entry.
+- 拖动桌面悬浮球只会移动它的位置，不会导出内容。位置会保存并在下次启动时恢复。
+- Dragging the desktop Floating bubble only moves it; it does not export content. Its position is saved and restored at the next launch.
 
-- 在 Shelf 中拖动单项可以导出它；也可以把整组项目拖到支持接收的应用。取消拖动不会删除内容。把 Shelf 项目拖回收纳球会按相同内容去重。
-- Drag one item from Shelf to export it, or drag the group to an application that accepts it. Cancelling a drag does not delete anything. Dragging a Shelf item back into the holder deduplicates matching content.
+- 点击桌面悬浮球会展开横向项目行：前三项清晰显示，第四项作为模糊预览；使用左右翻页按钮查看其他项目。每张卡片左上角的“×”只移除该 Shelf 条目。
+- Clicking the desktop Floating bubble opens a horizontal row: three items are clear and a fourth appears as a blurred peek. Use the page buttons to view other items. The “×” at the top left of a card removes only that Shelf entry.
 
-- 暂停接收不会删除内容；重启后，已保存项目、暂停状态和收纳球位置都会保留。清空 Shelf 或移除项目不会删除原始文件或文件夹。
-- Pausing Receiving does not delete content. Saved items, the paused state, and the holder position survive restart. Clearing Shelf or removing an item never deletes the original file or folder.
+- 点击刘海中的收纳标记会打开 Shelf 页面列表。列表按最新加入的顺序排列；从列表行拖动单项可导出单项，点击单项的移除按钮可删除它。
+- Clicking the compact notch Shelf mark opens the Shelf tab list. Items are newest first; drag an individual list row to export one item, or use its Remove button to delete it.
+
+- 从刘海中的收纳标记横向拖出可导出整组已保存项目。取消拖动不会删除内容；把 Shelf 项目拖回悬浮球会按相同内容去重。
+- Drag the compact notch Shelf mark outward to export the whole saved group. Cancelling a drag does not delete anything; dropping a Shelf item back onto the Floating bubble deduplicates matching content.
+
+- 暂停接收不会删除内容；重启后，已保存项目、暂停状态和悬浮球位置都会保留。清空 Shelf 或移除项目不会删除原始文件或文件夹。
+- Pausing Receiving does not delete content. Saved items, the paused state, and the Floating bubble position survive restart. Clearing Shelf or removing an item never deletes the original file or folder.
 
 ## 支持范围 / Current limits
 
