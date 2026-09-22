@@ -609,7 +609,11 @@ private final class BubbleShelfHorizontalScrollView: NSView {
         gesture = BubbleHorizontalScrollState()
     }
 
-    deinit { removeMonitor() }
+    // Deinitializers are nonisolated in Swift 6; remove the AppKit observer
+    // directly, matching the other local event bridges in this target.
+    deinit {
+        if let monitor { NSEvent.removeMonitor(monitor) }
+    }
 }
 
 struct BubbleNotchGlyph: View {
