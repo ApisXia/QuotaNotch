@@ -337,6 +337,7 @@ struct AgentModuleSwitchGesture: ViewModifier {
                     // drags remain available to Shelf export and never
                     // toggle the quota/task pair.
                     NotchHorizontalScrollBridge { towardLeft in select(!towardLeft) }
+                        .allowsHitTesting(false)
                 }
             }
     }

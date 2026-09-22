@@ -583,7 +583,10 @@ struct BubbleShelfAudioPair: View {
         // original event to the underlying SwiftUI Buttons. Thus horizontal
         // scrolling can swap either side, without swallowing audio clicks or
         // turning mouse drags into layout switches.
-        .background(BubbleShelfHorizontalScrollMonitor(onSwipe: shelf.onHorizontalSwipe))
+        .background {
+            BubbleShelfHorizontalScrollMonitor(onSwipe: shelf.onHorizontalSwipe)
+                .allowsHitTesting(false)
+        }
     }
 }
 

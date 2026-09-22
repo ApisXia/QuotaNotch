@@ -430,6 +430,7 @@ struct BubbleCollectorPreview: View {
                     }
                     .frame(width: rowFrame.width, height: rowFrame.height)
                     .position(x: rowFrame.midX, y: rowFrame.midY)
+                    .allowsHitTesting(false)
                 }
 
                 BubbleCollectorDropTarget(
