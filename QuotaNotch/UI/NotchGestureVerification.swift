@@ -266,8 +266,11 @@ enum NotchGestureVerification {
             throw failure("Audio click was intercepted by a full-wing scroll bridge")
         }
 
-        let shelfDownPoint = shelfBridge.convert(NSPoint(x: shelfBridge.bounds.width * 0.18,
+        let shelfDownPoint = shelfBridge.convert(NSPoint(x: shelfBridge.bounds.width * 0.05,
                                                          y: shelfBridge.bounds.midY), to: nil)
+        // BubbleInteractionView starts an export after an 8pt Euclidean
+        // movement. The earlier 18% -> 28% sample was only about 5pt in the
+        // real 54pt pair and therefore exercised a click, not a drag.
         let shelfDragPoint = shelfBridge.convert(NSPoint(x: shelfBridge.bounds.width * 0.28,
                                                          y: shelfBridge.bounds.midY + 1), to: nil)
         if let down = mouseEvent(.leftMouseDown, location: shelfDownPoint, window: window,
