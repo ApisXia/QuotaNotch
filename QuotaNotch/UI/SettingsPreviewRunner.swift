@@ -891,7 +891,7 @@ struct SettingsPreviewRunner {
         guard let collapsedFrame = frames.last else {
             fatalError("Holder demo did not capture a post-collapse frame")
         }
-        verifyPresentation(hasVisibleCapturePixels(collapsedFrame.image),
+        verifyPresentation(hasVisibleHolderContent(collapsedFrame.image),
                            "Holder demo collapsed frame was blank before the edge move")
 
         controller.moveHolder(to: CGPoint(x: 42, y: 42))
@@ -953,6 +953,8 @@ struct SettingsPreviewRunner {
         }
 
         let movieFrames = frames.map(composite)
+        verifyPresentation(movieFrames.last.map { hasVisibleHolderContent($0) } == true,
+                           "Holder demo final composited frame was blank")
         for index in [0, 7, 15, 31, 40, movieFrames.count - 1] where movieFrames.indices.contains(index) {
             try NSBitmapImageRep(cgImage: movieFrames[index]).representation(using: .png, properties: [:])!.write(
                 to: output.appendingPathComponent("Bubble-holder-demo-frame-\(index).png"))
@@ -1561,6 +1563,31 @@ struct SettingsPreviewRunner {
         let length = CFDataGetLength(data)
         for index in 0..<length where bytes[index] != 0 {
             return true
+        }
+        return false
+    }
+
+    private static func hasVisibleHolderContent(_ image: CGImage) -> Bool {
+        let width = max(1, image.width)
+        let height = max(1, image.height)
+        guard let context = CGContext(data: nil, width: width, height: height,
+                                      bitsPerComponent: 8, bytesPerRow: width * 4,
+                                      space: CGColorSpaceCreateDeviceRGB(),
+                                      bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else {
+            return false
+        }
+        context.clear(CGRect(x: 0, y: 0, width: width, height: height))
+        context.draw(image, in: CGRect(x: 0, y: 0, width: width, height: height))
+        guard let data = context.data else { return false }
+        let bytes = data.bindMemory(to: UInt8.self, capacity: width * height * 4)
+        var visiblePixels = 0
+        for offset in stride(from: 0, to: width * height * 4, by: 4) {
+            let alpha = Int(bytes[offset + 3])
+            let luminance = Int(bytes[offset]) + Int(bytes[offset + 1]) + Int(bytes[offset + 2])
+            if alpha > 8, luminance > 30 {
+                visiblePixels += 1
+                if visiblePixels >= 20 { return true }
+            }
         }
         return false
     }

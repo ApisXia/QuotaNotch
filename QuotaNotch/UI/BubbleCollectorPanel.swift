@@ -195,8 +195,7 @@ final class BubbleCollectorFloatingPanel {
         // assigning the new host frame before setFrame lets AppKit apply the
         // parent resize delta a second time, which can move the collapsed
         // canvas offscreen during the reverse transition.
-        let contentSize = panel.contentView?.bounds.size ?? geometry.canvasSize
-        host.frame = CGRect(origin: .zero, size: contentSize)
+        host.frame = CGRect(origin: .zero, size: geometry.canvasSize)
         host.needsLayout = true
         host.layoutSubtreeIfNeeded()
         host.needsDisplay = true
