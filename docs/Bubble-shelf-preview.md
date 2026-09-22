@@ -1,46 +1,40 @@
 # Bubble Shelf 预览指南 / Preview Guide
 
-本指南说明 QuotaNotch 收纳（Shelf）预览的实际使用方式和支持范围。
+本指南说明如何使用 QuotaNotch 的固定收纳球（Shelf holder）。
 
-This guide describes how to use the QuotaNotch Shelf preview and what it supports.
+This guide explains the fixed, movable Shelf holder in QuotaNotch.
 
 ## 开始使用 / Start
 
-1. 安装并打开 QuotaNotch。打开刘海，在标签栏选择“收纳 / Shelf”。
-2. 在 Shelf 页面手动打开“接收 / Receiving”。它默认关闭；暂停接收会保留已经保存的内容。
-3. 如果系统要求授权，请在“系统设置 → 隐私与安全性 → 辅助功能”允许 QuotaNotch。打开接收后，在 Shelf 设置的“Finder 文件选择”行点击“允许读取 Finder”，再按系统提示允许 Automation；如果拒绝，按页面提示允许后重试。被动接收不会自行请求 Automation 授权。
+1. 安装并打开 QuotaNotch，打开刘海后选择“收纳 / Shelf”。
+2. 在 Shelf 页面手动打开“接收 / Receiving”。它默认关闭；打开后会显示收纳球。暂停接收会隐藏收纳球，但会保留已经保存的内容。
+3. 收纳球可以拖到屏幕上的其他位置，位置会被保存并在下次启动时恢复。使用 Shelf 的固定选项可将它与刘海关联；该选项默认关闭。
 
-1. Install and open QuotaNotch. Open the notch and choose the Shelf tab.
-2. Turn on the Receiving switch in Shelf. It is off by default; pausing keeps items already saved.
-3. If macOS asks for permission, allow QuotaNotch in System Settings → Privacy & Security → Accessibility. After turning on Receiving, click “Allow Finder Access” in the Shelf settings’ “Finder file selection” row, then follow the Automation prompt. If access is denied, follow the page’s retry guidance. Passive receiving does not request Automation consent.
+1. Install and open QuotaNotch, open the notch, and choose Shelf.
+2. Turn on Receiving in Shelf. It is off by default; turning it on shows the holder. Pausing hides the holder while keeping saved items.
+3. Drag the holder to another place on the screen when needed. Its position is saved and restored at the next launch. The Shelf pin option keeps it associated with the notch and is off by default.
 
 ## 使用 / Use
 
-- 在支持的应用中选择文本，或在 Finder 中选中文件/文件夹，然后点击选择旁边出现的收纳气泡以保存。也可以把支持的内容直接拖进 Shelf。
-- Select text in a supported app, or select files/folders in Finder, then click the nearby Shelf bubble to save the candidate. You can also drag supported content directly into Shelf.
+- 把文件、文件夹、文本、网页链接或图像直接拖进收纳球。导入成功后，收纳球会留在原来的位置并继续显示。
+- Drag a file, folder, text, web link, or image directly into the holder. After a successful import, the holder stays where it was and remains visible.
 
-- 当关闭状态的 Shelf 图标已经显示时，把指针移到图标上并向上滚动可开启接收，向下滚动可暂停。点击图标会打开整个 Shelf 页面；向任意方向拖动图标会导出全部项目。图标不会因为悬停而自动开启接收。
-- When the closed Shelf glyph is visible, move the pointer over it and scroll up to start receiving or down to pause. Click the glyph to open the full Shelf page; drag it in any direction to export all items. Hovering never turns receiving on by itself.
+- 点击收纳球展开 Shelf，查看已保存项目。项目按最新加入的顺序排列；点击单项的移除按钮可删除 Shelf 条目。
+- Click the holder to expand Shelf and view saved items. Items are listed newest first; use an item's Remove button to delete that Shelf entry.
 
-- 在打开的 Shelf 中，拖动单行的图标可导出单个项目。取消拖动不会删除或改变 Shelf 内容。
-- In the open Shelf, drag a row’s icon to export one item. Cancelling a drag does not remove or change Shelf contents.
+- 在 Shelf 中拖动单项可以导出它；也可以把整组项目拖到支持接收的应用。取消拖动不会删除内容。把 Shelf 项目拖回收纳球会按相同内容去重。
+- Drag one item from Shelf to export it, or drag the group to an application that accepts it. Cancelling a drag does not delete anything. Dragging a Shelf item back into the holder deduplicates matching content.
 
-- 接收模式至少手动设置过一次后，即使暂停，关闭状态的 Shelf 图标也会保留；从未设置且没有内容时，关闭状态可能没有 Shelf 图标。
-- After Receiving has been set manually once, the closed Shelf glyph remains available while paused. With no saved content and no prior setup, the closed notch may show no Shelf glyph.
+- 暂停接收不会删除内容；重启后，已保存项目、暂停状态和收纳球位置都会保留。清空 Shelf 或移除项目不会删除原始文件或文件夹。
+- Pausing Receiving does not delete content. Saved items, the paused state, and the holder position survive restart. Clearing Shelf or removing an item never deletes the original file or folder.
 
-- 新项目排在最前面；相同内容会去重并提升到最前。点击“清空”或单项移除只删除 Shelf 条目和它管理的缩略图；已经准备好的导出文件可能暂时保留以完成当前拖动，不会删除原始文件或文件夹。
-- New items appear first; duplicates are promoted instead of copied. Clear and item removal delete Shelf entries and owned thumbnails. Prepared export files may remain temporarily so an active drag can finish; original files and folders are left untouched.
+## 支持范围 / Current limits
 
-- 内容和暂停状态会在重启后保留。原始文件后来不可用时，Shelf 会保留条目并标记不可用，导出会报告问题而不会伪造成功。
-- Items and the paused state survive restart. If an original file later becomes unavailable, Shelf keeps the entry and marks it unavailable; export reports the problem instead of claiming success.
+- 收纳球接受实际文件和文件夹 URL、文本、网页 URL，以及可解码的 PNG、JPEG 或 TIFF 图像。
+- The holder accepts real file and folder URLs, text, web URLs, and decodable PNG, JPEG, or TIFF images.
 
-## 当前支持范围 / Current limits
+- 文件承诺（file promise）会明确提示不支持；不会把尚未生成的文件伪装成已保存项目。原始文件后来不可用时，Shelf 会保留条目并标记不可用，导出会报告问题。
+- File promises are reported as unsupported; an unfinished promised file is never presented as saved. If an original file later becomes unavailable, Shelf keeps the entry, marks it unavailable, and reports the problem during export.
 
-- 选择捕获依赖 macOS Accessibility 的 AX 文本和选择接口；不是所有应用都会暴露可读取的文本或选择内容。Finder 文件捕获使用实际的 file URL。
-- Selection capture depends on macOS Accessibility AX text and selection attributes; some apps expose no readable selection. Finder file capture uses real file URLs.
-
-- 粘贴板和拖放支持实际文件/文件夹 URL、文本、网页 URL，以及可解码的 PNG/TIFF 图像。文件承诺（file promise）目前会明确拒绝；不会伪造一个已经完成的文件。
-- Pasteboard and drag-and-drop accept real file/folder URLs, text, web URLs, and decodable PNG/TIFF images. File promises are explicitly rejected for now; the preview does not pretend a promised file has arrived.
-
-- 这份预览不轮询全局剪贴板；可读取的内容取决于应用提供的选择接口。Shelf 与音乐同时显示时，Shelf 永远在左翼最外侧；默认是“Shelf 极简 + 音频小组件”，明确的水平滚动只在这两种固定足迹之间切换到“Shelf 小组件 + 音频极简”（专辑图在上、短频谱在下）。上下滚动仍只切换 Shelf 接收模式，鼠标拖动仍用于导出，不会触发排列切换；音频原有点击打开控制保持不变。
-- The preview reads only selections exposed by the current app and does not poll the global clipboard. When Shelf and music share the notch, Shelf stays at the outermost left edge. The default is “Shelf minimal + audio widget”; an explicit horizontal scroll swaps to “Shelf widget + audio minimal” (album art above a short spectrum) while keeping the same total footprint. Vertical scrolling still toggles Shelf receiving, and mouse dragging still exports content rather than switching layouts; the existing audio click-to-open control remains unchanged.
+- 预览不读取其他应用的选区，不轮询全局剪贴板，也不要求 Accessibility 或 Finder Automation 授权。只会处理用户明确拖入收纳球的内容。
+- The preview does not read selections from other apps, poll the global clipboard, or require Accessibility or Finder Automation permission. It processes content only when the user explicitly drops it into the holder.

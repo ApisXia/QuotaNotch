@@ -12,6 +12,17 @@ final class BubbleShelfStore: ObservableObject {
     @Published var isReceiving: Bool {
         didSet { defaults.set(isReceiving, forKey: Self.isReceivingDefaultsKey) }
     }
+    /// Independent preference for whether the holder may be treated as a
+    /// notch-pinned surface. It deliberately does not infer from saved items
+    /// or from the receive-mode preference.
+    @Published var isPinnedToNotch: Bool {
+        didSet { defaults.set(isPinnedToNotch, forKey: Self.isPinnedToNotchDefaultsKey) }
+    }
+    /// Last holder center in global AppKit screen coordinates. Nil means the
+    /// panel chooses a suitable position for the current screen.
+    @Published var holderLocation: CGPoint? {
+        didSet { persistHolderLocation(holderLocation) }
+    }
     @Published private(set) var storageIssue: String?
     @Published private(set) var exportIssue: String?
     @Published private(set) var lastImportResult: BubbleShelfImportResult?
@@ -22,9 +33,19 @@ final class BubbleShelfStore: ObservableObject {
         set { isReceiving = newValue }
     }
 
+    /// Compatibility spelling for holder surfaces. It is the persisted
+    /// visibility/receive switch and does not clear shelf contents when false.
+    var holderShown: Bool {
+        get { isReceiving }
+        set { isReceiving = newValue }
+    }
+
     var hasBeenConfigured: Bool { defaults.object(forKey: Self.isReceivingDefaultsKey) != nil }
 
     static let isReceivingDefaultsKey = "bubbleShelfReceiving"
+    static let isPinnedToNotchDefaultsKey = "bubbleShelfPinnedToNotch"
+    static let holderLocationXDefaultsKey = "bubbleShelfHolderLocationX"
+    static let holderLocationYDefaultsKey = "bubbleShelfHolderLocationY"
 
     let storageDirectory: URL
     private let defaults: UserDefaults
@@ -49,6 +70,8 @@ final class BubbleShelfStore: ObservableObject {
         self.imageDirectory = base.appendingPathComponent("images", isDirectory: true)
         self.exportDirectory = base.appendingPathComponent("exports", isDirectory: true)
         self._isReceiving = Published(initialValue: resolvedDefaults.object(forKey: Self.isReceivingDefaultsKey) as? Bool ?? false)
+        self._isPinnedToNotch = Published(initialValue: resolvedDefaults.object(forKey: Self.isPinnedToNotchDefaultsKey) as? Bool ?? false)
+        self._holderLocation = Published(initialValue: Self.persistedHolderLocation(from: resolvedDefaults))
         restore()
         pruneExportCacheAtLaunch()
     }
@@ -77,7 +100,12 @@ final class BubbleShelfStore: ObservableObject {
     func resetPreviewConfiguration() {
         resetPreview()
         _isReceiving = Published(initialValue: false)
+        _isPinnedToNotch = Published(initialValue: false)
+        _holderLocation = Published(initialValue: nil)
         defaults.removeObject(forKey: Self.isReceivingDefaultsKey)
+        defaults.removeObject(forKey: Self.isPinnedToNotchDefaultsKey)
+        defaults.removeObject(forKey: Self.holderLocationXDefaultsKey)
+        defaults.removeObject(forKey: Self.holderLocationYDefaultsKey)
     }
 #endif
 
@@ -747,6 +775,24 @@ final class BubbleShelfStore: ObservableObject {
 
     private static func weblocData(for url: URL) -> Data? {
         try? PropertyListSerialization.data(fromPropertyList: ["URL": url.absoluteString], format: .xml, options: 0)
+    }
+
+    private func persistHolderLocation(_ location: CGPoint?) {
+        guard let location,
+              location.x.isFinite, location.y.isFinite else {
+            defaults.removeObject(forKey: Self.holderLocationXDefaultsKey)
+            defaults.removeObject(forKey: Self.holderLocationYDefaultsKey)
+            return
+        }
+        defaults.set(Double(location.x), forKey: Self.holderLocationXDefaultsKey)
+        defaults.set(Double(location.y), forKey: Self.holderLocationYDefaultsKey)
+    }
+
+    private static func persistedHolderLocation(from defaults: UserDefaults) -> CGPoint? {
+        guard let x = defaults.object(forKey: holderLocationXDefaultsKey) as? Double,
+              let y = defaults.object(forKey: holderLocationYDefaultsKey) as? Double,
+              x.isFinite, y.isFinite else { return nil }
+        return CGPoint(x: CGFloat(x), y: CGFloat(y))
     }
 
     private static func defaultStorageDirectory(fileManager: FileManager) -> URL {
