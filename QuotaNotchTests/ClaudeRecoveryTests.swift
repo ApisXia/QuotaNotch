@@ -200,12 +200,15 @@ final class ClaudeRecoveryTests: XCTestCase {
         XCTAssertEqual(calls, 1)
     }
 
-    func testFallbackRateLimitIsNotHiddenByAuthenticationError() async {
+    func testFallbackRateLimitIsPreservedForNonAuthPrimary() async {
         let until = instant.addingTimeInterval(900)
-        let client = QuotaClient(credentials: RecoveryCredentials([login(refresh: nil)]),
-            transport: RecoveryTransport([]), clock: { instant }, claudeFallback: RecoveryFallback(error: .rateLimited(until)))
+        let fallback = RecoveryFallback(error: .rateLimited(until))
+        let client = QuotaClient(credentials: RecoveryCredentials([login(expiry: 3600, refresh: nil)]),
+            transport: RecoveryTransport([reply(503)]), clock: { instant }, claudeFallback: fallback)
         let result = await client.refresh(.claude)
         XCTAssertEqual(result.failure, .rateLimited(until))
+        let fallbackCalls = await fallback.calls
+        XCTAssertEqual(fallbackCalls, 1)
     }
 
     func testPersistenceFailureDoesNotPretendRefreshWasSaved() async {
@@ -302,8 +305,8 @@ final class ClaudeCredentialCacheTests: XCTestCase {
     func testLocalSourceReloadsExternalCredentialAfterExpiryAndDoesNotCacheFailures() async throws {
         let io = MemoryCredentialIO()
         let clock = RecoveryTestClock(instant)
-        let repository = ClaudeCredentialRepository(io: io, now: clock.now)
-        let source = LocalQuotaCredentials(claude: repository, clock: clock.now)
+        let repository = ClaudeCredentialRepository(io: io, now: { clock.now() })
+        let source = LocalQuotaCredentials(claude: repository, clock: { clock.now() })
 
         do {
             _ = try await source.load(.claude)
