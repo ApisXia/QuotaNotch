@@ -1,7 +1,6 @@
 // QuotaNotch additions, 2026. SPDX-License-Identifier: GPL-3.0-only
 import Foundation
 #if os(macOS)
-import Security
 import Darwin
 #endif
 
@@ -33,10 +32,18 @@ struct ClaudeCredentialRepository: Sendable {
     func load() throws -> QuotaCredential {
         var candidates: [QuotaCredential] = []
         var unavailable = false
+        let referenceDate = now()
         for location in locations {
             do {
                 var credential = try LocalQuotaCredentials.decode(io.read(location), provider: .claude)
                 credential.location = location
+                // Claude Code's file is the preferred source. Returning before
+                // touching Keychain avoids a background authorization prompt
+                // for the common, already-valid file-backed login.
+                if case .file = location,
+                   credential.expiresAt.map({ $0 > referenceDate }) ?? true {
+                    return credential
+                }
                 candidates.append(credential)
             } catch QuotaFailure.credentialsUnavailable { unavailable = true }
             catch { continue }
@@ -44,11 +51,10 @@ struct ClaudeCredentialRepository: Sendable {
         guard !candidates.isEmpty else {
             throw unavailable ? QuotaFailure.credentialsUnavailable : QuotaFailure.notSignedIn
         }
-        let date = now()
         // A stale or malformed file must not hide the current Keychain login.
         return candidates.sorted { a, b in
-            let aValid = a.expiresAt.map { $0 > date } ?? true
-            let bValid = b.expiresAt.map { $0 > date } ?? true
+            let aValid = a.expiresAt.map { $0 > referenceDate } ?? true
+            let bValid = b.expiresAt.map { $0 > referenceDate } ?? true
             if aValid != bValid { return aValid }
             if a.expiresAt != b.expiresAt {
                 return (a.expiresAt ?? .distantFuture) > (b.expiresAt ?? .distantFuture)
@@ -84,6 +90,12 @@ struct ClaudeCredentialRepository: Sendable {
 }
 
 struct SystemClaudeCredentialIO: ClaudeCredentialIO {
+    var keychain: any ClaudeKeychainIO
+
+    init(keychain: any ClaudeKeychainIO = SystemClaudeKeychainIO()) {
+        self.keychain = keychain
+    }
+
     func read(_ location: ClaudeCredentialLocation) throws -> Data {
         #if os(macOS)
         switch location {
@@ -92,16 +104,7 @@ struct SystemClaudeCredentialIO: ClaudeCredentialIO {
             guard let data = try? Data(contentsOf: url) else { throw QuotaFailure.credentialsUnavailable }
             return data
         case .keychain(let service):
-            var query = keychainQuery(service)
-            query[kSecReturnData as String] = true
-            query[kSecMatchLimit as String] = kSecMatchLimitOne
-            var result: CFTypeRef?
-            let status = SecItemCopyMatching(query as CFDictionary, &result)
-            if status == errSecItemNotFound { throw QuotaFailure.notSignedIn }
-            guard status == errSecSuccess, let data = result as? Data else {
-                throw QuotaFailure.credentialsUnavailable
-            }
-            return data
+            return try keychain.read(service: service)
         }
         #else
         // CI never inspects a runner's actual login.
@@ -111,10 +114,10 @@ struct SystemClaudeCredentialIO: ClaudeCredentialIO {
 
     func replace(_ location: ClaudeCredentialLocation, expected: Data, updated: Data) throws -> Data {
         #if os(macOS)
-        let current = try read(location)
-        guard current == expected else { return current }
         switch location {
         case .file(let url):
+            let current = try read(location)
+            guard current == expected else { return current }
             let temporary = url.deletingLastPathComponent().appendingPathComponent(".quotanotch-oauth-\(UUID().uuidString)")
             let fd = open(temporary.path, O_WRONLY | O_CREAT | O_EXCL, S_IRUSR | S_IWUSR)
             guard fd >= 0 else { throw QuotaFailure.credentialsUnavailable }
@@ -126,22 +129,7 @@ struct SystemClaudeCredentialIO: ClaudeCredentialIO {
             guard latest == expected else { return latest }
             guard rename(temporary.path, url.path) == 0 else { throw QuotaFailure.credentialsUnavailable }
         case .keychain(let service):
-            // Update exactly the item we read, even if the service has multiple accounts.
-            var query = keychainQuery(service)
-            query[kSecReturnData as String] = true
-            query[kSecReturnPersistentRef as String] = true
-            query[kSecMatchLimit as String] = kSecMatchLimitOne
-            var item: CFTypeRef?
-            guard SecItemCopyMatching(query as CFDictionary, &item) == errSecSuccess,
-                  let values = item as? [String: Any],
-                  let reference = values[kSecValuePersistentRef as String] as? Data,
-                  let latest = values[kSecValueData as String] as? Data else {
-                throw QuotaFailure.credentialsUnavailable
-            }
-            guard latest == expected else { return latest }
-            let status = SecItemUpdate([kSecValuePersistentRef as String: reference] as CFDictionary,
-                [kSecValueData as String: updated] as CFDictionary)
-            guard status == errSecSuccess else { throw QuotaFailure.credentialsUnavailable }
+            return try keychain.replace(service: service, expected: expected, updated: updated)
         }
         // These checks narrow the cross-process race; Claude Code does not share our lock.
         return try read(location)
@@ -150,9 +138,4 @@ struct SystemClaudeCredentialIO: ClaudeCredentialIO {
         #endif
     }
 
-    #if os(macOS)
-    private func keychainQuery(_ service: String) -> [String: Any] {
-        [kSecClass as String: kSecClassGenericPassword, kSecAttrService as String: service]
-    }
-    #endif
 }
