@@ -93,8 +93,8 @@ final class ClaudeKeychainIOTests: XCTestCase {
         XCTAssertEqual(try io.replace(service: "Claude Code-credentials", expected: old, updated: updated), updated)
         XCTAssertEqual(runner.calls.count, 3)
         let write = runner.calls[1]
-        XCTAssertEqual(write.prefix(6), ["add-generic-password", "-U", "-s", "Claude Code-credentials",
-                                         "-a", "fixture-user"])
+        XCTAssertEqual(Array(write.prefix(6)), ["add-generic-password", "-U", "-s", "Claude Code-credentials",
+                                                "-a", "fixture-user"])
         XCTAssertEqual(write[6], "-w")
         XCTAssertFalse(write.contains("delete-generic-password"))
         XCTAssertFalse(write.contains("-T"))
