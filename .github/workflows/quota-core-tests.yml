@@ -2,6 +2,13 @@ name: Quota core regression tests
 
 on:
   workflow_dispatch:
+  push:
+    branches: ['feature/bubble-native-material']
+    paths:
+      - 'QuotaNotch/Core/**'
+      - 'QuotaNotchTests/**'
+      - 'Package.swift'
+      - '.github/workflows/quota-core-tests.yml'
 
 permissions:
   contents: read
