@@ -37,10 +37,10 @@ body:
       options:
         - Select a version
         - v1.0.0
+        - v1.05
+        - v1.04
+        - v1.03
         - v1.02
-        - v1.01
-        - future-preview-290
-        - future-preview-289
     validations:
       required: true
   - type: input
