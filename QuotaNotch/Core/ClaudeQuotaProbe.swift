@@ -21,6 +21,10 @@ struct ClaudeQuotaProbe: Sendable {
             // A second route reaches the same rate-limited service; honor its cooldown.
             if case QuotaFailure.rateLimited = primary { throw primary }
             if primary is CancellationError || Task.isCancelled { throw CancellationError() }
+            if !shouldUseFallback(for: primary) {
+                credentials.invalidateClaudeCache()
+                throw primary
+            }
             guard let fallback else { throw primary }
             do { return try await fallback.fetch(now: clock()) }
             catch let failure as QuotaFailure {
@@ -41,7 +45,7 @@ struct ClaudeQuotaProbe: Sendable {
         do { return try await usage(credential) }
         catch QuotaFailure.expired {
             // Reload first: the CLI may already have replaced the rejected token.
-            let latest = try await credentials.load(.claude)
+            let latest = try await credentials.reloadClaude()
             if latest != credential {
                 credential = latest
                 if needsRefresh(credential), credential.refreshToken != nil, !renewed {
@@ -60,12 +64,14 @@ struct ClaudeQuotaProbe: Sendable {
 
     private func renewOrReload(_ original: QuotaCredential) async throws -> QuotaCredential {
         // One refresh operation per probe, shared by QuotaClient's in-flight task.
-        let latest = try await credentials.load(.claude)
+        // This must bypass a five-minute cache: an external CLI refresh may have
+        // replaced the token since the initial read.
+        let latest = try await credentials.reloadClaude()
         if latest != original, !needsRefresh(latest) { return latest }
         do { return try await renew(latest) }
         catch {
             if case QuotaFailure.rateLimited = error { throw error }
-            if let reread = try? await credentials.load(.claude), reread != latest,
+            if let reread = try? await credentials.reloadClaude(), reread != latest,
                reread.expiresAt.map({ $0 > clock() }) ?? true { return reread }
             throw error
         }
@@ -97,8 +103,14 @@ struct ClaudeQuotaProbe: Sendable {
         guard validToken(refresh) else { throw QuotaFailure.invalidResponse }
         var updated = QuotaCredential(accessToken: token, accountID: original.accountID,
             expiresAt: clock().addingTimeInterval(seconds), refreshToken: refresh, location: original.location)
-        updated = try await credentials.saveClaude(updated, replacing: original)
-        return updated
+        do {
+            updated = try await credentials.saveClaude(updated, replacing: original)
+            return updated
+        } catch {
+            // A failed write must not leave the previous token in a local cache.
+            credentials.invalidateClaudeCache()
+            throw error
+        }
     }
 
     private func usage(_ credential: QuotaCredential) async throws -> QuotaSnapshot {
@@ -121,5 +133,19 @@ struct ClaudeQuotaProbe: Sendable {
 
     private func validToken(_ token: String) -> Bool {
         !token.isEmpty && !token.contains("\r") && !token.contains("\n")
+    }
+
+    private func shouldUseFallback(for error: Error) -> Bool {
+        guard let failure = error as? QuotaFailure else { return true }
+        switch failure {
+        case .credentialsUnavailable, .notSignedIn, .expired:
+            // These indicate local auth state or a shared service cooldown. The
+            // CLI is another auth reader and must not be launched automatically.
+            return false
+        default:
+            // Transport, HTTP and parse failures may still benefit from the
+            // independent CLI route.
+            return true
+        }
     }
 }

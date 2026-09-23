@@ -18,6 +18,7 @@ private actor RecoveryCredentials: QuotaCredentialSource {
     var values: [QuotaCredential]
     var saveError: QuotaFailure?
     private(set) var saved: [QuotaCredential] = []
+    private(set) var reloadCount = 0
     init(_ values: [QuotaCredential], saveError: QuotaFailure? = nil) { self.values = values; self.saveError = saveError }
     func load(_ provider: QuotaProvider) async throws -> QuotaCredential {
         if values.count > 1 { return values.removeFirst() }
@@ -26,6 +27,11 @@ private actor RecoveryCredentials: QuotaCredentialSource {
     func saveClaude(_ updated: QuotaCredential, replacing original: QuotaCredential) async throws -> QuotaCredential {
         if let saveError { throw saveError }
         saved.append(updated); values = [updated]; return updated
+    }
+
+    func reloadClaude() async throws -> QuotaCredential {
+        reloadCount += 1
+        return try await load(.claude)
     }
 }
 private actor RecoveryTransport: QuotaTransport {
@@ -47,6 +53,57 @@ private actor RecoveryFallback: ClaudeQuotaFallback {
         calls += 1
         if let error { throw error }
         return try QuotaParser.parse(reply().data, provider: .claude, now: now)
+    }
+}
+
+private final class FailingCredentials: QuotaCredentialSource, @unchecked Sendable {
+    let failure: QuotaFailure
+    private let lock = NSLock()
+    private var invalidations = 0
+
+    init(_ failure: QuotaFailure) { self.failure = failure }
+
+    func load(_ provider: QuotaProvider) async throws -> QuotaCredential {
+        throw failure
+    }
+
+    func invalidateClaudeCache() {
+        lock.lock(); invalidations += 1; lock.unlock()
+    }
+
+    var invalidationCount: Int {
+        lock.lock(); defer { lock.unlock() }
+        return invalidations
+    }
+}
+
+private final class RecoveryTestClock: @unchecked Sendable {
+    private let lock = NSLock()
+    private var value: Date
+
+    init(_ value: Date) { self.value = value }
+
+    func now() -> Date {
+        lock.lock(); defer { lock.unlock() }
+        return value
+    }
+
+    func advance(by interval: TimeInterval) {
+        lock.lock(); value.addTimeInterval(interval); lock.unlock()
+    }
+}
+
+private final class LockedCount: @unchecked Sendable {
+    private let lock = NSLock()
+    private var storage = 0
+
+    func increment() {
+        lock.lock(); storage += 1; lock.unlock()
+    }
+
+    var value: Int {
+        lock.lock(); defer { lock.unlock() }
+        return storage
     }
 }
 
@@ -132,10 +189,10 @@ final class ClaudeRecoveryTests: XCTestCase {
         }
     }
 
-    func testAuthenticationFailureUsesCLIFallback() async throws {
+    func testHTTPFailureStillUsesCLIFallback() async throws {
         let fallback = RecoveryFallback()
         let client = QuotaClient(credentials: RecoveryCredentials([login()]),
-            transport: RecoveryTransport([reply(400)]), clock: { instant }, claudeFallback: fallback)
+            transport: RecoveryTransport([reply(503)]), clock: { instant }, claudeFallback: fallback)
         let result = await client.refresh(.claude)
         XCTAssertNil(result.failure)
         XCTAssertEqual(result.snapshot?.windows.first?.remainingPercent, 75)
@@ -152,10 +209,47 @@ final class ClaudeRecoveryTests: XCTestCase {
     }
 
     func testPersistenceFailureDoesNotPretendRefreshWasSaved() async {
+        let fallback = RecoveryFallback()
         let client = QuotaClient(credentials: RecoveryCredentials([login()], saveError: .credentialsUnavailable),
-            transport: RecoveryTransport([reply(200, renewal)]), clock: { instant })
+            transport: RecoveryTransport([reply(200, renewal)]), clock: { instant }, claudeFallback: fallback)
         let result = await client.refresh(.claude)
         XCTAssertEqual(result.failure, .credentialsUnavailable)
+        let fallbackCalls = await fallback.calls
+        XCTAssertEqual(fallbackCalls, 0)
+    }
+
+    func testCredentialFailuresNeverStartCLIFallbackAndInvalidateCache() async {
+        for failure in [QuotaFailure.credentialsUnavailable, .notSignedIn] {
+            let credentials = FailingCredentials(failure)
+            let fallback = RecoveryFallback()
+            let client = QuotaClient(credentials: credentials, transport: RecoveryTransport([]),
+                clock: { instant }, claudeFallback: fallback)
+            let result = await client.refresh(.claude)
+            XCTAssertEqual(result.failure, failure)
+            let fallbackCalls = await fallback.calls
+            let invalidationCount = credentials.invalidationCount
+            XCTAssertEqual(fallbackCalls, 0)
+            XCTAssertEqual(invalidationCount, 1)
+        }
+
+        // A 401/403 is converted to `.expired` after the forced reload path;
+        // it is still an auth failure and must not fall through to the CLI.
+        let credentials = RecoveryCredentials([login(expiry: 3600, refresh: nil)])
+        let fallback = RecoveryFallback()
+        let client = QuotaClient(credentials: credentials, transport: RecoveryTransport([reply(401)]),
+            clock: { instant }, claudeFallback: fallback)
+        let result = await client.refresh(.claude)
+        XCTAssertEqual(result.failure, .expired)
+        let fallbackCalls = await fallback.calls
+        XCTAssertEqual(fallbackCalls, 0)
+    }
+
+    func testForcedReloadRunsBeforeExternalTokenComparison() async throws {
+        let credentials = RecoveryCredentials([login(expiry: 3600), login("external", expiry: 7200)])
+        let transport = RecoveryTransport([reply(401), reply()])
+        _ = try await ClaudeQuotaProbe(credentials: credentials, transport: transport, clock: { instant }).fetch()
+        let reloadCount = await credentials.reloadCount
+        XCTAssertEqual(reloadCount, 1)
     }
 
     func testMalformedRefreshResponseCannotOverwriteCredentials() async {
@@ -167,6 +261,66 @@ final class ClaudeRecoveryTests: XCTestCase {
             let saved = await credentials.saved
             XCTAssertTrue(saved.isEmpty)
         }
+    }
+}
+
+final class ClaudeCredentialCacheTests: XCTestCase {
+    func testCacheUsesFixedFiveMinuteExpiryWithoutSlidingOnRead() {
+        let cache = ClaudeCredentialCache()
+        let first = login("first", expiry: 3600)
+        cache.store(first, loadedAt: instant)
+
+        XCTAssertEqual(cache.value(at: instant.addingTimeInterval(299)), first)
+        // The read above must not extend the entry's lifetime.
+        XCTAssertNil(cache.value(at: instant.addingTimeInterval(300)))
+    }
+
+    func testConcurrentCacheMissesShareOneSynchronousSourceRead() {
+        let cache = ClaudeCredentialCache()
+        let sourceReads = LockedCount()
+        let expected = login("shared", expiry: 3600)
+
+        DispatchQueue.concurrentPerform(iterations: 24) { _ in
+            _ = try? cache.load(at: instant) {
+                sourceReads.increment()
+                Thread.sleep(forTimeInterval: 0.001)
+                return expected
+            }
+        }
+        XCTAssertEqual(sourceReads.value, 1)
+    }
+
+    func testForcedCacheLoadBypassesStillValidEntry() throws {
+        let cache = ClaudeCredentialCache()
+        cache.store(login("old", expiry: 3600), loadedAt: instant)
+        let replacement = login("replacement", expiry: 3600)
+        let result = try cache.load(at: instant.addingTimeInterval(1), force: true) { replacement }
+        XCTAssertEqual(result, replacement)
+        XCTAssertEqual(cache.value(at: instant.addingTimeInterval(2)), replacement)
+    }
+
+    func testLocalSourceReloadsExternalCredentialAfterExpiryAndDoesNotCacheFailures() async throws {
+        let io = MemoryCredentialIO()
+        let clock = RecoveryTestClock(instant)
+        let repository = ClaudeCredentialRepository(io: io, now: clock.now)
+        let source = LocalQuotaCredentials(claude: repository, clock: clock.now)
+
+        do {
+            _ = try await source.load(.claude)
+            XCTFail("an empty source should fail without populating the cache")
+        } catch {
+            XCTAssertEqual(error as? QuotaFailure, .notSignedIn)
+        }
+        io.file = credentialJSON("first", expiry: 3600)
+        let first = try await source.load(.claude)
+        XCTAssertEqual(first.accessToken, "first")
+
+        io.file = credentialJSON("external", expiry: 7200)
+        let cached = try await source.load(.claude)
+        XCTAssertEqual(cached.accessToken, "first")
+        clock.advance(by: 300)
+        let refreshed = try await source.load(.claude)
+        XCTAssertEqual(refreshed.accessToken, "external")
     }
 }
 
