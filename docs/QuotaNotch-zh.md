@@ -50,8 +50,9 @@ Claude 只有接口实际提供模型窗口时才显示该模型。固定选择�
 ## 本机登录要求
 
 - Claude：需要 Claude Code 的订阅登录；在 CLI 中运行 `/login`。检查
-  `~/.claude/.credentials.json` 和钥匙串服务 `Claude Code-credentials`，优先选用
-  有效且较新的凭据；损坏或过期的文件不会挡住钥匙串中的有效登录。
+  `~/.claude/.credentials.json`，文件有效时不再额外访问钥匙串；文件缺失、损坏或
+  过期时再检查钥匙串服务 `Claude Code-credentials`。钥匙串访问使用系统
+  `security` 工具；读取成功的凭据在内存中缓存最多 5 分钟，认证失败时重新读取。
   自定义绝对路径 `CLAUDE_CONFIG_DIR` 仅在传入 App 进程环境时有效。
 - Codex：需要 `codex login` 建立的 `~/.codex/auth.json` OAuth 凭据；支持 App 进程
   环境中的绝对路径 `CODEX_HOME`。本版暂不支持只存于 Codex 钥匙串的登录配置。
@@ -62,11 +63,11 @@ Claude 只有接口实际提供模型窗口时才显示该模型。固定选择�
   本机登录，再有限重试。新的 access/refresh token 写回原来的文件或钥匙串，保留
   scopes 等字段。写入前检查原凭据是否已改变，发现外部更新就使用新凭据。
   这能缩小与 Claude Code 同时续期的竞态窗口，但两者没有共同的跨进程锁。
-- Claude API 恢复失败时尝试本机 `claude /usage`，最多等待 20 秒。仅在 App 的专用
+- Claude API 网络或响应解析失败时可尝试本机 `claude /usage`，最多等待 20 秒。仅在 App 的专用
   空目录运行内置用量命令，禁用工具、普通 hooks 和外部 MCP 配置；不发送推理提示。
   备用结果支持剩余/已用百分比及相对重置时间，无法可靠解析的重置时间显示未知。
-  服务端限流时不会切换通道继续请求。
-- Claude 的恢复途径都失败后，才提示重新登录。Codex/Gemini 仍只读取凭据，
+  服务端限流、凭据不可读、未登录或认证失效时不会再启动 CLI，避免连续触发另一条授权路径。
+- Claude 凭据不可读时提示访问问题，认证失效时提示重新登录。Codex/Gemini 仍只读取凭据，
   认证失效时清除旧额度并提示重新登录。
 
 凭据在运行 App 的 Mac 上读取，Claude 续期成功后保存回原来的本机存储；

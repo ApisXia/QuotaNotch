@@ -448,3 +448,9 @@ The QuotaNotch core, view and tests were independently written for this fork.
 ClaudeBar commit 80de4330ede5a7d1ea71456e54d26473cbd50c99 was also reviewed
 as a behavioral reference for Claude OAuth renewal and CLI quota fallback.
 The recovery implementation and regression tests in QuotaNotch are original.
+
+ClaudeBar fixes 251e0524ba6ff34403ddaac593b0e3e9153b4be6 (Keychain access),
+01e710a62d58c19c42b4d545edc8431a9d2ec5b0 (credential cache recovery), and
+13d8ba7 (compact/hex Keychain payloads) informed the September 2026 credential
+access correction. The process adapter and regression tests are independently
+implemented; no upstream source files are redistributed by this correction.
