@@ -21,7 +21,6 @@ struct ContentView: View {
     @ObservedObject var coordinator = BoringViewCoordinator.shared
     @ObservedObject var musicManager = MusicManager.shared
     @ObservedObject private var quotaStore = QuotaNotchStore.shared
-    @ObservedObject private var bubbleShelfStore = BubbleShelfStore.shared
     @ObservedObject var batteryModel = BatteryStatusViewModel.shared
     @ObservedObject var brightnessManager = BrightnessManager.shared
     @ObservedObject var volumeManager = VolumeManager.shared
@@ -35,15 +34,6 @@ struct ContentView: View {
 
 
     @State private var measuredClosedWidth: CGFloat = 0
-    // A horizontal scroll changes only which side of the fixed left pair is
-    // compact. The preview runner can inject either settled arrangement
-    // without changing the production gesture or module footprint.
-    @State private var shelfAudioArrangement: BubbleShelfAudioArrangement = .shelfMinimalAudioWidget
-    var shelfAudioArrangementPreview: BubbleShelfAudioArrangement? = nil
-
-    private var activeShelfAudioArrangement: BubbleShelfAudioArrangement {
-        shelfAudioArrangementPreview ?? shelfAudioArrangement
-    }
     // Anchor the physical notch using the same state that chooses the rendered wings.
     // A late child preference can be reset to zero by surrounding layout containers.
     private var taskWingOffset: CGFloat {
@@ -54,58 +44,6 @@ struct ContentView: View {
         guard asymmetric else { return 0 }
         let widget = QuotaCompactMetrics.iconSize(height: vm.effectiveClosedNotchHeight)
         return NotchModuleMetrics(widgetWidth: widget).additionalWidth / 2
-    }
-    private var bubbleHasExistingLeftModule: Bool {
-        compactPresentation != .none || agentStore.showAccessory
-    }
-    private var bubbleWingOffset: CGFloat {
-        guard vm.notchState == .closed, bubbleClosedState != nil,
-              vm.effectiveClosedNotchHeight > 0, !eventPresentation.replacesPrimary,
-              !coordinator.helloAnimationRunning else { return 0 }
-        let widget = QuotaCompactMetrics.iconSize(height: vm.effectiveClosedNotchHeight)
-        let added = BubbleNotchLayout.addedLeftFootprint(
-            widgetWidth: widget,
-            hasExistingLeftModule: bubbleHasExistingLeftModule
-        )
-        // Music-only normally has a second audio widget on the right. Once
-        // Shelf shares that left wing, the same audio control lives inside the
-        // fixed Shelf/audio pair, so account for the removed right widget when
-        // re-centering the physical camera gap.
-        let removedRightAudio = compactPresentation == .music
-            && !agentStore.showAccessory
-            && bubbleClosedState != nil ? widget : 0
-        return BubbleNotchLayout.centerCorrection(leftAdded: added, rightAdded: -removedRightAudio)
-    }
-    private var bubbleClosedState: BubbleShelfCompactState? {
-        guard vm.effectiveClosedNotchHeight > 0,
-              !vm.hideOnClosed,
-              !eventPresentation.replacesPrimary,
-              BubbleNotchLayout.shouldShowPinnedGlyph(
-                isPinnedToNotch: bubbleShelfStore.isPinnedToNotch
-              ) else { return nil }
-        return BubbleShelfCompactState(
-            itemCount: bubbleShelfStore.items.count,
-            isReceiving: bubbleShelfStore.isReceiving,
-            onOpen: openBubbleShelf,
-            onVerticalSwipe: { upward in
-                if upward {
-                    if !BubbleShelfStore.shared.isReceiving {
-                        BubbleCollectorController.shared.startReceivingFromUser()
-                    }
-                } else if BubbleShelfStore.shared.isReceiving {
-                    BubbleCollectorController.shared.pauseReceiving()
-                }
-            },
-            writers: { BubbleShelfStore.shared.exportItems(BubbleShelfStore.shared.items.map(\.id)) },
-            onHorizontalSwipe: { towardLeft in
-                guard compactPresentation == .music || compactPresentation == .combined else { return }
-                let next = shelfAudioArrangement.switched(towardLeft: towardLeft)
-                guard next != shelfAudioArrangement else { return }
-                withAnimation(reduceMotion ? nil : .smooth(duration: 0.24)) {
-                    shelfAudioArrangement = next
-                }
-            }
-        )
     }
     @StateObject private var cat = NotchCatDirector()
     @AppStorage("notchCatEnabled") private var catEnabled = false
@@ -247,11 +185,8 @@ struct ContentView: View {
                 }
             }
             if vm.notchState == .closed {
-                // The camera overlay is only the physical cutout. Keeping it
-                // inside the corner-inset gap leaves both wings available for
-                // scroll routing, clicks, and Shelf drags.
-                Color.clear.frame(width: max(0, vm.closedNotchSize.width - cornerRadiusInsets.closed.top),
-                                 height: vm.effectiveClosedNotchHeight)
+                // Match the actual camera gap so this hover target cannot cover wing controls.
+                Color.clear.frame(width: max(0, vm.closedNotchSize.width - cornerRadiusInsets.closed.top), height: vm.effectiveClosedNotchHeight)
                     .contentShape(Rectangle())
                     .onHover { cat.pointer($0, source: "camera"); handleHover($0) }
                     .onTapGesture { openFromPointer(explicit: true) }
@@ -340,9 +275,8 @@ struct ContentView: View {
                             hover: { cat.edgePointer($0) }, summon: { cat.summon($0) },
                             cancel: { cat.cancelSummon() })
                     }
-                    .offset(x: vm.notchState == .closed ? taskWingOffset + bubbleWingOffset + catWingOffset : 0)
+                    .offset(x: vm.notchState == .closed ? taskWingOffset + catWingOffset : 0)
                     .animation(reduceMotion ? nil : .smooth(duration: 0.32), value: taskWingOffset)
-                    .animation(reduceMotion ? nil : .smooth(duration: 0.32), value: bubbleWingOffset)
                 
     }
 
@@ -377,8 +311,6 @@ struct ContentView: View {
                         QuotaNotchView()
                     case .activity:
                         AgentNotchView()
-                    case .bubbleShelf:
-                        BubbleShelfView()
                     }
                 }
                 .transition(
@@ -424,9 +356,7 @@ struct ContentView: View {
             QuotaPinnedWings(centerWidth: vm.closedNotchSize.width - cornerRadiusInsets.closed.top,
                              height: vm.effectiveClosedNotchHeight,
                              showsMusic: compactPresentation == .combined,
-                             albumArtNamespace: albumArtNamespace,
-                             shelf: bubbleClosedState,
-                             shelfAudioArrangement: activeShelfAudioArrangement) { provider in
+                             albumArtNamespace: albumArtNamespace) { provider in
                 quotaStore.selectedProvider = provider
                 coordinator.currentView = .aiUsage
                 doOpen()
@@ -439,26 +369,11 @@ struct ContentView: View {
             if agentStore.showAccessory {
                 musicAndTaskWings
             } else {
-                MusicLiveActivity(shelf: bubbleClosedState,
-                                  shelfAudioArrangement: activeShelfAudioArrangement,
-                                  onOpen: { coordinator.currentView = .home; doOpen() })
+                MusicLiveActivity().contentShape(Rectangle()).onTapGesture { coordinator.currentView = .home; doOpen() }
             }
         } else if agentStore.showAccessory && vm.effectiveClosedNotchHeight > 0 && !eventPresentation.replacesPrimary {
             AgentTaskOnlyWings(centerWidth: vm.closedNotchSize.width - cornerRadiusInsets.closed.top,
-                               height: vm.effectiveClosedNotchHeight, open: openTasks,
-                               shelf: bubbleClosedState)
-        } else if let shelf = bubbleClosedState {
-            let height = vm.effectiveClosedNotchHeight
-            let width = QuotaCompactMetrics.iconSize(height: height)
-            HStack(spacing: 0) {
-                BubbleShelfClosedControl(state: shelf, presentation: .widget, height: height, widgetWidth: width)
-                    .frame(width: width, height: height)
-                    .catWing(.left, occupied: width, height: height)
-                Color.clear
-                    .frame(width: vm.closedNotchSize.width - cornerRadiusInsets.closed.top, height: height)
-                    .auditNotchFrame("camera")
-                Color.clear.frame(width: 0).catWing(.right, occupied: 0, height: height)
-            }
+                               height: vm.effectiveClosedNotchHeight, open: openTasks)
         } else {
             HStack(spacing: 0) {
                 Color.clear.frame(width: 0).catWing(.left, occupied: 0, height: vm.effectiveClosedNotchHeight)
@@ -513,62 +428,39 @@ struct ContentView: View {
         let height = vm.effectiveClosedNotchHeight
         let size = max(0, height - 12)
         return HStack(spacing: QuotaCompactMetrics.spacing) {
-            Group {
-                if let shelf = bubbleClosedState {
-                    BubbleShelfAudioPair(shelf: shelf,
-                                         arrangement: activeShelfAudioArrangement,
-                                         height: height,
-                                         widgetWidth: size,
-                                         onAudioOpen: { coordinator.currentView = .home; doOpen() })
-                        .frame(width: size + NotchModuleMetrics(widgetWidth: size).additionalWidth, height: height)
-                } else {
-                    Button { coordinator.currentView = .home; doOpen() } label: {
-                        Image(nsImage: musicManager.albumArt).resizable().scaledToFill()
-                            .frame(width: size, height: size)
-                            .clipShape(RoundedRectangle(cornerRadius: MusicPlayerImageSizes.cornerRadiusInset.closed))
-                            .frame(width: size, height: height)
-                            .auditNotchModule("music").auditNotchFrame("album")
-                    }.buttonStyle(.plain)
-                }
-            }
-            .catWing(.left, occupied: size + (bubbleClosedState == nil ? 0 : NotchModuleMetrics(widgetWidth: size).additionalWidth), height: height, widgetWidth: size)
+            Button { coordinator.currentView = .home; doOpen() } label: {
+                Image(nsImage: musicManager.albumArt).resizable().scaledToFill()
+                    .frame(width: size, height: size)
+                    .clipShape(RoundedRectangle(cornerRadius: MusicPlayerImageSizes.cornerRadiusInset.closed))
+                    .frame(width: size, height: height)
+                    .auditNotchModule("music").auditNotchFrame("album")
+            }.buttonStyle(.plain)
+                .catWing(.left, occupied: size, height: height)
             Color.clear.frame(width: vm.closedNotchSize.width - cornerRadiusInsets.closed.top, height: height).auditNotchFrame("camera")
             AgentCompactDock(primaryWidth: 0, height: height, anchorWidth: size, widgetWidth: size, open: openTasks) { EmptyView() }
                 .catWing(.right, occupied: size, height: height)
-        }
-        .frame(height: height)
+        }.frame(height: height)
     }
 
-    func MusicLiveActivity(shelf: BubbleShelfCompactState? = nil,
-                           shelfAudioArrangement: BubbleShelfAudioArrangement = .shelfMinimalAudioWidget,
-                           onOpen: @escaping () -> Void = {}) -> some View {
+    func MusicLiveActivity() -> some View {
         let height = vm.effectiveClosedNotchHeight
         let size = max(0, height - 12)
         return HStack(spacing: QuotaCompactMetrics.spacing) {
-            Group {
-                if let shelf {
-                    BubbleShelfAudioPair(shelf: shelf,
-                                         arrangement: shelfAudioArrangement,
-                                         height: height,
-                                         widgetWidth: size,
-                                         onAudioOpen: onOpen)
-                        .frame(width: size + NotchModuleMetrics(widgetWidth: size).additionalWidth, height: height)
-                } else {
-                    Button(action: onOpen) {
-                        Image(nsImage: musicManager.albumArt)
-                            .resizable()
-                            .clipped()
-                            .clipShape(RoundedRectangle(cornerRadius: MusicPlayerImageSizes.cornerRadiusInset.closed))
-                            .matchedGeometryEffect(id: "albumArt", in: albumArtNamespace)
-                            .frame(width: max(0, vm.effectiveClosedNotchHeight - 12),
-                                   height: max(0, vm.effectiveClosedNotchHeight - 12))
-                            .auditNotchModule("music")
-                            .auditNotchFrame("album")
-                    }
-                    .buttonStyle(.plain)
-                }
-            }
-            .catWing(.left, occupied: size + (shelf == nil ? 0 : NotchModuleMetrics(widgetWidth: size).additionalWidth), height: height, widgetWidth: size)
+            Image(nsImage: musicManager.albumArt)
+                .resizable()
+                .clipped()
+                .clipShape(
+                    RoundedRectangle(
+                        cornerRadius: MusicPlayerImageSizes.cornerRadiusInset.closed)
+                )
+                .matchedGeometryEffect(id: "albumArt", in: albumArtNamespace)
+                .frame(
+                    width: max(0, vm.effectiveClosedNotchHeight - 12),
+                    height: max(0, vm.effectiveClosedNotchHeight - 12)
+                )
+
+                .auditNotchFrame("album")
+                .catWing(.left, occupied: size, height: height)
             Rectangle()
                 .fill(.black)
                 .overlay(
@@ -616,9 +508,7 @@ struct ContentView: View {
                             + -cornerRadiusInsets.closed.top
                 ).auditNotchFrame("camera")
 
-            if shelf == nil {
-                Button(action: onOpen) {
-                HStack {
+            HStack {
                     Rectangle()
                         .fill(
                             NotchStyle.coloredSpectrogram
@@ -631,41 +521,30 @@ struct ContentView: View {
                             AudioSpectrumView(isPlaying: $musicManager.isPlaying)
                                 .frame(width: 16, height: 12)
                         }
-                }
-                }
-                .buttonStyle(.plain)
-                .frame(
-                    width: max(
-                        0,
-                        vm.effectiveClosedNotchHeight - 12
-                    ),
-                    height: max(
-                        0,
-                        vm.effectiveClosedNotchHeight - 12
-                    ),
-                    alignment: .center
-                )
-                .catWing(.right, occupied: size, height: height)
-            } else {
-                Color.clear.frame(width: 0, height: height)
-                    .catWing(.right, occupied: 0, height: height)
             }
+            .frame(
+                width: max(
+                    0,
+                    vm.effectiveClosedNotchHeight - 12
+                ),
+                height: max(
+                    0,
+                    vm.effectiveClosedNotchHeight - 12
+                ),
+                alignment: .center
+            )
+            .catWing(.right, occupied: size, height: height)
         }
         .frame(
             height: vm.effectiveClosedNotchHeight,
             alignment: .center
         )
+        .auditNotchModule("music")
     }
 
     private func openTasks() {
         agentStore.notchReadEnabled = true
         coordinator.currentView = .activity
-        doOpen()
-    }
-
-    private func openBubbleShelf() {
-        coordinator.currentView = .bubbleShelf
-        agentStore.notchReadEnabled = false
         doOpen()
     }
 

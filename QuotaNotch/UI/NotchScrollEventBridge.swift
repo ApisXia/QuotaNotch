@@ -4,7 +4,7 @@ import SwiftUI
 
 /// A transparent, click-through AppKit bridge for a complete notch wing.
 /// It observes scroll-wheel events without becoming the target of clicks or
-/// mouse drags, which keeps Shelf export and the existing module buttons intact.
+/// mouse drags, which keeps the existing module buttons intact.
 struct NotchHorizontalScrollBridge: NSViewRepresentable {
     let allowsVerticalPassthrough: Bool
     let onHorizontalSwipe: (Bool) -> Void
@@ -28,8 +28,7 @@ struct NotchHorizontalScrollBridge: NSViewRepresentable {
     }
 }
 
-/// Shared AppKit event routing for the left Shelf/audio pair and the right
-/// quota/task pair. The monitor is local to the app and checks the real view
+/// Shared AppKit event routing for notch module pairs. The monitor is local to the app and checks the real view
 /// bounds before claiming an event, including non-windowed events delivered by
 /// a nonactivating Notch panel.
 class NotchScrollEventView: NSView {
@@ -40,7 +39,7 @@ class NotchScrollEventView: NSView {
     private var router = NotchScrollRouter()
 
     var hasLocalMonitorForPreview: Bool { monitor != nil }
-    var currentAxisForPreview: BubbleShelfPairScrollAxis? { router.axis }
+    var currentAxisForPreview: NotchScrollAxis? { router.axis }
 
     init(frame frameRect: NSRect, allowsVerticalPassthrough: Bool = false) {
         self.allowsVerticalPassthrough = allowsVerticalPassthrough
@@ -57,7 +56,7 @@ class NotchScrollEventView: NSView {
         super.init(coder: coder)
     }
 
-    /// The bridge must never steal a button click or a Shelf drag.
+    /// The bridge must never steal a button click or a mouse drag.
     override func hitTest(_ point: NSPoint) -> NSView? { nil }
 
     override func viewDidMoveToWindow() {
@@ -94,7 +93,7 @@ class NotchScrollEventView: NSView {
     /// reducer/closure.
     @discardableResult
     func handleScroll(x: CGFloat, y: CGFloat, at time: TimeInterval,
-                      phase: BubbleScrollPhase,
+                      phase: NotchScrollPhase,
                       momentum: Bool = false,
                       eventWindow: NSWindow?, location: NSPoint) -> Bool {
         guard let targetWindow = window,
@@ -129,7 +128,7 @@ class NotchScrollEventView: NSView {
     /// synthetic global event. This is the same reducer used by `route(event:)`.
     @discardableResult
     func routePreviewScroll(deltaX: CGFloat, deltaY: CGFloat,
-                            phase: BubbleScrollPhase,
+                            phase: NotchScrollPhase,
                             isMomentum: Bool,
                             timestamp: TimeInterval) -> NotchScrollRoute {
         let decision = router.update(deltaX: deltaX, deltaY: deltaY,
@@ -160,7 +159,7 @@ class NotchScrollEventView: NSView {
         return convert(windowPoint, from: nil)
     }
 
-    static func scrollPhase(for event: NSEvent) -> BubbleScrollPhase {
+    static func scrollPhase(for event: NSEvent) -> NotchScrollPhase {
         if event.phase.isEmpty { return .none }
         if event.phase.contains(.began) { return .began }
         if event.phase.contains(.ended) || event.phase.contains(.cancelled) { return .ended }

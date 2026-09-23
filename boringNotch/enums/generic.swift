@@ -28,7 +28,6 @@ public enum NotchViews {
     case home
     case aiUsage
     case activity
-    case bubbleShelf
 }
 
 enum SettingsEnum {

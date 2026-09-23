@@ -23,7 +23,6 @@ struct SettingsView: View {
                 NavigationLink(value: "General") { Label("通用", systemImage: "gearshape") }
                 NavigationLink(value: "Quota") { Label("AI 额度", systemImage: "chart.pie") }
                 NavigationLink(value: "Activity") { Label(AgentText.t("任务监控", "Task monitor"), systemImage: "square.stack.3d.up") }
-                NavigationLink(value: "Shelf") { Label(AgentText.t("收纳", "Shelf"), systemImage: "tray.full") }
                 NavigationLink(value: "Media") { Label("音乐", systemImage: "music.note") }
                 NavigationLink(value: "Calendar") { Label("Calendars & Reminders", systemImage: "calendar") }
                 NavigationLink(value: "Appearance") { Label("外观", systemImage: "circle.lefthalf.filled") }
@@ -37,7 +36,6 @@ struct SettingsView: View {
                 switch selectedTab {
                 case "Quota": QuotaPreferences()
                 case "Activity": AgentActivitySettings()
-                case "Shelf": BubbleShelfSettingsView()
                 case "Media": Media()
                 case "Calendar": CalendarSettings()
                 case "Appearance": Appearance()
@@ -55,6 +53,10 @@ struct SettingsView: View {
         .frame(minWidth: 700, minHeight: 500)
         .background(Color(NSColor.windowBackgroundColor))
         .tint(settingsAccent)
+        .onAppear {
+            let pages = ["General", "Quota", "Activity", "Media", "Calendar", "Appearance", "System", "About"]
+            if !pages.contains(selectedTab) { selectedTab = "General" }
+        }
     }
 
     private var settingsAccent: Color {

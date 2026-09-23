@@ -78,7 +78,6 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationWillTerminate(_ notification: Notification) {
-        Task { @MainActor in BubbleCollectorController.shared.shutdown() }
         NotificationCenter.default.removeObserver(self)
         if let observer = screenLockedObserver {
             DistributedNotificationCenter.default().removeObserver(observer)
@@ -221,7 +220,6 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         AgentActivityStore.shared.start()
-        Task { @MainActor in BubbleCollectorController.shared.synchronizePersistedMode() }
         UNUserNotificationCenter.current().delegate = AgentNotificationDelegate.shared
 
         NotificationCenter.default.addObserver(

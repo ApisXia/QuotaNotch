@@ -334,7 +334,7 @@ struct AgentModuleSwitchGesture: ViewModifier {
             .background {
                 if enabled {
                     // Trackpad scroll is the module-switch gesture. Mouse
-                    // drags remain available to Shelf export and never
+                    // drags remain available to child controls and never
                     // toggle the quota/task pair.
                     NotchHorizontalScrollBridge { towardLeft in select(!towardLeft) }
                         .allowsHitTesting(false)
@@ -387,37 +387,26 @@ struct AgentTaskOnlyWings: View {
     let centerWidth: CGFloat
     let height: CGFloat
     let open: () -> Void
-    var shelf: BubbleShelfCompactState? = nil
     @ObservedObject private var store = AgentActivityStore.shared
     private var iconWidth: CGFloat { QuotaCompactMetrics.iconSize(height: height) }
-    private var metrics: NotchModuleMetrics { NotchModuleMetrics(widgetWidth: iconWidth) }
     private var textWidth: CGFloat { iconWidth + NotchModuleMetrics(widgetWidth: iconWidth).additionalWidth }
     private var candidates: [AgentSession] { store.visible.filter { $0.state.isActive || store.isUnread($0) } }
     private var recent: [AgentSession] { AgentTaskOnlySummary.recent(candidates) }
     private var emphasis: AgentSession? { AgentTaskOnlySummary.emphasis(candidates) }
     var body: some View {
         HStack(spacing: QuotaCompactMetrics.spacing) {
-            HStack(spacing: 0) {
-                // Shelf is the outermost left module; the task mark remains
-                // the same widget/minimal size immediately beside it.
-                if let shelf {
-                    BubbleShelfCompanion(state: shelf, height: height, widgetWidth: iconWidth)
-                }
-                Button(action: open) {
-                    Group {
-                        if let session = emphasis {
-                            AgentPaperGlyph(state: session.state)
-                                .scaleEffect(iconWidth / 16)
-                        }
+            Button(action: open) {
+                Group {
+                    if let session = emphasis {
+                        AgentPaperGlyph(state: session.state)
+                            .scaleEffect(iconWidth / 16)
                     }
-                    .frame(width: iconWidth, height: height).contentShape(Rectangle())
-                    .auditNotchModule("task")
-                }.buttonStyle(.plain)
-                    .accessibilityLabel(AgentText.t("任务", "Tasks") + " · " + AgentText.state(emphasis?.state ?? .unknown))
-            }
-            .catWing(.left,
-                     occupied: iconWidth + (shelf == nil ? 0 : metrics.additionalWidth),
-                     height: height, widgetWidth: iconWidth)
+                }
+                .frame(width: iconWidth, height: height).contentShape(Rectangle())
+                .auditNotchModule("task")
+            }.buttonStyle(.plain)
+                .accessibilityLabel(AgentText.t("任务", "Tasks") + " · " + AgentText.state(emphasis?.state ?? .unknown))
+                .catWing(.left, occupied: iconWidth, height: height)
             Color.clear.frame(width: centerWidth, height: height).auditNotchFrame("camera")
             Button(action: open) {
                 VStack(alignment: .leading, spacing: 1) {
