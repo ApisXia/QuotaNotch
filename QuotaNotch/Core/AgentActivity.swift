@@ -126,7 +126,9 @@ enum AgentEventParser {
             let source = payload["source"] as? String ?? ""
             let originator = payload["originator"] as? String ?? ""
             let internalSource = payload["thread_source"] as? String ?? ""
-            session.excluded = payload["parent_thread_id"] != nil || payload["source"] is [String: Any]
+            let parent = payload["parent_thread_id"] as? String ?? ""
+            let structuredSource = payload["source"] as? [String: Any]
+            session.excluded = !parent.isEmpty || structuredSource?["subagent"] != nil
                 || ["thread_title", "thread_description", "memory_consolidation", "review"].contains(internalSource)
             if originator.contains("desktop") || originator.contains("app") { session.surface = .desktop }
             else if source == "vscode" || originator.contains("vscode") { session.surface = .vscode }

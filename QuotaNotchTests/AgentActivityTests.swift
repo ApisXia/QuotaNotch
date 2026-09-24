@@ -265,6 +265,34 @@ final class AgentRepositoryTests: XCTestCase {
         let snapshot = await AgentActivityRepository(home: root, hookDirectory: root.appendingPathComponent("events")).scan(force: true)
         XCTAssertTrue(snapshot.sessions.isEmpty)
     }
+    func testMovedDesktopRolloutKeepsTitleAndArchiveState() async throws {
+        let db = try createDiscoveryDatabase(); defer { sqlite3_close(db) }
+        let id = UUID().uuidString
+        _ = try desktopLog(id, name: "rollout-moved-" + id + ".jsonl")
+        let oldPath = root.appendingPathComponent("missing.jsonl").path
+        XCTAssertEqual(sqlite3_exec(db, "INSERT INTO threads VALUES('\(id)','\(oldPath)','/projects/desktop','Moved task','vscode',0,1)", nil, nil, nil), SQLITE_OK)
+        let repository = AgentActivityRepository(home: root, hookDirectory: root.appendingPathComponent("events"))
+        let active = await repository.scan(force: true)
+        XCTAssertEqual(active.sessions.count, 1)
+        XCTAssertEqual(active.sessions.first?.title, "Moved task")
+        XCTAssertEqual(active.sessions.first?.state, .running)
+        XCTAssertEqual(sqlite3_exec(db, "UPDATE threads SET archived=1", nil, nil, nil), SQLITE_OK)
+        let archived = await repository.scan(force: true)
+        XCTAssertTrue(archived.sessions.isEmpty)
+    }
+    func testSupplementalLogPathWithQuoteAndLateIndexDoesNotDuplicate() async throws {
+        let db = try createDiscoveryDatabase(); defer { sqlite3_close(db) }
+        let id = UUID().uuidString
+        let file = try desktopLog(id, name: "user's-log.jsonl")
+        let repository = AgentActivityRepository(home: root, hookDirectory: root.appendingPathComponent("events"))
+        let first = await repository.scan(force: true)
+        XCTAssertEqual(first.sessions.count, 1)
+        let escaped = file.path.replacingOccurrences(of: "'", with: "''")
+        XCTAssertEqual(sqlite3_exec(db, "INSERT INTO threads VALUES('\(id)','\(escaped)','/projects/desktop','Renamed later','vscode',0,1)", nil, nil, nil), SQLITE_OK)
+        let indexed = await repository.scan(force: true)
+        XCTAssertEqual(indexed.sessions.count, 1)
+        XCTAssertEqual(indexed.sessions.first?.title, "Renamed later")
+    }
     func testWorktreeResolvesToRepository() throws {
         let main = root.appendingPathComponent("main", isDirectory: true)
         let worktree = root.appendingPathComponent("worktree", isDirectory: true)

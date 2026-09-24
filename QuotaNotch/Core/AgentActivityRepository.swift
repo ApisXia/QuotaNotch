@@ -13,17 +13,21 @@ struct AgentActivitySnapshot {
 /// Reads only metadata columns. Never requests prompts, responses, credentials, or tool output.
 struct AgentMetadataDatabase {
     let url: URL
-    func read() throws -> (sessions: [AgentSession], projects: [AgentProject], truncated: Bool) {
+    func read(recentLogs: [URL] = [], now: Date = Date()) throws -> (sessions: [AgentSession], projects: [AgentProject], truncated: Bool) {
         var db: OpaquePointer?
         guard sqlite3_open_v2(url.path, &db, SQLITE_OPEN_READONLY | SQLITE_OPEN_NOMUTEX, nil) == SQLITE_OK else {
             if let db { sqlite3_close(db) }; throw CocoaError(.fileReadNoPermission)
         }
         defer { sqlite3_close(db) }
         sqlite3_busy_timeout(db, 100)
-        func rows(_ sql: String) throws -> [[String: String]] {
+        func rows(_ sql: String, parameters: [String] = []) throws -> [[String: String]] {
             var statement: OpaquePointer?
             guard sqlite3_prepare_v2(db, sql, -1, &statement, nil) == SQLITE_OK else { throw CocoaError(.fileReadCorruptFile) }
             defer { sqlite3_finalize(statement) }
+            for (index, value) in parameters.enumerated() {
+                let code = value.withCString { sqlite3_bind_text(statement, Int32(index + 1), $0, -1, unsafeBitCast(-1, to: sqlite3_destructor_type.self)) }
+                guard code == SQLITE_OK else { throw CocoaError(.fileReadCorruptFile) }
+            }
             var result: [[String: String]] = []
             var code = sqlite3_step(statement)
             while code == SQLITE_ROW {
@@ -43,10 +47,23 @@ struct AgentMetadataDatabase {
         let selected = desired.filter { columns.contains($0) }
         guard columns.contains("id"), columns.contains("rollout_path") else { throw CocoaError(.fileReadCorruptFile) }
         let order = columns.contains("updated_at") ? " ORDER BY updated_at DESC" : ""
-        let recent = columns.contains("updated_at") ? " WHERE updated_at >= \(Int(Date().addingTimeInterval(-7 * 86400).timeIntervalSince1970))" : ""
+        let recent = columns.contains("updated_at") ? " WHERE updated_at >= \(Int(now.addingTimeInterval(-7 * 86400).timeIntervalSince1970))" : ""
         let records = try rows("SELECT " + selected.joined(separator: ",") + " FROM threads" + recent + order + " LIMIT 2001")
+        // A fresh transcript can belong to a stale index row. Fetch those rows
+        // explicitly so discovery preserves titles, project assignments and archives.
+        var byID: [String: [String: String]] = [:]
+        for row in records.prefix(2000) { if let id = row["id"] { byID[id] = row } }
+        for offset in stride(from: 0, to: recentLogs.count, by: 200) {
+            let batch = Array(recentLogs[offset..<min(offset + 200, recentLogs.count)])
+            let paths = batch.map(\.path)
+            let ids = batch.compactMap { Self.rolloutID($0) }
+            let pathSlots = Array(repeating: "?", count: paths.count).joined(separator: ",")
+            let idClause = ids.isEmpty ? "" : " OR id IN (" + Array(repeating: "?", count: ids.count).joined(separator: ",") + ")"
+            let matches = try rows("SELECT " + selected.joined(separator: ",") + " FROM threads WHERE rollout_path IN (" + pathSlots + ")" + idClause, parameters: paths + ids)
+            for row in matches { if let id = row["id"] { byID[id] = row } }
+        }
         var sessions: [AgentSession] = []
-        for row in records.prefix(2000) {
+        for row in byID.values {
             guard let id = row["id"] else { continue }
             var session = AgentSession(id: id)
             session.cwd = row["cwd"] ?? ""; session.rolloutPath = row["rollout_path"] ?? ""
@@ -70,6 +87,11 @@ struct AgentMetadataDatabase {
         }
         return (sessions, projects, records.count > 2000)
     }
+
+    static func rolloutID(_ url: URL) -> String? {
+        let suffix = String(url.deletingPathExtension().lastPathComponent.suffix(36))
+        return UUID(uuidString: suffix) == nil ? nil : suffix
+    }
 }
 
 actor AgentActivityRepository {
@@ -92,13 +114,15 @@ actor AgentActivityRepository {
 
     func scan(now: Date = Date(), force: Bool = false) -> AgentActivitySnapshot {
         if force || now.timeIntervalSince(metadataReadAt) >= 8 {
-            refreshMetadata(); metadataReadAt = now
+            refreshMetadata(now: now); metadataReadAt = now
         }
         var result = AgentActivitySnapshot(hasDatabase: hasDatabase,
             hasSessionDirectory: FileManager.default.fileExists(atPath: home.appendingPathComponent("sessions").path),
             issue: metadataIssue, truncated: truncated)
         var readFailure = false
-        for record in metadata where !record.archived && !record.excluded {
+        let indexedByID = Dictionary(metadata.map { ($0.id.lowercased(), $0) }, uniquingKeysWith: { first, _ in first })
+        for candidate in metadata where !candidate.archived && !candidate.excluded {
+            var record = candidate
             guard !record.rolloutPath.isEmpty else { continue }
             let path = record.rolloutPath
             guard let attributes = try? FileManager.default.attributesOfItem(atPath: path),
@@ -132,6 +156,10 @@ actor AgentActivityRepository {
                     cursors[path] = cursor; identities[path] = inode
                 } catch { readFailure = true }
             }
+            // File names are not always canonical. Once the transcript supplies
+            // its identity, apply any authoritative archive/project/title metadata.
+            if let authoritative = indexedByID[session.id.lowercased()] { record = authoritative }
+            guard !record.archived, !record.excluded else { continue }
             session.title = record.title.isEmpty ? (indexTitles[session.id] ?? "") : record.title
             session.archived = record.archived
             if session.surface == .unknown { session.surface = record.surface }
@@ -183,7 +211,7 @@ actor AgentActivityRepository {
         return data
     }
 
-    private func refreshMetadata() {
+    private func refreshMetadata(now: Date) {
         let fm = FileManager.default
         metadataIssue = nil
         if let data = try? boundedData(home.appendingPathComponent(".codex-global-state.json"), limit: 8 * 1024 * 1024),
@@ -197,27 +225,43 @@ actor AgentActivityRepository {
         let databases = ((try? fm.contentsOfDirectory(at: home, includingPropertiesForKeys: nil)) ?? [])
             .filter { $0.lastPathComponent.hasPrefix("state_") && $0.pathExtension == "sqlite" }
             .sorted { $0.lastPathComponent.compare($1.lastPathComponent, options: .numeric) == .orderedDescending }
+        // Discover files even with a readable database: a desktop client may
+        // write lifecycle events before adding/updating the index row.
+        var recentLogs: [(URL, Date)] = []
+        if let files = fm.enumerator(at: home.appendingPathComponent("sessions"),
+                                     includingPropertiesForKeys: [.contentModificationDateKey],
+                                     options: [.skipsHiddenFiles]) {
+            for case let url as URL in files where url.pathExtension == "jsonl" {
+                let date = (try? url.resourceValues(forKeys: [.contentModificationDateKey]))?.contentModificationDate ?? .distantPast
+                if date >= now.addingTimeInterval(-7 * 86400) { recentLogs.append((url, date)) }
+            }
+        }
+        recentLogs.sort { $0.1 > $1.1 }
+        let discoveryTruncated = recentLogs.count > 2000
+        let discovered = recentLogs.prefix(2000).map(\.0)
         hasDatabase = false
+        metadata = []; projects = []; truncated = discoveryTruncated
         for database in databases {
-            if let result = try? AgentMetadataDatabase(url: database).read() {
-                metadata = result.sessions; projects = result.projects; truncated = result.truncated
+            if let result = try? AgentMetadataDatabase(url: database).read(recentLogs: discovered, now: now) {
+                metadata = result.sessions; projects = result.projects; truncated = discoveryTruncated || result.truncated
                 hasDatabase = true; break
             }
         }
         if !hasDatabase {
             if !databases.isEmpty { metadataIssue = "Codex metadata is unavailable. Using local task records." }
-            let sessionsURL = home.appendingPathComponent("sessions")
-            if let files = fm.enumerator(at: sessionsURL, includingPropertiesForKeys: [.contentModificationDateKey],
-                                         options: [.skipsHiddenFiles]) {
-                var recent: [(URL, Date)] = []
-                for case let url as URL in files where url.pathExtension == "jsonl" {
-                    let date = (try? url.resourceValues(forKeys: [.contentModificationDateKey]))?.contentModificationDate ?? .distantPast
-                    if date > Date().addingTimeInterval(-7 * 86400) { recent.append((url, date)) }
-                }
-                recent.sort { $0.1 > $1.1 }; truncated = recent.count > 2000
-                metadata = recent.prefix(2000).map { AgentSession(id: $0.0.lastPathComponent, rolloutPath: $0.0.path) }
-            } else { metadata = [] }
-            projects = []
+        }
+        let indexedPaths = Set(metadata.map(\.rolloutPath))
+        let indexedIDs = Dictionary(metadata.map { ($0.id.lowercased(), $0) }, uniquingKeysWith: { first, _ in first })
+        for url in discovered where !indexedPaths.contains(url.path) {
+            if let id = AgentMetadataDatabase.rolloutID(url), let record = indexedIDs[id.lowercased()] {
+                // A resumed rollout may have moved. Retain the authoritative
+                // metadata, including exclusion flags, while reading its new path.
+                var moved = record
+                moved.rolloutPath = url.path
+                metadata.append(moved)
+            } else {
+                metadata.append(AgentSession(id: url.lastPathComponent, rolloutPath: url.path))
+            }
         }
         let legacy = global["local-projects"] as? [String: [String: Any]] ?? [:]
         let mappings = global["app-server-project-id-by-legacy-project-id-by-host"] as? [String: [String: String]] ?? [:]
