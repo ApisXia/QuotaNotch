@@ -19,6 +19,19 @@ final class AgentActivityTests: XCTestCase {
         AgentEventParser.apply(event("session_meta", ["id": id, "source": "vscode", "originator": "codex_work_desktop", "cwd": "/work/one"]), to: &s)
         XCTAssertEqual(s.surface, .desktop); XCTAssertEqual(s.cwd, "/work/one")
     }
+    func testDesktopNullParentIsNotAChildTask() {
+        var s = AgentSession(id: id)
+        AgentEventParser.apply(event("session_meta", ["id": id, "originator": "codex_work_desktop",
+            "source": "vscode", "parent_thread_id": NSNull()]), to: &s)
+        XCTAssertFalse(s.excluded)
+        XCTAssertEqual(s.surface, .desktop)
+    }
+    func testStructuredNonSubagentSourceIsNotExcluded() {
+        var s = AgentSession(id: id)
+        AgentEventParser.apply(event("session_meta", ["id": id, "originator": "codex_work_desktop",
+            "source": ["other": "desktop"]]), to: &s)
+        XCTAssertFalse(s.excluded)
+    }
     func testVSCodeSourceAndHandoff() {
         var s = AgentSession(id: id, surface: .desktop)
         AgentEventParser.apply(event("session_meta", ["id": id, "source": "vscode", "originator": "codex_vscode"]), to: &s)
@@ -210,6 +223,47 @@ final class AgentRepositoryTests: XCTestCase {
         XCTAssertNotEqual(unassigned.sessions.first?.projectName, "Renamed")
         XCTAssertEqual(sqlite3_exec(db, "UPDATE threads SET archived=1", nil, nil, nil), SQLITE_OK)
         let archived = await repository.scan(force: true); XCTAssertTrue(archived.sessions.isEmpty)
+    }
+    private func createDiscoveryDatabase() throws -> OpaquePointer {
+        var db: OpaquePointer?
+        guard sqlite3_open(root.appendingPathComponent("state_5.sqlite").path, &db) == SQLITE_OK, let db else {
+            throw CocoaError(.fileWriteUnknown)
+        }
+        XCTAssertEqual(sqlite3_exec(db, "CREATE TABLE threads(id TEXT, rollout_path TEXT, cwd TEXT, title TEXT, source TEXT, archived INTEGER, updated_at INTEGER)", nil, nil, nil), SQLITE_OK)
+        return db
+    }
+    private func desktopLog(_ id: String, name: String? = nil) throws -> URL {
+        let file = root.appendingPathComponent("sessions/" + (name ?? id + ".jsonl"))
+        try append(line("session_meta", ["id": id, "cwd": "/projects/desktop", "originator": "codex_work_desktop", "source": "vscode"]), file: file)
+        try append(line("event_msg", ["type": "task_started", "turn_id": "live"]), file: file)
+        return file
+    }
+    func testReadableEmptyDatabaseStillDiscoversDesktopLog() async throws {
+        let db = try createDiscoveryDatabase(); defer { sqlite3_close(db) }
+        let id = UUID().uuidString
+        _ = try desktopLog(id)
+        let snapshot = await AgentActivityRepository(home: root, hookDirectory: root.appendingPathComponent("events")).scan(force: true)
+        XCTAssertTrue(snapshot.hasDatabase)
+        XCTAssertEqual(snapshot.sessions.map(\.id), [id])
+        XCTAssertEqual(snapshot.sessions.first?.state, .running)
+    }
+    func testStaleIndexKeepsFreshLogAndAuthoritativeTitle() async throws {
+        let db = try createDiscoveryDatabase(); defer { sqlite3_close(db) }
+        let id = UUID().uuidString
+        let file = try desktopLog(id)
+        XCTAssertEqual(sqlite3_exec(db, "INSERT INTO threads VALUES('\(id)','\(file.path)','/projects/desktop','My renamed task','vscode',0,1)", nil, nil, nil), SQLITE_OK)
+        let snapshot = await AgentActivityRepository(home: root, hookDirectory: root.appendingPathComponent("events")).scan(force: true)
+        XCTAssertEqual(snapshot.sessions.count, 1)
+        XCTAssertEqual(snapshot.sessions.first?.title, "My renamed task")
+        XCTAssertEqual(snapshot.sessions.first?.state, .running)
+    }
+    func testStaleArchivedIndexMustNotBeResurrectedByFreshLog() async throws {
+        let db = try createDiscoveryDatabase(); defer { sqlite3_close(db) }
+        let id = UUID().uuidString
+        let file = try desktopLog(id)
+        XCTAssertEqual(sqlite3_exec(db, "INSERT INTO threads VALUES('\(id)','\(file.path)','/projects/desktop','Archived task','vscode',1,1)", nil, nil, nil), SQLITE_OK)
+        let snapshot = await AgentActivityRepository(home: root, hookDirectory: root.appendingPathComponent("events")).scan(force: true)
+        XCTAssertTrue(snapshot.sessions.isEmpty)
     }
     func testWorktreeResolvesToRepository() throws {
         let main = root.appendingPathComponent("main", isDirectory: true)
