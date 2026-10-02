@@ -111,9 +111,11 @@ final class FilePocketController: ObservableObject {
             self?.handle(event)
             return event
         }
-        if accessibilityGranted {
-            globalMonitor = NSEvent.addGlobalMonitorForEvents(matching: mask) { [weak self] event in self?.handle(event) }
-        }
+        // Mouse monitoring does not require keyboard Accessibility permission.
+        // Keep it active so a manually opened panel can restore hit testing after
+        // the pointer crosses a transparent gap, even without a global shortcut.
+        let globalMask: NSEvent.EventTypeMask = accessibilityGranted ? mask : [.leftMouseDown, .rightMouseDown, .mouseMoved, .leftMouseDragged]
+        globalMonitor = NSEvent.addGlobalMonitorForEvents(matching: globalMask) { [weak self] event in self?.handle(event) }
     }
 
     func show() {
@@ -152,6 +154,9 @@ final class FilePocketController: ObservableObject {
     }
 
     private func handle(_ event: NSEvent) {
+        // The file chooser owns these events; selecting a file should not dismiss
+        // the pocket behind the modal dialog or activate the global shortcut.
+        if NSApp.modalWindow != nil { shift.reset(); return }
         switch event.type {
         case .flagsChanged:
             let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
