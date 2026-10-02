@@ -43,7 +43,7 @@ struct SettingsPreviewRunner {
                 color: .systemBlue, isSubscribed: false, isReminder: false)
         }
         for width: CGFloat in [700, 900] {
-            for page in ["General", "Quota", "Activity", "Media", "Calendar", "Appearance", "System", "About"] {
+            for page in ["General", "FileTools", "Quota", "Activity", "Media", "Calendar", "Appearance", "System", "About"] {
                 UserDefaults.standard.set(page, forKey: "settingsSelectedTab")
                 try capture(SettingsView().environment(\.locale, Locale(identifier: language)), width: width,
                             name: "\(page)-\(Int(width))", output: output)

@@ -17,6 +17,7 @@ import UserNotifications
 @main
 #endif
 struct DynamicNotchApp: App {
+    @ObservedObject private var filePocket = FilePocketStore.shared
     @NSApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
     @Default(.menubarIcon) var showMenuBarIcon
     @Environment(\.openWindow) var openWindow
@@ -35,6 +36,9 @@ struct DynamicNotchApp: App {
     var body: some Scene {
         MenuBarExtra("QuotaNotch", image: "QuotaStatus", isInserted: $showMenuBarIcon) {
             Button(AgentText.t("任务监控", "Task monitor")) { AgentActivityWindow.shared.show() }
+            if filePocket.enabled {
+                Button(PocketText.t("文件兜", "File pocket")) { FilePocketController.shared.show() }
+            }
             Divider()
             Button("Settings") {
                 DispatchQueue.main.async {
@@ -78,6 +82,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationWillTerminate(_ notification: Notification) {
+        FilePocketController.shared.stop()
         NotificationCenter.default.removeObserver(self)
         if let observer = screenLockedObserver {
             DistributedNotificationCenter.default().removeObserver(observer)
@@ -94,6 +99,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
     @MainActor
     func onScreenLocked(_ notification: Notification) {
+        FilePocketController.shared.setLocked(true)
         isScreenLocked = true
         NotchCatRuntime.shared.setLocked(true)
         if !Defaults[.showOnLockScreen] {
@@ -105,6 +111,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
     @MainActor
     func onScreenUnlocked(_ notification: Notification) {
+        FilePocketController.shared.setLocked(false)
         isScreenLocked = false
         NotchCatRuntime.shared.setLocked(false)
         if !Defaults[.showOnLockScreen] {
@@ -219,6 +226,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        FilePocketController.shared.start()
         AgentActivityStore.shared.start()
         UNUserNotificationCenter.current().delegate = AgentNotificationDelegate.shared
 
