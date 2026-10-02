@@ -108,6 +108,31 @@ final class PocketImageProcessorTests: XCTestCase {
         XCTAssertThrowsError(try PocketImageProcessor.process(url, action: .convert, options: .init()))
         XCTAssertEqual(try FileManager.default.contentsOfDirectory(atPath: dir.path), ["note.txt"])
     }
+    func testEXIFOrientationIsAppliedExactlyOnce() throws {
+        let dir = try directory(), png = try fixture(dir)
+        let source = try XCTUnwrap(CGImageSourceCreateWithURL(png as CFURL, nil))
+        let image = try XCTUnwrap(CGImageSourceCreateImageAtIndex(source, 0, nil))
+        let rotated = dir.appendingPathComponent("rotated.jpg")
+        let destination = try XCTUnwrap(CGImageDestinationCreateWithURL(rotated as CFURL, "public.jpeg" as CFString, 1, nil))
+        CGImageDestinationAddImage(destination, image, [kCGImagePropertyOrientation: 6] as CFDictionary)
+        XCTAssertTrue(CGImageDestinationFinalize(destination))
+        let result = try PocketImageProcessor.process(rotated, action: .convert, options: .init(format: .png))
+        let output = try XCTUnwrap(result.output), size = try dimensions(output)
+        XCTAssertEqual(size.0, 16); XCTAssertEqual(size.1, 32)
+        let outputSource = try XCTUnwrap(CGImageSourceCreateWithURL(output as CFURL, nil))
+        let properties = CGImageSourceCopyPropertiesAtIndex(outputSource, 0, nil) as? [CFString: Any]
+        XCTAssertEqual(properties?[kCGImagePropertyOrientation] as? Int ?? 1, 1)
+    }
+    func testCancelledJobDoesNotWriteAnOutput() async throws {
+        let dir = try directory(), url = try fixture(dir)
+        let task = Task.detached {
+            withUnsafeCurrentTask { $0?.cancel() }
+            return try PocketImageProcessor.process(url, action: .convert, options: .init())
+        }
+        do { _ = try await task.value; XCTFail("Cancelled operation succeeded") }
+        catch { XCTAssertTrue(error is CancellationError) }
+        XCTAssertEqual(try FileManager.default.contentsOfDirectory(atPath: dir.path), ["fixture.png"])
+    }
     func testRejectsAnimationInsteadOfSilentlyDroppingFrames() throws {
         let dir = try directory(), url = try fixture(dir)
         let source = try XCTUnwrap(CGImageSourceCreateWithURL(url as CFURL, nil))

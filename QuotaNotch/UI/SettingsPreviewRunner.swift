@@ -839,6 +839,16 @@ struct SettingsPreviewRunner {
     }
 
     @MainActor private static func captureFilePocket(output: URL) throws {
+        for index in 0..<3 {
+            let angle = Double(index - 1) * 40
+            let point = CGPoint(x: CGFloat(174 + 106 * Darwin.cos(angle * .pi / 180)),
+                                y: CGFloat(161 + 106 * Darwin.sin(angle * .pi / 180)))
+            let hits = (0..<3).filter { other in
+                PocketSectorShape(angle: Double(other - 1) * 40)
+                    .path(in: CGRect(x: 36, y: 23, width: 276, height: 276)).contains(point)
+            }
+            verifyPresentation(hits == [index], "Pocket action hit regions overlap")
+        }
         let suite = "FilePocketPreview-" + UUID().uuidString
         let defaults = UserDefaults(suiteName: suite)!
         defer { defaults.removePersistentDomain(forName: suite) }

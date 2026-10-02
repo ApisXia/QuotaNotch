@@ -25,7 +25,8 @@ private final class FilePocketHostingView: NSHostingView<FilePocketView> {
               sender.draggingPasteboard.canReadObject(forClasses: [NSURL.self], options: [.urlReadingFileURLsOnly: true]) else {
             store.dropTarget = nil; return []
         }
-        store.dropTarget = target(sender)
+        let destination = target(sender)
+        if store.dropTarget != destination { store.dropTarget = destination }
         return store.dropTarget == nil ? [] : .copy
     }
     override func draggingExited(_ sender: NSDraggingInfo?) { FilePocketStore.shared.dropTarget = nil }

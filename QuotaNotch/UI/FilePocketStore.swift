@@ -111,7 +111,9 @@ final class FilePocketStore: ObservableObject {
         let snapshot = items.map(\.url), options = self.options
         add(urls)
         let accepted = Set(items.map(\.id))
-        let inputs = PocketFiles.merged(snapshot, urls).filter { accepted.contains(PocketFiles.canonical($0).path) }
+        let incoming = urls.filter { accepted.contains(PocketFiles.canonical($0).path) }
+        guard !incoming.isEmpty else { return false }
+        let inputs = PocketFiles.merged(snapshot, incoming)
         if let action { run(action, urls: inputs, options: options) }
         return !inputs.isEmpty
     }
