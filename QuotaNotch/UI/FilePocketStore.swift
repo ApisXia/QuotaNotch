@@ -54,15 +54,13 @@ final class FilePocketStore: ObservableObject {
     @Published private(set) var items: [PocketItem] = []
     @Published private(set) var outcomes: [String: PocketOutcome] = [:]
     @Published private(set) var busy = false
-    @Published private(set) var loadingDrop = false
+    @Published var dropTarget: PocketDropTarget?
     @Published private(set) var completed = 0
     @Published private(set) var total = 0
     @Published var expanded = false
     @Published var status = ""
     private let defaults: UserDefaults
     private var job: Task<Void, Never>?
-    private var dropJob: Task<Void, Never>?
-    private var generation = UUID()
     var outputs: [URL] { outcomes.values.compactMap(\.output) }
     var options: PocketImageOptions { PocketImageOptions(format: format, quality: quality, longestEdge: longestEdge) }
 
@@ -96,47 +94,26 @@ final class FilePocketStore: ObservableObject {
     }
 
     func remove(_ item: PocketItem) {
-        guard !busy && !loadingDrop else { return }
+        guard !busy else { return }
         items.removeAll { $0.id == item.id }; outcomes.removeValue(forKey: item.id); persist()
     }
 
     func chooseFiles() {
-        guard !busy && !loadingDrop else { return }
+        guard !busy else { return }
         let panel = NSOpenPanel(); panel.allowsMultipleSelection = true; panel.canChooseDirectories = false
         panel.canChooseFiles = true
         if panel.runModal() == .OK { add(panel.urls) }
     }
 
     @discardableResult
-    func accept(_ providers: [NSItemProvider], action: PocketImageAction? = nil) -> Bool {
-        guard enabled, !busy, !loadingDrop else { return false }
-        let providers = providers.filter { $0.hasItemConformingToTypeIdentifier(UTType.fileURL.identifier) }
-        guard !providers.isEmpty else { return false }
-        let snapshot = items.map(\.url), options = self.options, token = generation
-        loadingDrop = true
-        dropJob = Task { [weak self] in
-            var urls: [URL] = []
-            for provider in providers {
-                if Task.isCancelled { break }
-                let url: URL? = await withCheckedContinuation { continuation in
-                    provider.loadItem(forTypeIdentifier: UTType.fileURL.identifier, options: nil) { item, _ in
-                        let url: URL?
-                        if let value = item as? URL { url = value }
-                        else if let data = item as? Data { url = URL(dataRepresentation: data, relativeTo: nil) }
-                        else { url = nil }
-                        continuation.resume(returning: url)
-                    }
-                }
-                if let url, url.isFileURL { urls.append(url) }
-            }
-            guard let self, self.generation == token else { return }
-            self.loadingDrop = false; self.dropJob = nil
-            guard !Task.isCancelled, self.enabled else { return }
-            if urls.isEmpty { self.status = PocketText.t("未能读取拖入的文件。", "Could not read dropped files."); return }
-            self.add(urls)
-            if let action { self.run(action, urls: PocketFiles.merged(snapshot, urls), options: options) }
-        }
-        return true
+    func accept(_ urls: [URL], action: PocketImageAction? = nil) -> Bool {
+        guard enabled, !busy, !urls.isEmpty else { return false }
+        let snapshot = items.map(\.url), options = self.options
+        add(urls)
+        let accepted = Set(items.map(\.id))
+        let inputs = PocketFiles.merged(snapshot, urls).filter { accepted.contains(PocketFiles.canonical($0).path) }
+        if let action { run(action, urls: inputs, options: options) }
+        return !inputs.isEmpty
     }
 
     func run(_ action: PocketImageAction) { run(action, urls: items.map(\.url), options: options) }
@@ -175,7 +152,7 @@ final class FilePocketStore: ObservableObject {
     }
 
     func cancel() {
-        job?.cancel(); dropJob?.cancel(); dropJob = nil; generation = UUID(); loadingDrop = false
+        job?.cancel()
     }
 
     func revealOutputs() { NSWorkspace.shared.activateFileViewerSelecting(outputs) }

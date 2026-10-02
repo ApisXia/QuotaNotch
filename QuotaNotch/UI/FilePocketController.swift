@@ -8,6 +8,54 @@ private final class FilePocketPanel: NSPanel {
     override var canBecomeMain: Bool { false }
 }
 
+enum PocketDropTarget: Equatable {
+    case pocket
+    case action(PocketImageAction)
+}
+
+/// One AppKit destination resolves the curved drop regions explicitly. Separate
+/// SwiftUI drop targets would have overlapping rectangular bounds for the arcs.
+@MainActor
+private final class FilePocketHostingView: NSHostingView<FilePocketView> {
+    override func draggingEntered(_ sender: NSDraggingInfo) -> NSDragOperation { draggingUpdated(sender) }
+    override func draggingUpdated(_ sender: NSDraggingInfo) -> NSDragOperation {
+        let store = FilePocketStore.shared
+        guard store.enabled, !store.busy,
+              sender.draggingSourceOperationMask.contains(.copy),
+              sender.draggingPasteboard.canReadObject(forClasses: [NSURL.self], options: [.urlReadingFileURLsOnly: true]) else {
+            store.dropTarget = nil; return []
+        }
+        store.dropTarget = target(sender)
+        return store.dropTarget == nil ? [] : .copy
+    }
+    override func draggingExited(_ sender: NSDraggingInfo?) { FilePocketStore.shared.dropTarget = nil }
+    override func draggingEnded(_ sender: NSDraggingInfo) { FilePocketStore.shared.dropTarget = nil }
+    override func prepareForDragOperation(_ sender: NSDraggingInfo) -> Bool { target(sender) != nil }
+    override func performDragOperation(_ sender: NSDraggingInfo) -> Bool {
+        let store = FilePocketStore.shared
+        defer { store.dropTarget = nil }
+        guard let target = target(sender) else { return false }
+        let urls = sender.draggingPasteboard.readObjects(forClasses: [NSURL.self], options: [.urlReadingFileURLsOnly: true]) as? [URL] ?? []
+        switch target {
+        case .pocket: return store.accept(urls)
+        case .action(let action): return store.accept(urls, action: action)
+        }
+    }
+    private func target(_ sender: NSDraggingInfo) -> PocketDropTarget? {
+        var p = convert(sender.draggingLocation, from: nil)
+        if !isFlipped { p.y = bounds.height - p.y }
+        if CGRect(x: 18, y: 100, width: 112, height: 125).contains(p) { return .pocket }
+        if FilePocketStore.shared.expanded {
+            return CGRect(x: 146, y: 82, width: 288, height: 274).contains(p) ? .pocket : nil
+        }
+        for (index, action) in PocketImageAction.allCases.enumerated() {
+            let shape = PocketSectorShape(angle: Double(index - 1) * 40)
+            if shape.path(in: CGRect(x: 36, y: 23, width: 276, height: 276)).contains(p) { return .action(action) }
+        }
+        return nil
+    }
+}
+
 @MainActor
 final class FilePocketController: ObservableObject {
     static let shared = FilePocketController()
@@ -76,7 +124,9 @@ final class FilePocketController: ObservableObject {
             p.isOpaque = false; p.backgroundColor = .clear; p.hasShadow = false
             p.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
             p.isReleasedWhenClosed = false; p.acceptsMouseMovedEvents = true
-            p.contentView = NSHostingView(rootView: FilePocketView(store: .shared).environment(\.locale, QuotaLanguage.locale))
+            let content = FilePocketHostingView(rootView: FilePocketView(store: .shared))
+            content.registerForDraggedTypes([.fileURL])
+            p.contentView = content
             panel = p
         }
         guard let panel else { return }
@@ -115,7 +165,12 @@ final class FilePocketController: ObservableObject {
             shift.reset()
             if let panel, panel.isVisible, !interactivePoint(NSEvent.mouseLocation) { hide() }
         case .mouseMoved, .leftMouseDragged:
-            if let panel, panel.isVisible { panel.ignoresMouseEvents = !interactivePoint(NSEvent.mouseLocation) }
+            if let panel, panel.isVisible {
+                // A press that started on our controls keeps receiving its drag
+                // and mouse-up even when the pointer stretches outside the shape.
+                if event.type == .leftMouseDragged, event.window === panel { return }
+                panel.ignoresMouseEvents = !interactivePoint(NSEvent.mouseLocation)
+            }
         default: break
         }
     }

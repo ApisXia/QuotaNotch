@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-only
 import AppKit
+import Darwin
 import QuickLook
 import QuickLookThumbnailing
 import SwiftUI
@@ -24,12 +25,12 @@ struct PocketSectorShape: Shape {
         let center = CGPoint(x: rect.midX, y: rect.midY), outer = min(rect.width, rect.height) / 2 - 2, inner = outer - 56
         var points: [CGPoint] = []
         for index in 0...24 {
-            let a = (angle - 17 + Double(index) * 34 / 24) * .pi / 180
-            points.append(CGPoint(x: center.x + outer * cos(a), y: center.y + outer * sin(a)))
+            let a: Double = (angle - 17 + Double(index) * 34 / 24) * .pi / 180
+            points.append(CGPoint(x: center.x + outer * CGFloat(Darwin.cos(a)), y: center.y + outer * CGFloat(Darwin.sin(a))))
         }
         for index in (0...24).reversed() {
-            let a = (angle - 17 + Double(index) * 34 / 24) * .pi / 180
-            points.append(CGPoint(x: center.x + inner * cos(a), y: center.y + inner * sin(a)))
+            let a: Double = (angle - 17 + Double(index) * 34 / 24) * .pi / 180
+            points.append(CGPoint(x: center.x + inner * CGFloat(Darwin.cos(a)), y: center.y + inner * CGFloat(Darwin.sin(a))))
         }
         func near(_ point: CGPoint, _ other: CGPoint, _ amount: CGFloat) -> CGPoint {
             let dx = other.x - point.x, dy = other.y - point.y, d = max(0.001, hypot(dx, dy)), t = min(0.48, amount / d)
@@ -61,15 +62,21 @@ struct PocketGlass<S: Shape>: View {
     var body: some View {
         Group {
             if reduceTransparency { shape.fill(Color(nsColor: .windowBackgroundColor)) }
-            else if #available(macOS 26.0, *) {
-                Color.clear.glassEffect(.regular, in: shape)
-            } else {
-                PocketVisualEffect().clipShape(shape)
-                    .overlay(shape.fill(.white.opacity(0.055)))
-                    .overlay(shape.stroke(LinearGradient(colors: [.white.opacity(0.7), .white.opacity(0.08), .white.opacity(0.35)], startPoint: .topLeading, endPoint: .bottomTrailing), lineWidth: 0.8))
+            else {
+                #if compiler(>=6.2)
+                if #available(macOS 26.0, *) { Color.clear.glassEffect(.regular, in: shape) }
+                else { fallback }
+                #else
+                fallback
+                #endif
             }
         }
         .shadow(color: .black.opacity(0.14), radius: 12, x: 0, y: 6)
+    }
+    private var fallback: some View {
+        PocketVisualEffect().clipShape(shape)
+            .overlay(shape.fill(.white.opacity(0.055)))
+            .overlay(shape.stroke(LinearGradient(colors: [.white.opacity(0.7), .white.opacity(0.08), .white.opacity(0.35)], startPoint: .topLeading, endPoint: .bottomTrailing), lineWidth: 0.8))
     }
 }
 
@@ -154,7 +161,6 @@ private struct PocketRowPositions: PreferenceKey {
 struct FilePocketView: View {
     @ObservedObject var store: FilePocketStore
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @State private var pocketTarget = false
     @State private var previewURL: URL?
     @State private var showList = false
     @State private var showRows = false
@@ -212,16 +218,15 @@ struct FilePocketView: View {
                         }
                     }
                     VStack(spacing: 4) {
-                        Image(systemName: pocketTarget ? "plus" : "tray").font(.system(size: 20, weight: .regular))
+                        Image(systemName: (store.dropTarget == .pocket) ? "plus" : "tray").font(.system(size: 20, weight: .regular))
                         Text("\(store.items.count)").font(.system(size: 12, weight: .medium, design: .rounded)).monospacedDigit()
                     }.opacity(tilted ? 0 : 1).offset(y: 6)
                 }.frame(width: 92, height: 90)
             }
             .rotationEffect(.degrees(tilted ? 78 : 0), anchor: UnitPoint(x: 0.5, y: 0.58))
-            .scaleEffect(pocketTarget ? 1.08 : 1)
+            .scaleEffect((store.dropTarget == .pocket) ? 1.08 : 1)
             .animation(reduceMotion ? nil : .spring(response: 0.38, dampingFraction: 0.78), value: tilted)
-            .animation(reduceMotion ? nil : .spring(response: 0.25), value: pocketTarget)
-            .onDrop(of: [UTType.fileURL], isTargeted: $pocketTarget) { store.accept($0) }
+            .animation(reduceMotion ? nil : .spring(response: 0.25), value: (store.dropTarget == .pocket))
             .accessibilityLabel(PocketText.t("文件兜，\(store.items.count) 个文件", "File pocket, \(store.items.count) files"))
             .help(PocketText.t("点击展开；拖入暂存", "Click to browse; drop to collect"))
             Text(PocketText.t(tilted ? "收回" : "暂存", tilted ? "Close" : "Pocket"))
@@ -236,7 +241,7 @@ struct FilePocketView: View {
                 Text(PocketText.t("暂存文件", "Pocket files")).font(.system(size: 12, weight: .medium))
                 Spacer(); Text("\(store.items.count)").foregroundStyle(.secondary).monospacedDigit()
                 Button { store.chooseFiles() } label: { Image(systemName: "plus") }
-                    .buttonStyle(.plain).disabled(store.busy || store.loadingDrop)
+                    .buttonStyle(.plain).disabled(store.busy)
                     .help(PocketText.t("添加文件", "Add files"))
                 Button { store.expanded = false } label: { Image(systemName: "arrow.turn.up.left") }
                     .buttonStyle(.plain).help(PocketText.t("收回", "Close"))
@@ -264,10 +269,9 @@ struct FilePocketView: View {
                     Button(PocketText.title(action)) { store.run(action) }.buttonStyle(.plain)
                 }
             }.font(.system(size: 11, weight: .medium)).frame(height: 36)
-                .disabled(store.busy || store.loadingDrop || store.items.isEmpty)
+                .disabled(store.busy || store.items.isEmpty)
         }
         .background(PocketGlass(shape: RoundedRectangle(cornerRadius: 22)))
-        .onDrop(of: [UTType.fileURL], isTargeted: nil) { store.accept($0) }
     }
 
     private func row(_ item: PocketItem) -> some View {
@@ -289,7 +293,7 @@ struct FilePocketView: View {
                 }.contentShape(Rectangle())
             }.buttonStyle(.plain).help(outcome?.detail ?? item.name)
             Button { withAnimation { store.remove(item) } } label: { Image(systemName: "xmark").font(.system(size: 10)).frame(width: 24, height: 32) }
-                .buttonStyle(.plain).disabled(store.busy || store.loadingDrop)
+                .buttonStyle(.plain).disabled(store.busy)
                 .help(PocketText.t("移出暂存，保留原文件", "Remove from pocket; keep original"))
                 .accessibilityLabel(PocketText.t("移出", "Remove") + " " + item.name)
         }
@@ -303,8 +307,6 @@ struct FilePocketView: View {
                     ProgressView(value: Double(store.completed), total: Double(max(1, store.total))).frame(width: 90)
                     Text("\(store.completed)/\(store.total)").monospacedDigit()
                     Button(PocketText.t("取消", "Cancel")) { store.cancel() }
-                } else if store.loadingDrop {
-                    ProgressView().controlSize(.small)
                 } else {
                     Button { store.chooseFiles() } label: { Label(PocketText.t("添加", "Add"), systemImage: "plus") }
                     if !store.outputs.isEmpty { Button(PocketText.t("查看结果", "Show outputs")) { store.revealOutputs() } }
@@ -363,7 +365,6 @@ private struct PocketActionControl: View {
     @ObservedObject var store: FilePocketStore
     let action: PocketImageAction
     let angle: Double
-    @State private var targeted = false
     private var symbol: String {
         switch action { case .convert: return "arrow.triangle.2.circlepath"; case .compress: return "arrow.down.right.and.arrow.up.left"; case .resize: return "arrow.up.left.and.arrow.down.right" }
     }
@@ -372,13 +373,12 @@ private struct PocketActionControl: View {
             ZStack(alignment: .topLeading) {
                 Color.clear
                 VStack(spacing: 5) { Image(systemName: symbol).font(.system(size: 17)); Text(PocketText.title(action)).font(.system(size: 11, weight: .medium)) }
-                    .position(x: 138 + 106 * cos(angle * .pi / 180), y: 138 + 106 * sin(angle * .pi / 180))
+                    .position(x: CGFloat(138 + 106 * Darwin.cos(angle * .pi / 180)), y: CGFloat(138 + 106 * Darwin.sin(angle * .pi / 180)))
             }.frame(width: 276, height: 276)
         }
-        .scaleEffect(targeted ? 1.035 : 1)
-        .animation(.spring(response: 0.24), value: targeted)
-        .onDrop(of: [UTType.fileURL], isTargeted: $targeted) { store.accept($0, action: action) }
-        .disabled(store.busy || store.loadingDrop)
+        .scaleEffect((store.dropTarget == .action(action)) ? 1.035 : 1)
+        .animation(.spring(response: 0.24), value: store.dropTarget)
+        .disabled(store.busy)
         .accessibilityLabel(PocketText.title(action))
         .help(PocketText.t("拖入直接处理；点击处理兜内文件", "Drop to process incoming and stored files; click to process the pocket"))
     }

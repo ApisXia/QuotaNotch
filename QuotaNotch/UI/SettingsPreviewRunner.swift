@@ -17,6 +17,7 @@ struct SettingsPreviewRunner {
         let language = UserDefaults.standard.stringArray(forKey: "AppleLanguages")?.first ?? "en"
         let output = URL(fileURLWithPath: "build/Settings-previews/\(language)")
         try FileManager.default.createDirectory(at: output, withIntermediateDirectories: true)
+        try captureFilePocket(output: output)
         // Old manual sizing preferences must no longer affect the actual screen layout.
         UserDefaults.standard.set(15, forKey: "notchHeight")
         UserDefaults.standard.set(10, forKey: "nonNotchHeight")
@@ -837,6 +838,34 @@ struct SettingsPreviewRunner {
         print("Verified \(records.count) cat layouts with physical-notch anchoring")
     }
 
+    @MainActor private static func captureFilePocket(output: URL) throws {
+        let suite = "FilePocketPreview-" + UUID().uuidString
+        let defaults = UserDefaults(suiteName: suite)!
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let pocket = FilePocketStore(defaults: defaults)
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(suite)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        var urls: [URL] = []
+        for index in 0..<12 {
+            let image = NSImage(size: NSSize(width: 96, height: 64))
+            image.lockFocus()
+            NSColor(calibratedHue: CGFloat(index) / 16, saturation: 0.3, brightness: 0.8, alpha: 1).setFill()
+            NSRect(x: 0, y: 0, width: 96, height: 64).fill()
+            image.unlockFocus()
+            let bitmap = NSBitmapImageRep(data: image.tiffRepresentation!)!
+            let url = directory.appendingPathComponent("Image-\(index + 1).png")
+            try bitmap.representation(using: .png, properties: [:])!.write(to: url)
+            urls.append(url)
+        }
+        pocket.add(urls)
+        try capture(FilePocketView(store: pocket), width: 460, name: "File-pocket-closed", output: output, height: 440)
+        pocket.expanded = true
+        try capture(FilePocketView(store: pocket), width: 460, name: "File-pocket-open", output: output, height: 440)
+        let restored = FilePocketStore(defaults: defaults)
+        verifyPresentation(restored.items.count == urls.count, "Pocket bookmarks did not restore")
+    }
+
     @MainActor private static func capture<V: View>(_ view: V, width: CGFloat, name: String, output: URL, height: CGFloat = 600) throws {
         let size = NSSize(width: width, height: height)
         let host = NSHostingView(rootView: view)
@@ -847,6 +876,7 @@ struct SettingsPreviewRunner {
         NSApp.activate(ignoringOtherApps: true)
         window.makeKeyAndOrderFront(nil)
         settle()
+        if name.hasPrefix("File-pocket") { RunLoop.current.run(until: Date().addingTimeInterval(1.1)) }
         let scrollViews = descendants(host).compactMap { $0 as? NSScrollView }
         // The sidebar has its own scroll view; select the widest one for page content.
         let scroll = scrollViews.max { $0.frame.width < $1.frame.width }
