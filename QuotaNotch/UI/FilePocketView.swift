@@ -66,9 +66,9 @@ private struct PocketGlassSurface<S: Shape>: ViewModifier {
             if #available(macOS 26.0, *) {
                 // Apply glass to the content, not a clipped clear background. A
                 // clip after glassEffect cuts off the system's rim and shadow.
-                content.glassEffect(control ? .clear.interactive() : .regular, in: shape)
-                    // Native clear glass loses its contour in a non-key panel.
-                    // Preserve a faint surface and rim without stealing focus.
+                content.glassEffect(control ? .regular.interactive() : .regular, in: shape)
+                    // Keep the contour readable when Finder owns the drag.
+                    // Regular glass preserves contrast on arbitrary desktops.
                     .background {
                         shape.fill(LinearGradient(colors: [
                             .white.opacity(control ? (colorScheme == .dark ? 0.13 : 0.23) : 0.04),
