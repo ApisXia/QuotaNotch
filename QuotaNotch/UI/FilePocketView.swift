@@ -57,6 +57,7 @@ private struct PocketGlassSurface<S: Shape>: ViewModifier {
     let shape: S
     var control = false
     @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
+    @Environment(\.colorScheme) private var colorScheme
     func body(content: Content) -> some View {
         if reduceTransparency {
             content.background(shape.fill(Color(nsColor: .windowBackgroundColor)))
@@ -66,6 +67,23 @@ private struct PocketGlassSurface<S: Shape>: ViewModifier {
                 // Apply glass to the content, not a clipped clear background. A
                 // clip after glassEffect cuts off the system's rim and shadow.
                 content.glassEffect(control ? .clear.interactive() : .regular, in: shape)
+                    // Native clear glass loses its contour in a non-key panel.
+                    // Preserve a faint surface and rim without stealing focus.
+                    .background {
+                        shape.fill(LinearGradient(colors: [
+                            .white.opacity(control ? (colorScheme == .dark ? 0.13 : 0.23) : 0.04),
+                            .white.opacity(control ? 0.06 : 0.02)
+                        ], startPoint: .topLeading, endPoint: .bottomTrailing))
+                        .shadow(color: .black.opacity(0.12), radius: 10, x: 0, y: 5)
+                    }
+                    .overlay {
+                        shape.stroke(LinearGradient(stops: [
+                            .init(color: .white.opacity(0.7), location: 0),
+                            .init(color: .white.opacity(0.12), location: 0.45),
+                            .init(color: .white.opacity(0.34), location: 1)
+                        ], startPoint: .topLeading, endPoint: .bottomTrailing), lineWidth: 0.75)
+                        .allowsHitTesting(false)
+                    }
             } else { fallback(content) }
             #else
             fallback(content)
@@ -190,10 +208,6 @@ struct FilePocketView: View {
         PocketGlassGroup {
             composition
         }
-        // A drag destination must stay non-key while Finder owns the drag.
-        // Keep its material active without taking keyboard focus from Finder.
-        .environment(\.appearsActive, true)
-        .materialActiveAppearance(.active)
     }
 
     private var composition: some View {
