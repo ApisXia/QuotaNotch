@@ -31,7 +31,11 @@ jobs:
         run: swift test --filter 'FilePocketTests|PocketImageProcessorTests'
       - name: Record renderer and build production pocket preview
         run: |
+          mkdir -p build
+          # Hosted runners enable Reduce Transparency; disable it only on this
+          # disposable preview VM so this job actually exercises native glass.
           defaults read com.apple.universalaccess reduceTransparency || true
+          defaults write com.apple.universalaccess reduceTransparency -bool false
           swiftc -parse-as-library -target arm64-apple-macos15.0 \
             QuotaNotch/Core/FilePocket.swift QuotaNotch/Core/PocketImageProcessor.swift \
             QuotaNotch/UI/FilePocketStore.swift QuotaNotch/UI/FilePocketController.swift \
