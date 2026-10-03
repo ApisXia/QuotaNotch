@@ -190,6 +190,10 @@ struct FilePocketView: View {
         PocketGlassGroup {
             composition
         }
+        // A drag destination must stay non-key while Finder owns the drag.
+        // Keep its material active without taking keyboard focus from Finder.
+        .environment(\.appearsActive, true)
+        .materialActiveAppearance(.active)
     }
 
     private var composition: some View {
