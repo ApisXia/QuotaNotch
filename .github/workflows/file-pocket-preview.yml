@@ -7,6 +7,7 @@ on:
       - 'QuotaNotch/**'
       - 'QuotaNotchTests/FilePocketTests.swift'
       - '.github/workflows/file-pocket-preview.yml'
+      - 'scripts/render-pocket.swift'
 
 permissions:
   contents: read
@@ -28,20 +29,20 @@ jobs:
           xcode-version: '26'
       - name: Test file gestures and image operations
         run: swift test --filter 'FilePocketTests|PocketImageProcessorTests'
-      - name: Build isolated native preview
+      - name: Record renderer and build production pocket preview
         run: |
-          xcodebuild build -quiet -project boringNotch.xcodeproj -scheme boringNotch \
-            -configuration Release -destination 'generic/platform=macOS' \
-            -derivedDataPath build/DerivedData ARCHS=arm64 ONLY_ACTIVE_ARCH=YES \
-            SWIFT_ACTIVE_COMPILATION_CONDITIONS=SETTINGS_PREVIEW \
-            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO DEVELOPMENT_TEAM='' CODE_SIGN_IDENTITY=''
+          defaults read com.apple.universalaccess reduceTransparency || true
+          swiftc -parse-as-library -target arm64-apple-macos15.0 \
+            QuotaNotch/Core/FilePocket.swift QuotaNotch/Core/PocketImageProcessor.swift \
+            QuotaNotch/UI/FilePocketStore.swift QuotaNotch/UI/FilePocketController.swift \
+            QuotaNotch/UI/FilePocketView.swift scripts/render-pocket.swift -o build/render-pocket
       - name: Capture native glass on desktop in both appearances
         env:
           FILE_POCKET_PREVIEW_ONLY: '1'
           FILE_POCKET_DESKTOP_CAPTURE: '1'
         run: |
-          build/DerivedData/Build/Products/Release/QuotaNotch.app/Contents/MacOS/QuotaNotch -AppleLanguages '(en)'
-          build/DerivedData/Build/Products/Release/QuotaNotch.app/Contents/MacOS/QuotaNotch -AppleLanguages '(zh-Hans)'
+          build/render-pocket -AppleLanguages '(en)'
+          build/render-pocket -AppleLanguages '(zh-Hans)'
       - name: Upload native glass screenshots
         if: always()
         uses: actions/upload-artifact@v4
