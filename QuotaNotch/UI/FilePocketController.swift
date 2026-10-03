@@ -66,6 +66,9 @@ final class FilePocketController: ObservableObject {
     private var globalMonitor: Any?
     private var localMonitor: Any?
     private var permissionTimer: Timer?
+    private var dragTimer: Timer?
+    private let dragPasteboard = NSPasteboard(name: .drag)
+    private var dragShift = PocketDragShiftGesture(pasteboardChangeCount: 0)
     private var shift = PocketShiftGesture()
     private var locked = false
 
@@ -116,6 +119,15 @@ final class FilePocketController: ObservableObject {
         // the pointer crosses a transparent gap, even without a global shortcut.
         let globalMask: NSEvent.EventTypeMask = accessibilityGranted ? mask : [.leftMouseDown, .rightMouseDown, .mouseMoved, .leftMouseDragged]
         globalMonitor = NSEvent.addGlobalMonitorForEvents(matching: globalMask) { [weak self] event in self?.handle(event) }
+        dragShift = PocketDragShiftGesture(pasteboardChangeCount: dragPasteboard.changeCount)
+        // Finder owns the drag tracking loop. Sample current state in common
+        // run-loop modes instead of depending on flagsChanged delivery to us.
+        let timer = Timer(timeInterval: 1.0 / 30, repeats: true) { [weak self] _ in
+            MainActor.assumeIsolated { self?.checkDragShift() }
+        }
+        timer.tolerance = 0.01
+        RunLoop.main.add(timer, forMode: .common)
+        dragTimer = timer
     }
 
     func show() {
@@ -148,9 +160,35 @@ final class FilePocketController: ObservableObject {
     func hide() { panel?.orderOut(nil); shift.reset() }
 
     private func removeMonitors() {
+        dragTimer?.invalidate(); dragTimer = nil
         if let globalMonitor { NSEvent.removeMonitor(globalMonitor) }
         if let localMonitor { NSEvent.removeMonitor(localMonitor) }
         globalMonitor = nil; localMonitor = nil; shift.reset()
+    }
+
+    private func checkDragShift() {
+        guard FilePocketStore.shared.enabled, !locked else { return }
+        let count = dragPasteboard.changeCount
+        guard NSApp.modalWindow == nil else {
+            dragShift = PocketDragShiftGesture(pasteboardChangeCount: count)
+            return
+        }
+        let down = NSEvent.pressedMouseButtons & 1 != 0
+        let flags = NSEvent.modifierFlags
+        let trigger = dragShift.update(
+            mouseDown: down, pasteboardChangeCount: count,
+            hasFiles: down && dragPasteboard.canReadObject(forClasses: [NSURL.self], options: [.urlReadingFileURLsOnly: true]),
+            shift: flags.contains(.shift),
+            otherModifier: !flags.intersection([.command, .control, .option, .function]).isEmpty,
+            at: ProcessInfo.processInfo.systemUptime)
+        if trigger {
+            shift.reset()
+            if panel?.isVisible != true { show() }
+        }
+        // External drag tracking may also omit our mouse-move callbacks.
+        if dragShift.fileDrag, let panel, panel.isVisible {
+            panel.ignoresMouseEvents = !interactivePoint(NSEvent.mouseLocation)
+        }
     }
 
     private func handle(_ event: NSEvent) {
@@ -186,7 +224,8 @@ final class FilePocketController: ObservableObject {
         let p = NSPoint(x: screenPoint.x - panel.frame.minX, y: panel.frame.maxY - screenPoint.y)
         // Clear portions of the floating window pass through to the desktop.
         if CGRect(x: 8, y: 88, width: 130, height: 156).contains(p) { return true }
-        if CGRect(x: 26, y: 364, width: 408, height: 58).contains(p) { return true }
+        let footer = FilePocketStore.shared.expanded ? CGRect(x: 146, y: 367, width: 288, height: 58) : CGRect(x: 34, y: 289, width: 288, height: 58)
+        if footer.contains(p) { return true }
         if FilePocketStore.shared.expanded { return CGRect(x: 140, y: 76, width: 304, height: 282).contains(p) }
         let dx = p.x - 174, dy = p.y - 161, radius = hypot(dx, dy)
         return radius >= 68 && radius <= 148 && abs(atan2(dy, dx)) <= .pi / 3 + 0.08

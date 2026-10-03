@@ -18,6 +18,7 @@ struct SettingsPreviewRunner {
         let output = URL(fileURLWithPath: "build/Settings-previews/\(language)")
         try FileManager.default.createDirectory(at: output, withIntermediateDirectories: true)
         try captureFilePocket(output: output)
+        if ProcessInfo.processInfo.environment["FILE_POCKET_PREVIEW_ONLY"] == "1" { return }
         // Old manual sizing preferences must no longer affect the actual screen layout.
         UserDefaults.standard.set(15, forKey: "notchHeight")
         UserDefaults.standard.set(10, forKey: "nonNotchHeight")
@@ -874,6 +875,48 @@ struct SettingsPreviewRunner {
         try capture(FilePocketView(store: pocket), width: 460, name: "File-pocket-open", output: output, height: 440)
         let restored = FilePocketStore(defaults: defaults)
         verifyPresentation(restored.items.count == urls.count, "Pocket bookmarks did not restore")
+        if ProcessInfo.processInfo.environment["FILE_POCKET_DESKTOP_CAPTURE"] == "1" {
+            try capturePocketDesktop(pocket, output: output)
+        }
+    }
+
+    /// Window-server captures, including the real backdrop, are necessary for
+    /// visual effects. cacheDisplay alone flattens them into opaque placeholders.
+    @MainActor private static func capturePocketDesktop(_ pocket: FilePocketStore, output: URL) throws {
+        let size = NSSize(width: 600, height: 520)
+        let origin = NSPoint(x: 80, y: 80)
+        let backdrop = NSWindow(contentRect: NSRect(origin: origin, size: size), styleMask: [.borderless], backing: .buffered, defer: false)
+        backdrop.isReleasedWhenClosed = false
+        let panel = NSPanel(contentRect: NSRect(origin: NSPoint(x: origin.x + 70, y: origin.y + 40), size: FilePocketController.size), styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
+        panel.isReleasedWhenClosed = false
+        panel.isOpaque = false; panel.backgroundColor = .clear; panel.hasShadow = false
+        panel.level = .floating; panel.hidesOnDeactivate = false
+        defer {
+            panel.orderOut(nil); panel.contentView = nil; panel.close()
+            backdrop.orderOut(nil); backdrop.contentView = nil; backdrop.close()
+        }
+        for dark in [false, true] {
+            let appearance = NSAppearance(named: dark ? .darkAqua : .aqua)
+            backdrop.appearance = appearance; panel.appearance = appearance
+            backdrop.contentView = NSHostingView(rootView: ZStack {
+                LinearGradient(colors: dark ? [Color(red: 0.08, green: 0.19, blue: 0.25), Color(red: 0.29, green: 0.38, blue: 0.39)] : [Color(red: 0.66, green: 0.82, blue: 0.85), Color(red: 0.86, green: 0.85, blue: 0.79)], startPoint: .bottomLeading, endPoint: .topTrailing)
+                Ellipse().fill(.white.opacity(dark ? 0.08 : 0.24)).frame(width: 620, height: 280).rotationEffect(.degrees(-36)).offset(x: 100, y: -60)
+            }.frame(width: size.width, height: size.height))
+            panel.contentView = NSHostingView(rootView: FilePocketView(store: pocket))
+            backdrop.orderFrontRegardless(); panel.orderFrontRegardless()
+            for expanded in [false, true] {
+                pocket.expanded = expanded
+                RunLoop.current.run(until: Date().addingTimeInterval(1.8))
+                let screenHeight = NSScreen.screens[0].frame.height
+                let region = "\(Int(origin.x)),\(Int(screenHeight - origin.y - size.height)),\(Int(size.width)),\(Int(size.height))"
+                let destination = output.appendingPathComponent("File-pocket-desktop-\(dark ? "dark" : "light")-\(expanded ? "open" : "closed").png")
+                let process = Process()
+                process.executableURL = URL(fileURLWithPath: "/usr/sbin/screencapture")
+                process.arguments = ["-x", "-R", region, destination.path]
+                try process.run(); process.waitUntilExit()
+                verifyPresentation(process.terminationStatus == 0 && FileManager.default.fileExists(atPath: destination.path), "Window-server screenshot failed")
+            }
+        }
     }
 
     @MainActor private static func capture<V: View>(_ view: V, width: CGFloat, name: String, output: URL, height: CGFloat = 600) throws {

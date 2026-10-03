@@ -2,6 +2,31 @@ import XCTest
 @testable import QuotaNotchCore
 
 final class FilePocketTests: XCTestCase {
+    func testFileDragHoldTriggersOnceAndRequiresFreshDrag() {
+        var gesture = PocketDragShiftGesture(pasteboardChangeCount: 10)
+        // Retained file URLs from a previous drag are not a live drag.
+        XCTAssertFalse(gesture.update(mouseDown: true, pasteboardChangeCount: 10, hasFiles: true, shift: true, otherModifier: false, at: 1))
+        XCTAssertFalse(gesture.update(mouseDown: true, pasteboardChangeCount: 10, hasFiles: true, shift: true, otherModifier: false, at: 2))
+        XCTAssertFalse(gesture.update(mouseDown: true, pasteboardChangeCount: 11, hasFiles: true, shift: true, otherModifier: false, at: 3))
+        XCTAssertFalse(gesture.update(mouseDown: true, pasteboardChangeCount: 11, hasFiles: true, shift: true, otherModifier: false, at: 3.1))
+        XCTAssertTrue(gesture.update(mouseDown: true, pasteboardChangeCount: 11, hasFiles: true, shift: true, otherModifier: false, at: 3.2))
+        XCTAssertFalse(gesture.update(mouseDown: true, pasteboardChangeCount: 11, hasFiles: true, shift: true, otherModifier: false, at: 4))
+        _ = gesture.update(mouseDown: false, pasteboardChangeCount: 11, hasFiles: true, shift: false, otherModifier: false, at: 5)
+        XCTAssertFalse(gesture.fileDrag)
+        XCTAssertFalse(gesture.update(mouseDown: true, pasteboardChangeCount: 11, hasFiles: true, shift: true, otherModifier: false, at: 6))
+        XCTAssertFalse(gesture.update(mouseDown: true, pasteboardChangeCount: 11, hasFiles: true, shift: true, otherModifier: false, at: 7))
+    }
+    func testDragHoldRejectsTextAndModifierChordsAndResetsOnRelease() {
+        var gesture = PocketDragShiftGesture(pasteboardChangeCount: 0)
+        _ = gesture.update(mouseDown: true, pasteboardChangeCount: 1, hasFiles: false, shift: true, otherModifier: false, at: 1)
+        XCTAssertFalse(gesture.update(mouseDown: true, pasteboardChangeCount: 1, hasFiles: false, shift: true, otherModifier: false, at: 2))
+        _ = gesture.update(mouseDown: true, pasteboardChangeCount: 2, hasFiles: true, shift: true, otherModifier: true, at: 3)
+        XCTAssertFalse(gesture.update(mouseDown: true, pasteboardChangeCount: 2, hasFiles: true, shift: true, otherModifier: true, at: 4))
+        _ = gesture.update(mouseDown: true, pasteboardChangeCount: 2, hasFiles: true, shift: true, otherModifier: false, at: 5)
+        _ = gesture.update(mouseDown: true, pasteboardChangeCount: 2, hasFiles: true, shift: false, otherModifier: false, at: 5.1)
+        XCTAssertFalse(gesture.update(mouseDown: true, pasteboardChangeCount: 2, hasFiles: true, shift: true, otherModifier: false, at: 5.2))
+        XCTAssertTrue(gesture.update(mouseDown: true, pasteboardChangeCount: 2, hasFiles: true, shift: true, otherModifier: false, at: 5.4))
+    }
     func testDoubleShiftRequiresTwoCompleteShortTaps() {
         var gesture = PocketShiftGesture()
         XCTAssertFalse(gesture.update(shift: true, otherModifier: false, at: 1))

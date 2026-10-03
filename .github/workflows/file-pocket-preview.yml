@@ -1,0 +1,51 @@
+name: File pocket native glass
+
+on:
+  pull_request:
+    branches: [main, dev]
+    paths:
+      - 'QuotaNotch/**'
+      - 'QuotaNotchTests/FilePocketTests.swift'
+      - '.github/workflows/file-pocket-preview.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pocket-glass-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  native-glass:
+    runs-on: macos-26
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: '26'
+      - name: Test file gestures and image operations
+        run: swift test --filter 'FilePocketTests|PocketImageProcessorTests'
+      - name: Build isolated native preview
+        run: |
+          xcodebuild build -quiet -project boringNotch.xcodeproj -scheme boringNotch \
+            -configuration Release -destination 'generic/platform=macOS' \
+            -derivedDataPath build/DerivedData ARCHS=arm64 ONLY_ACTIVE_ARCH=YES \
+            SWIFT_ACTIVE_COMPILATION_CONDITIONS=SETTINGS_PREVIEW \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO DEVELOPMENT_TEAM='' CODE_SIGN_IDENTITY=''
+      - name: Capture native glass on desktop in both appearances
+        env:
+          FILE_POCKET_PREVIEW_ONLY: '1'
+          FILE_POCKET_DESKTOP_CAPTURE: '1'
+        run: |
+          build/DerivedData/Build/Products/Release/QuotaNotch.app/Contents/MacOS/QuotaNotch -AppleLanguages '(en)'
+          build/DerivedData/Build/Products/Release/QuotaNotch.app/Contents/MacOS/QuotaNotch -AppleLanguages '(zh-Hans)'
+      - name: Upload native glass screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: File-pocket-native-glass-${{ github.sha }}
+          path: build/Settings-previews/**
+          if-no-files-found: error

@@ -8,7 +8,7 @@ struct FilePocketSettings: View {
         Form {
             Section {
                 Toggle(PocketText.t("启用文件兜", "Enable file pocket"), isOn: $store.enabled)
-                Text(PocketText.t("双击 Shift，在鼠标旁唤出。拖入左侧暂存，拖到右侧直接处理兜内和新拖入的文件。", "Double-tap Shift to open at the pointer. Drop on the pocket to collect files; drop on an action to process both stored and incoming files."))
+                Text(PocketText.t("拖着文件按住 Shift，或双击 Shift，在鼠标旁唤出。拖入左侧暂存，拖到右侧直接处理兜内和新拖入的文件。", "Hold Shift while dragging files, or double-tap Shift to open at the pointer. Drop on the pocket to collect files; drop on an action to process both stored and incoming files."))
                     .font(.callout).foregroundStyle(.secondary)
                 Button(PocketText.t("打开文件兜", "Open file pocket")) { controller.show() }.disabled(!store.enabled)
                 if !controller.accessibilityGranted {

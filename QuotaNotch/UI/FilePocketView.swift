@@ -22,61 +22,74 @@ struct PocketPouchShape: Shape {
 struct PocketSectorShape: Shape {
     let angle: Double
     func path(in rect: CGRect) -> Path {
-        let center = CGPoint(x: rect.midX, y: rect.midY), outer = min(rect.width, rect.height) / 2 - 2, inner = outer - 56
-        var points: [CGPoint] = []
-        for index in 0...24 {
-            let a: Double = (angle - 17 + Double(index) * 34 / 24) * .pi / 180
-            points.append(CGPoint(x: center.x + outer * CGFloat(Darwin.cos(a)), y: center.y + outer * CGFloat(Darwin.sin(a))))
-        }
-        for index in (0...24).reversed() {
-            let a: Double = (angle - 17 + Double(index) * 34 / 24) * .pi / 180
-            points.append(CGPoint(x: center.x + inner * CGFloat(Darwin.cos(a)), y: center.y + inner * CGFloat(Darwin.sin(a))))
-        }
-        func near(_ point: CGPoint, _ other: CGPoint, _ amount: CGFloat) -> CGPoint {
-            let dx = other.x - point.x, dy = other.y - point.y, d = max(0.001, hypot(dx, dy)), t = min(0.48, amount / d)
-            return CGPoint(x: point.x + dx * t, y: point.y + dy * t)
+        let center = CGPoint(x: rect.midX, y: rect.midY)
+        let outer = min(rect.width, rect.height) / 2 - 2
+        let inner = outer - 56
+        let corner: CGFloat = 11
+        let start = (angle - 17) * .pi / 180, end = (angle + 17) * .pi / 180
+        let outerTrim = Double(corner / outer), innerTrim = Double(corner / inner)
+        func point(_ radius: CGFloat, _ a: Double) -> CGPoint {
+            CGPoint(x: center.x + radius * CGFloat(Darwin.cos(a)), y: center.y + radius * CGFloat(Darwin.sin(a)))
         }
         var path = Path()
-        for i in points.indices {
-            let point = points[i], rounding: CGFloat = [0, 24, 25, 49].contains(i) ? 7 : 0.2
-            let before = near(point, points[(i + points.count - 1) % points.count], rounding)
-            let after = near(point, points[(i + 1) % points.count], rounding)
-            if i == 0 { path.move(to: before) } else { path.addLine(to: before) }
-            path.addQuadCurve(to: after, control: point)
-        }
+        path.move(to: point(outer, start + outerTrim))
+        path.addArc(center: center, radius: outer, startAngle: .radians(start + outerTrim), endAngle: .radians(end - outerTrim), clockwise: false)
+        path.addQuadCurve(to: point(outer - corner, end), control: point(outer, end))
+        path.addLine(to: point(inner + corner, end))
+        path.addQuadCurve(to: point(inner, end - innerTrim), control: point(inner, end))
+        path.addArc(center: center, radius: inner, startAngle: .radians(end - innerTrim), endAngle: .radians(start + innerTrim), clockwise: true)
+        path.addQuadCurve(to: point(inner + corner, start), control: point(inner, start))
+        path.addLine(to: point(outer - corner, start))
+        path.addQuadCurve(to: point(outer, start + outerTrim), control: point(outer, start))
         path.closeSubpath(); return path
     }
 }
 
 private struct PocketVisualEffect: NSViewRepresentable {
     func makeNSView(context: Context) -> NSVisualEffectView {
-        let view = NSVisualEffectView(); view.material = .hudWindow
+        let view = NSVisualEffectView(); view.material = .popover
         view.blendingMode = .behindWindow; view.state = .active; return view
     }
     func updateNSView(_ nsView: NSVisualEffectView, context: Context) {}
 }
 
-struct PocketGlass<S: Shape>: View {
+private struct PocketGlassSurface<S: Shape>: ViewModifier {
     let shape: S
+    var control = false
     @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
-    var body: some View {
-        Group {
-            if reduceTransparency { shape.fill(Color(nsColor: .windowBackgroundColor)) }
-            else {
-                #if compiler(>=6.2)
-                if #available(macOS 26.0, *) { Color.clear.glassEffect(.regular, in: shape) }
-                else { fallback }
-                #else
-                fallback
-                #endif
-            }
+    func body(content: Content) -> some View {
+        if reduceTransparency {
+            content.background(shape.fill(Color(nsColor: .windowBackgroundColor)))
+        } else {
+            #if compiler(>=6.2)
+            if #available(macOS 26.0, *) {
+                // Apply glass to the content, not a clipped clear background. A
+                // clip after glassEffect cuts off the system's rim and shadow.
+                content.glassEffect(control ? .clear.interactive() : .regular, in: shape)
+            } else { fallback(content) }
+            #else
+            fallback(content)
+            #endif
         }
-        .shadow(color: .black.opacity(0.14), radius: 12, x: 0, y: 6)
     }
-    private var fallback: some View {
-        PocketVisualEffect().clipShape(shape)
-            .overlay(shape.fill(.white.opacity(0.055)))
-            .overlay(shape.stroke(LinearGradient(colors: [.white.opacity(0.7), .white.opacity(0.08), .white.opacity(0.35)], startPoint: .topLeading, endPoint: .bottomTrailing), lineWidth: 0.8))
+    private func fallback(_ content: Content) -> some View {
+        content.background {
+            PocketVisualEffect().clipShape(shape)
+                .overlay(shape.stroke(LinearGradient(colors: [.white.opacity(0.65), .white.opacity(0.08), .white.opacity(0.3)], startPoint: .topLeading, endPoint: .bottomTrailing), lineWidth: 0.7))
+                .shadow(color: .black.opacity(0.12), radius: 9, x: 0, y: 4)
+        }
+    }
+}
+
+private struct PocketGlassGroup<Content: View>: View {
+    @ViewBuilder let content: () -> Content
+    var body: some View {
+        #if compiler(>=6.2)
+        if #available(macOS 26.0, *) { GlassEffectContainer(spacing: 8) { content() } }
+        else { content() }
+        #else
+        content()
+        #endif
     }
 }
 
@@ -97,20 +110,20 @@ private struct PocketGlassControl<S: Shape, Content: View>: View {
             if !suppressClick && hypot(drag.width, drag.height) < 5 { action() }
         } label: {
             content()
-                .background(PocketGlass(shape: shape))
                 .overlay {
                     if hovering || pressed {
-                        RadialGradient(colors: [.white.opacity(pressed ? 0.32 : 0.15), .clear], center: .center, startRadius: 0, endRadius: 65)
+                        RadialGradient(colors: [.white.opacity(pressed ? 0.12 : 0.06), .clear], center: .center, startRadius: 0, endRadius: 65)
                             .frame(width: 130, height: 130).position(hoverPoint)
                             .allowsHitTesting(false)
                     }
                 }
                 .clipShape(shape)
+                .modifier(PocketGlassSurface(shape: shape, control: true))
                 .contentShape(shape)
         }
         .buttonStyle(.plain)
-        .scaleEffect(x: reduceMotion ? 1 : 1 + (pressed ? 0.025 : 0) + abs(drag.width) / 900,
-                     y: reduceMotion ? 1 : 1 + (pressed ? 0.025 : 0) + abs(drag.height) / 900)
+        .scaleEffect(x: reduceMotion ? 1 : 1 + (pressed ? 0.025 : 0) + 0.065 * tanh(abs(drag.width) / 70),
+                     y: reduceMotion ? 1 : 1 + (pressed ? 0.025 : 0) + 0.065 * tanh(abs(drag.height) / 70))
         .offset(x: reduceMotion ? 0 : 12 * tanh(drag.width / 65), y: reduceMotion ? 0 : 10 * tanh(drag.height / 65))
         .onContinuousHover { phase in
             switch phase {
@@ -174,6 +187,12 @@ struct FilePocketView: View {
     @State private var atBottom = false
 
     var body: some View {
+        PocketGlassGroup {
+            composition
+        }
+    }
+
+    private var composition: some View {
         ZStack(alignment: .topLeading) {
             pocket.position(x: 74, y: 161).zIndex(3)
             if !showList {
@@ -196,7 +215,7 @@ struct FilePocketView: View {
                     .animation(reduceMotion ? nil : .spring(response: 0.46, dampingFraction: 0.84).delay(Double(index) * 0.045), value: poured)
                     .allowsHitTesting(false).zIndex(5)
             }
-            footer.frame(width: 408, height: 58).position(x: 230, y: 393)
+            footer.frame(width: 288, height: 58).position(x: showList ? 290 : 178, y: showList ? 396 : 318)
         }
         .frame(width: FilePocketController.size.width, height: FilePocketController.size.height)
         .coordinateSpace(name: "pocket")
@@ -209,20 +228,39 @@ struct FilePocketView: View {
 
     private var pocket: some View {
         VStack(spacing: 8) {
-            PocketGlassControl(shape: PocketPouchShape(), action: { store.expanded.toggle() }) {
-                ZStack {
-                    if !tilted {
-                        ForEach(Array(store.items.prefix(3).enumerated()), id: \.element.id) { index, item in
-                            PocketThumbnail(url: item.url).rotationEffect(.degrees(Double(index - 1) * 12))
-                                .offset(x: CGFloat(index - 1) * 10, y: -29)
-                        }
+            ZStack {
+                Ellipse()
+                    .fill(.primary.opacity(0.12))
+                    .overlay(Ellipse().stroke(.white.opacity(0.4), lineWidth: 0.7))
+                    .frame(width: 86, height: 14).offset(y: -38)
+                if !tilted {
+                    ForEach(Array(store.items.prefix(3).enumerated()), id: \.element.id) { index, item in
+                        PocketThumbnail(url: item.url)
+                            .overlay(RoundedRectangle(cornerRadius: 7).stroke(.white.opacity(0.7), lineWidth: 0.7))
+                            .rotationEffect(.degrees(Double(index - 1) * 12))
+                            .offset(x: CGFloat(index - 1) * 13, y: -38)
                     }
-                    VStack(spacing: 4) {
-                        Image(systemName: (store.dropTarget == .pocket) ? "plus" : "tray").font(.system(size: 20, weight: .regular))
-                        Text("\(store.items.count)").font(.system(size: 12, weight: .medium, design: .rounded)).monospacedDigit()
-                    }.opacity(tilted ? 0 : 1).offset(y: 6)
-                }.frame(width: 92, height: 90)
+                }
+                PocketGlassControl(shape: PocketPouchShape(), action: { store.expanded.toggle() }) {
+                    VStack(spacing: 5) {
+                        Image(systemName: (store.dropTarget == .pocket) ? "plus" : "tray")
+                            .font(.system(size: 19, weight: .light))
+                        Text("\(store.items.count)")
+                            .font(.system(size: 12, weight: .medium, design: .rounded)).monospacedDigit()
+                    }
+                    .opacity(tilted ? 0 : 1)
+                    .frame(width: 88, height: 82)
+                }
+                // The mouth follows the same bend as the bag and stays visible
+                // when it tips right; files emerge from this opening.
+                Path { path in
+                    path.move(to: CGPoint(x: 9, y: 7))
+                    path.addQuadCurve(to: CGPoint(x: 79, y: 7), control: CGPoint(x: 44, y: 17))
+                }
+                .stroke(.white.opacity(0.55), lineWidth: 0.8)
+                .frame(width: 88, height: 82).allowsHitTesting(false)
             }
+            .frame(width: 92, height: 90)
             .rotationEffect(.degrees(tilted ? 78 : 0), anchor: UnitPoint(x: 0.5, y: 0.58))
             .scaleEffect((store.dropTarget == .pocket) ? 1.08 : 1)
             .animation(reduceMotion ? nil : .spring(response: 0.38, dampingFraction: 0.78), value: tilted)
@@ -271,7 +309,7 @@ struct FilePocketView: View {
             }.font(.system(size: 11, weight: .medium)).frame(height: 36)
                 .disabled(store.busy || store.items.isEmpty)
         }
-        .background(PocketGlass(shape: RoundedRectangle(cornerRadius: 22)))
+        .modifier(PocketGlassSurface(shape: RoundedRectangle(cornerRadius: 22)))
     }
 
     private func row(_ item: PocketItem) -> some View {
@@ -317,7 +355,7 @@ struct FilePocketView: View {
             }.buttonStyle(.plain).font(.system(size: 11)).padding(.horizontal, 12)
             if !store.status.isEmpty { Text(store.status).font(.system(size: 11)).foregroundStyle(.secondary).lineLimit(1).help(store.status) }
         }.padding(.vertical, 8)
-            .background(PocketGlass(shape: RoundedRectangle(cornerRadius: 16)))
+            .modifier(PocketGlassSurface(shape: RoundedRectangle(cornerRadius: 20)))
     }
 
     private func animateExpansion(_ expanded: Bool) {

@@ -1,8 +1,11 @@
 # File pocket preview
 
 Enable **Settings → File tools → Enable file pocket**. The feature is independent
-of the notch. Double-tap Shift near the destination, including while dragging
-files in Finder. Global keyboard monitoring requires Accessibility access; the
+of the notch. Hold Shift for 0.18 seconds while dragging files in Finder, or
+double-tap Shift near the destination. The drag trigger samples the current
+mouse/modifier state and a fresh drag pasteboard in common run-loop modes.
+Old pasteboard contents, text drags and ordinary mouse gestures do not trigger it.
+Global double-tap keyboard monitoring requires Accessibility access; the
 menu bar and settings button also open the pocket without that permission.
 
 - Drop on the left pouch to collect local files. References survive relaunch.
@@ -30,7 +33,7 @@ symlink deduplication, collision naming, actual ImageIO conversion and resizing,
 transparent-to-JPEG flattening, original preservation, and unsupported inputs.
 The existing QuotaNotch workflow builds the universal app and installer on macOS.
 
-Before release, check on a real Mac: Finder multi-file drags while double-tapping
+Before release, check on a real Mac: Finder multi-file drags while holding or double-tapping
 Shift, permission grant/revocation, Quick Look, multiple monitors and screen-edge
 clamping, background clicks passing through, native Liquid Glass on macOS 26+,
 and cancelling a large batch. CI compilation does not validate those interactions.

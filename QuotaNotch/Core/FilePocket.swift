@@ -1,8 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 import Foundation
 
-/// Two complete, unchorded taps. Holding Shift, typing with it, or combining
-/// modifiers must not summon a panel while the user is working in another app.
+/// Two complete, unchorded taps for opening without a file drag.
 struct PocketShiftGesture {
     private var downAt: TimeInterval?
     private var firstTap: TimeInterval?
@@ -22,6 +21,39 @@ struct PocketShiftGesture {
         }
         firstTap = time
         return false
+    }
+}
+
+/// A fresh file drag plus a short Shift hold. Old drag-pasteboard contents must
+/// not turn ordinary clicks, text selection or window dragging into a trigger.
+struct PocketDragShiftGesture {
+    private var baseline: Int
+    private(set) var fileDrag = false
+    private var heldSince: TimeInterval?
+    private var triggered = false
+
+    init(pasteboardChangeCount: Int) { baseline = pasteboardChangeCount }
+
+    mutating func update(mouseDown: Bool, pasteboardChangeCount: Int, hasFiles: Bool,
+                         shift: Bool, otherModifier: Bool, at time: TimeInterval) -> Bool {
+        guard mouseDown else {
+            baseline = pasteboardChangeCount
+            fileDrag = false; heldSince = nil; triggered = false
+            return false
+        }
+        if pasteboardChangeCount != baseline {
+            baseline = pasteboardChangeCount
+            fileDrag = hasFiles
+            heldSince = nil
+        }
+        guard fileDrag, shift, !otherModifier, !triggered else {
+            heldSince = nil
+            return false
+        }
+        guard let start = heldSince else { heldSince = time; return false }
+        guard time - start >= 0.18 else { return false }
+        triggered = true
+        return true
     }
 }
 
