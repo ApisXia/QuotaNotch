@@ -1,0 +1,56 @@
+name: File pocket native glass
+
+on:
+  pull_request:
+    branches: [main, dev]
+    paths:
+      - 'QuotaNotch/**'
+      - 'QuotaNotchTests/FilePocketTests.swift'
+      - '.github/workflows/file-pocket-preview.yml'
+      - 'scripts/render-pocket.swift'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pocket-glass-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  native-glass:
+    runs-on: macos-26
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: '26'
+      - name: Test file gestures and image operations
+        run: swift test --filter 'FilePocketTests|PocketImageProcessorTests'
+      - name: Record renderer and build production pocket preview
+        run: |
+          mkdir -p build
+          # Hosted runners enable Reduce Transparency; disable it only on this
+          # disposable preview VM so this job actually exercises native glass.
+          defaults read com.apple.universalaccess reduceTransparency || true
+          defaults write com.apple.universalaccess reduceTransparency -bool false
+          swiftc -parse-as-library -target arm64-apple-macos15.0 \
+            QuotaNotch/Core/FilePocket.swift QuotaNotch/Core/PocketImageProcessor.swift \
+            QuotaNotch/UI/FilePocketStore.swift QuotaNotch/UI/FilePocketController.swift \
+            QuotaNotch/UI/FilePocketView.swift scripts/render-pocket.swift -o build/render-pocket
+      - name: Capture native glass on desktop in both appearances
+        env:
+          FILE_POCKET_PREVIEW_ONLY: '1'
+          FILE_POCKET_DESKTOP_CAPTURE: '1'
+        run: |
+          build/render-pocket -AppleLanguages '(en)'
+          build/render-pocket -AppleLanguages '(zh-Hans)'
+      - name: Upload native glass screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: File-pocket-native-glass-${{ github.sha }}
+          path: build/Settings-previews/**
+          if-no-files-found: error

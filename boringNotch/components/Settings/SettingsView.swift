@@ -21,6 +21,7 @@ struct SettingsView: View {
         NavigationSplitView {
             List(selection: $selectedTab) {
                 NavigationLink(value: "General") { Label("通用", systemImage: "gearshape") }
+                NavigationLink(value: "FileTools") { Label(PocketText.t("文件工具", "File tools"), systemImage: "tray") }
                 NavigationLink(value: "Quota") { Label("AI 额度", systemImage: "chart.pie") }
                 NavigationLink(value: "Activity") { Label(AgentText.t("任务监控", "Task monitor"), systemImage: "square.stack.3d.up") }
                 NavigationLink(value: "Media") { Label("音乐", systemImage: "music.note") }
@@ -34,6 +35,7 @@ struct SettingsView: View {
         } detail: {
             Group {
                 switch selectedTab {
+                case "FileTools": FilePocketSettings()
                 case "Quota": QuotaPreferences()
                 case "Activity": AgentActivitySettings()
                 case "Media": Media()
