@@ -16,7 +16,18 @@ struct QuotaPetSchedule: TimelineSchedule {
     }
 }
 
-/// The closed-notch quota pet. One sprite pixel is one point (times `scale`).
+extension QuotaPetTasks {
+    init(_ summary: AgentAttentionSummary, enabled: Bool) {
+        self.init()
+        guard enabled else { return }
+        waiting = summary.waiting
+        running = summary.running
+        lastCompletedAt = summary.lastCompletedAt
+    }
+}
+
+/// The closed-notch pet. One sprite pixel is one point (times `scale`). It reflects quota on
+/// its body and tasks through its pose and the effect around it.
 struct QuotaPetView: View {
     let kind: QuotaPetKind
     let size: QuotaPetSize
@@ -24,30 +35,41 @@ struct QuotaPetView: View {
     let window: QuotaWindow?
     let stale: Bool
     var scale: CGFloat = 1
+    var tasks: QuotaPetTasks = .none
     /// Overrides the tracked mood (settings previews).
     var fixedMood: QuotaPetMood? = nil
+    var fixedSignal: QuotaPetSignal = .none
     @ObservedObject private var store = QuotaNotchStore.shared
     @AppStorage(QuotaPetTint.defaultsKey) private var tintRaw = QuotaPetTint.original.rawValue
+    @AppStorage(QuotaPetEffect.defaultsKey) private var effectRaw = QuotaPetEffect.soft.rawValue
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private var key: String { QuotaPetTracker.key(provider: provider, windowID: window?.id ?? "") }
     private var tint: QuotaPetTint { QuotaPetTint(rawValue: tintRaw) ?? .original }
+    private var effect: QuotaPetEffect { QuotaPetEffect(rawValue: effectRaw) ?? .soft }
 
-    /// A value-only mood function, safe to evaluate from the timeline schedule.
-    private var moodAt: @Sendable (Date) -> QuotaPetMood {
-        let tracker = store.petTracker, fixed = fixedMood, slot = self.key, reading = self.window, old = self.stale
-        return { date in fixed ?? tracker.mood(key: slot, window: reading, stale: old, now: date) }
+    /// A value-only state function, safe to evaluate from the timeline schedule.
+    private var stateAt: @Sendable (Date) -> (mood: QuotaPetMood, signal: QuotaPetSignal) {
+        let tracker = store.petTracker, fixed = fixedMood, signal = fixedSignal
+        let slot = self.key, reading = self.window, old = self.stale, work = self.tasks
+        return { date in
+            if let fixed { return (fixed, signal) }
+            return QuotaPetBehavior.resolve(quota: tracker.mood(key: slot, window: reading, stale: old, now: date),
+                                            tasks: work, now: date)
+        }
     }
 
     var body: some View {
-        let moodFor = self.moodAt
+        let stateFor = self.stateAt
         Group {
             if reduceMotion {
-                pet(mood: moodFor(Date()), frame: 0, blink: false)
+                let state = stateFor(Date())
+                pet(mood: state.mood, signal: state.signal, frame: 0, blink: false)
             } else {
-                TimelineView(QuotaPetSchedule(mood: moodFor)) { context in
-                    let current = moodFor(context.date)
-                    pet(mood: current, frame: current.animates ? QuotaPetArt.frame(at: context.date) : 0,
+                TimelineView(QuotaPetSchedule(mood: { stateFor($0).mood })) { context in
+                    let state = stateFor(context.date)
+                    pet(mood: state.mood, signal: state.signal,
+                        frame: state.mood.animates ? QuotaPetArt.frame(at: context.date) : 0,
                         blink: QuotaPetArt.blinking(at: context.date))
                 }
             }
@@ -55,13 +77,105 @@ struct QuotaPetView: View {
         .accessibilityHidden(true)
     }
 
-    private func pet(mood: QuotaPetMood, frame: Int, blink: Bool) -> some View {
+    private func pet(mood: QuotaPetMood, signal: QuotaPetSignal, frame: Int, blink: Bool) -> some View {
         let remaining = window?.remainingPercent ?? 0
         let sprite = QuotaPetArt.sprite(kind, size: size, mood: mood, remaining: remaining, frame: frame, blink: blink)
         let palette = QuotaPetArt.palette(kind, provider: provider, tint: tint, remaining: remaining)
+        let theme = Color(quotaPetRGB: QuotaPetArt.themeColor(kind))
         return QuotaPetPixels(sprite: sprite, palette: palette, scale: scale)
             .saturation(mood == .stale ? 0 : 1)
             .opacity(mood == .stale ? 0.55 : 1)
+            .background {
+                if signal != .none {
+                    QuotaPetEffectLayer(style: effect, signal: signal, sprite: sprite, scale: scale, color: theme, front: false)
+                }
+            }
+            .overlay {
+                if signal != .none {
+                    QuotaPetEffectLayer(style: effect, signal: signal, sprite: sprite, scale: scale, color: theme, front: true)
+                }
+            }
+    }
+}
+
+/// Running and waiting effects. Each style keeps one shape for both signals and only changes
+/// pace and brightness: running is slow and faint, waiting is quick and bright.
+struct QuotaPetEffectLayer: View {
+    let style: QuotaPetEffect
+    let signal: QuotaPetSignal
+    let sprite: QuotaPetSprite
+    let scale: CGFloat
+    let color: Color
+    /// Drawn above the pixels (the pixel outline) or behind them (everything else).
+    let front: Bool
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    private var margin: CGFloat { 8 * scale }
+    private var width: CGFloat { CGFloat(sprite.width) * scale + 2 * margin }
+    private var height: CGFloat { CGFloat(sprite.height) * scale + 2 * margin }
+    private var interval: TimeInterval { style == .soft ? 1.0 / 15 : 0.1 }
+
+    var body: some View {
+        Group {
+            if reduceMotion {
+                canvas(time: nil)
+            } else {
+                TimelineView(.periodic(from: .now, by: interval)) { context in
+                    canvas(time: context.date.timeIntervalSinceReferenceDate)
+                }
+            }
+        }
+        .frame(width: width, height: height)
+        .allowsHitTesting(false)
+    }
+
+    private func canvas(time: TimeInterval?) -> some View {
+        let contours = style == .pixel && signal == .running && !front ? sprite.contours(maxDistance: 4) : []
+        let outline = style == .pixel && signal == .waiting && front ? sprite.outlineCells : []
+        return Canvas(rendersAsynchronously: false) { context, size in
+            let center = CGPoint(x: size.width / 2, y: size.height / 2)
+            let reach = max(CGFloat(sprite.width), CGFloat(sprite.height)) * scale * 0.62
+            func pixels(_ cells: [QuotaPetCell], opacity: Double) {
+                var path = Path()
+                for cell in cells {
+                    path.addRect(CGRect(x: margin + CGFloat(cell.x) * scale, y: margin + CGFloat(cell.y) * scale, width: scale, height: scale))
+                }
+                context.fill(path, with: .color(color.opacity(opacity)))
+            }
+            func ring(progress: Double, peak: Double) {
+                let radius = reach * (0.35 + 0.8 * progress)
+                let rect = CGRect(x: center.x - radius, y: center.y - radius, width: radius * 2, height: radius * 2)
+                context.stroke(Path(ellipseIn: rect), with: .color(color.opacity(peak * (1 - progress))), lineWidth: max(1, scale))
+            }
+            switch (style, signal, front) {
+            case (.soft, .running, false):
+                guard let time else { return }
+                let p = (time / 2.8).truncatingRemainder(dividingBy: 1)
+                ring(progress: p, peak: 0.3)
+                ring(progress: (p + 0.5).truncatingRemainder(dividingBy: 1), peak: 0.3)
+            case (.soft, .waiting, false):
+                let wave = time.map { 0.5 + 0.5 * cos($0 / 1.2 * 2 * .pi) } ?? 0.6
+                var glow = context
+                glow.addFilter(.blur(radius: 5 * scale))
+                let r = reach * 0.75
+                glow.fill(Path(ellipseIn: CGRect(x: center.x - r, y: center.y - r, width: r * 2, height: r * 2)),
+                          with: .color(color.opacity(0.12 + 0.6 * wave)))
+                if let time {
+                    let p = (time / 1.2).truncatingRemainder(dividingBy: 1)
+                    ring(progress: p, peak: 0.75)
+                    ring(progress: (p + 0.5).truncatingRemainder(dividingBy: 1), peak: 0.75)
+                }
+            case (.pixel, .running, false):
+                guard let time, !contours.isEmpty else { return }
+                let step = Int(time / 0.6) % contours.count
+                pixels(contours[step], opacity: [0.30, 0.22, 0.14, 0.08][min(step, 3)])
+            case (.pixel, .waiting, true):
+                let lit = time.map { Int($0 / 0.5) % 2 == 0 } ?? true
+                if lit { pixels(outline, opacity: 1) }
+            default:
+                break
+            }
+        }
     }
 }
 
@@ -95,15 +209,33 @@ extension Color {
     }
 }
 
-/// The remaining percentage beside the pet when quota has both wings to itself, with a
-/// horizontal bar in the pet's own gauge color underneath.
-struct QuotaPetPercent: View {
+/// A dot that fades in and out (waiting tasks).
+struct QuotaPetPulse<Content: View>: View {
+    var active: Bool
+    @ViewBuilder let content: () -> Content
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var dim = false
+    var body: some View {
+        content()
+            .opacity(active && dim ? 0.3 : 1)
+            .onAppear {
+                guard active, !reduceMotion else { return }
+                withAnimation(.easeInOut(duration: 0.6).repeatForever(autoreverses: true)) { dim = true }
+            }
+    }
+}
+
+/// The cell beside the pet: remaining quota on top; below it the quota bar in the pet's gauge
+/// color, followed by one dot per task (waiting amber, running green, finished blue).
+struct QuotaPetSummary: View {
     let percent: Double?
     let stale: Bool
     let kind: QuotaPetKind
     let provider: QuotaProvider
     let tint: QuotaPetTint
     var fontSize: CGFloat = 12
+    var tasks: [AgentRunState] = []
+
     var body: some View {
         let value = percent.map { min(100, max(0, $0)) }
         let ink: Color = {
@@ -113,21 +245,87 @@ struct QuotaPetPercent: View {
             return .white
         }()
         let bar: Color = value.map { stale ? .gray : Color(quotaPetRGB: QuotaPetArt.gaugeColor(kind, provider: provider, tint: tint, remaining: $0)) } ?? .gray
-        VStack(spacing: max(2, fontSize * 0.2)) {
+        let dot = max(3, fontSize * 0.3)
+        let shown = Array(tasks.prefix(3))
+        VStack(spacing: max(2, fontSize * 0.22)) {
             Text(value.map { QuotaText.percent($0) + "%" } ?? "—")
                 .font(.system(size: fontSize, weight: .semibold, design: .rounded))
                 .monospacedDigit()
                 .lineLimit(1).minimumScaleFactor(0.7)
                 .foregroundStyle(ink)
-            GeometryReader { proxy in
-                ZStack(alignment: .leading) {
-                    Capsule().fill(Color.white.opacity(0.18))
-                    Capsule().fill(bar).frame(width: proxy.size.width * CGFloat((value ?? 0) / 100))
+            HStack(spacing: max(1.5, dot * 0.5)) {
+                GeometryReader { proxy in
+                    ZStack(alignment: .leading) {
+                        Capsule().fill(Color.white.opacity(0.18))
+                        Capsule().fill(bar).frame(width: proxy.size.width * CGFloat((value ?? 0) / 100))
+                    }
+                }
+                .frame(height: fontSize >= 13 ? 3 : 2)
+                ForEach(Array(shown.enumerated()), id: \.offset) { _, state in
+                    QuotaPetPulse(active: state == .waiting) {
+                        Circle().fill(Color(quotaPetRGB: QuotaPetArt.taskColor(state))).frame(width: dot, height: dot)
+                    }
+                }
+                if tasks.count > 3 {
+                    Text(verbatim: "+\(tasks.count - 3)")
+                        .font(.system(size: max(7, fontSize * 0.62), weight: .semibold, design: .rounded))
+                        .foregroundStyle(.white.opacity(0.7))
+                        .fixedSize()
                 }
             }
-            .frame(height: fontSize >= 13 ? 3 : 2)
+            .frame(height: dot)
         }
         .padding(.horizontal, 1)
         .fixedSize(horizontal: false, vertical: true)
+    }
+}
+
+/// With music: a small dark tag on the pet's bottom-right, matching the album's playback tag.
+/// Running tasks hop like the album's bars; waiting shows a blinking "!"; finished shows a check.
+struct QuotaPetTaskBadge: View {
+    let states: [AgentRunState]
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    var body: some View {
+        if let state = states.first {
+            Group {
+                switch state {
+                case .running:
+                    if reduceMotion {
+                        dots(phase: 0)
+                    } else {
+                        TimelineView(.periodic(from: .now, by: 1.0 / 12)) { context in
+                            dots(phase: context.date.timeIntervalSinceReferenceDate)
+                        }
+                    }
+                case .waiting, .failed:
+                    QuotaPetPulse(active: true) { mark("!", state: state) }
+                default:
+                    mark("✓", state: state)
+                }
+            }
+            .frame(width: 9, height: 7)
+            .padding(1)
+            .background(.black.opacity(0.85), in: RoundedRectangle(cornerRadius: 3))
+            .allowsHitTesting(false)
+            .accessibilityHidden(true)
+        }
+    }
+
+    private func dots(phase: TimeInterval) -> some View {
+        HStack(spacing: 1) {
+            ForEach(0..<3, id: \.self) { index in
+                let t = (phase - Double(index) * 0.15).truncatingRemainder(dividingBy: 1)
+                let lift = t >= 0 && t < 0.3 ? sin(t / 0.3 * .pi) * 1.5 : 0
+                Circle().fill(Color(quotaPetRGB: QuotaPetArt.taskColor(.running))).frame(width: 2, height: 2)
+                    .offset(y: -lift)
+            }
+        }
+    }
+
+    private func mark(_ text: String, state: AgentRunState) -> some View {
+        Text(verbatim: text)
+            .font(.system(size: 7, weight: .heavy, design: .rounded))
+            .foregroundStyle(Color(quotaPetRGB: QuotaPetArt.taskColor(state)))
     }
 }

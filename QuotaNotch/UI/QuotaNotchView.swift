@@ -160,6 +160,10 @@ final class QuotaNotchStore: ObservableObject {
     /// Recent changes per window, so the quota pet can react to them.
     @Published private(set) var petTracker = QuotaPetTracker()
     @Published private(set) var refreshing = false
+    /// A short line shown below the notch for a few seconds at key quota moments.
+    @Published private(set) var peek: String?
+    private var peekBaseline: (key: String, remaining: Double, pacing: Bool)?
+    private var peekClear: Task<Void, Never>?
     /// Quota is always on; individual services can be turned off. Claude only reads a local
     /// file now, so there is no cost to monitoring by default. (Kept for the preview runner.)
     @Published private(set) var enabled = true
@@ -202,6 +206,8 @@ final class QuotaNotchStore: ObservableObject {
         results = paused ? [:] : [.claude: QuotaResult(snapshot: QuotaSnapshot(windows: [window], fetchedAt: now), failure: nil, nextAttempt: now)]
         notificationStatus = QuotaText.localized("Notifications are off. Your threshold is saved.")
     }
+
+    func setPreviewPeek(_ text: String?) { peekClear?.cancel(); peek = text }
     #endif
 
     private let client = QuotaClient(claudeFallback: ClaudeCLIQuotaFallback())
@@ -275,6 +281,37 @@ final class QuotaNotchStore: ObservableObject {
                     results[provider] = result
                 }
             }
+        }
+        updatePeek(at: current)
+    }
+
+    /// Compares the shown window with its last reading and raises a peek on a key moment.
+    private func updatePeek(at date: Date) {
+        guard let pin = activePin, let provider = pin.provider, let window = window(for: pin) else { return }
+        let key = QuotaPetTracker.key(provider: provider, windowID: window.id)
+        let pacing = QuotaPace.runsOutBeforeReset(window, now: date)
+        let previous = peekBaseline?.key == key ? peekBaseline : nil
+        peekBaseline = (key, window.remainingPercent, pacing)
+        guard !isStale(provider), QuotaPeekRule.event(previous: previous?.remaining, current: window.remainingPercent,
+                                                      wasPacing: previous?.pacing ?? false, pacing: pacing) != nil else { return }
+        showPeek(Self.peekText(provider: provider, window: window, now: date))
+    }
+
+    static func peekText(provider: QuotaProvider, window: QuotaWindow, now: Date) -> String {
+        var parts = [provider.title + " " + window.localizedTitle,
+                     QuotaText.localized("剩余") + " " + QuotaText.percent(window.remainingPercent) + "%"]
+        if let reset = window.resetsAt { parts.append(QuotaText.countdown(reset, now: now)) }
+        return parts.joined(separator: " · ")
+    }
+
+    private func showPeek(_ text: String?) {
+        peekClear?.cancel()
+        peek = text
+        guard text != nil else { return }
+        peekClear = Task { [weak self] in
+            try? await Task.sleep(nanoseconds: UInt64(QuotaPeekRule.duration * 1_000_000_000))
+            guard !Task.isCancelled else { return }
+            self?.peek = nil
         }
     }
 

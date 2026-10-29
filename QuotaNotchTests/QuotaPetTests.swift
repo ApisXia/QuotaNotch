@@ -40,7 +40,7 @@ final class QuotaPetTests: XCTestCase {
             ".occceecccceeccco...", ".occcccccccccccco...", "occcccccooocccccco..", "occcccccccccccccco..",
             "oFFFFFFFFFFFFFFFFo..", ".offffffffffffffo...", "..oooooooooooooo....", "...................."
         ])
-        XCTAssertEqual(QuotaPetArt.sprite(.mochi, size: .widget, mood: .pacing, remaining: 41).rows, [
+        XCTAssertEqual(QuotaPetArt.sprite(.mochi, size: .widget, mood: .needsYou, remaining: 41).rows, [
             "....................", "..oo.......oo...oo..", ".ogo.......opo.occo.", ".oggooooooooppoocco.",
             ".oggcccccccccpo.oco.", "oggceecccceecco..o..", "occceecccceeccco....", "occceecccceeccco....",
             "ocpcccccccccpcco....", "occcccccocccccco....", ".osccccomocccso.....", "..ooscccoccsoo......",
@@ -51,7 +51,7 @@ final class QuotaPetTests: XCTestCase {
             "oggccccccccccco.", "occceecccceeccco", "occceecccceeccco", "ocpcccccccccpcco",
             "occccccococcccco", ".oscccccoccccso.", "................", ".ffffffffffxxxx."
         ])
-        XCTAssertEqual(QuotaPetArt.sprite(.bit, size: .minimal, mood: .pacing, remaining: 41).rows, [
+        XCTAssertEqual(QuotaPetArt.sprite(.bit, size: .minimal, mood: .needsYou, remaining: 41).rows, [
             "......oLo.......", ".......o........", "..oooooooooooo..", ".occcccccccccco.",
             "occkeekkkkeekcco", "ockkeekkkkeekkco", "ockkeekkkkeekkco", "ockkkkkkekkkkkco",
             "occkkkkemekkkcco", ".occccccoccccco.", "..oooooooooooo..", ".mmmmmmdddddddd."
@@ -60,6 +60,48 @@ final class QuotaPetTests: XCTestCase {
             "....oooooo....", "..ooFFFFFFoo..", ".offffffffffo.", ".offffffffffo.", "offfoffffofffo",
             "offofoffofoffo", "offfffoofffffo", "offffffffffffo", ".offffffffffo.", "..oooooooooo.."
         ])
+    }
+
+    func testTasksDriveThePoseAndWaitingWins() {
+        let now = Date(timeIntervalSince1970: 1_800_000_000)
+        var tasks = QuotaPetTasks(waiting: 1, running: 2)
+        XCTAssertTrue(QuotaPetBehavior.resolve(quota: .low, tasks: tasks, now: now) == (.needsYou, .waiting))
+        tasks.waiting = 0
+        XCTAssertTrue(QuotaPetBehavior.resolve(quota: .idle, tasks: tasks, now: now) == (.working, .running))
+        XCTAssertTrue(QuotaPetBehavior.resolve(quota: .empty, tasks: tasks, now: now) == (.empty, .none))
+        tasks.running = 0; tasks.lastCompletedAt = now.addingTimeInterval(-2)
+        XCTAssertTrue(QuotaPetBehavior.resolve(quota: .low, tasks: tasks, now: now) == (.celebrate, .none))
+        XCTAssertTrue(QuotaPetBehavior.resolve(quota: .low, tasks: tasks, now: now.addingTimeInterval(10)) == (.low, .none))
+        XCTAssertTrue(QuotaPetBehavior.resolve(quota: .stale, tasks: .none, now: now) == (.stale, .none))
+    }
+
+    func testPacingNoLongerTapsTheGlass() {
+        let pacing = QuotaPetArt.sprite(.mochi, size: .widget, mood: .pacing, remaining: 41)
+        let waiting = QuotaPetArt.sprite(.mochi, size: .widget, mood: .needsYou, remaining: 41)
+        XCTAssertNotEqual(pacing, waiting)
+        XCTAssertEqual(pacing.rows[1], "..oo.......oo.......")
+    }
+
+    func testContoursFollowTheOutline() {
+        let sprite = QuotaPetArt.sprite(.jelly, size: .widget, mood: .idle, remaining: 50)
+        let rings = sprite.contours(maxDistance: 3)
+        XCTAssertEqual(rings.count, 3)
+        for (index, ring) in rings.enumerated() {
+            XCTAssertFalse(ring.isEmpty)
+            for cell in ring { XCTAssertFalse(sprite.isFilled(cell.x, cell.y), "ring \(index)") }
+        }
+        // The first ring touches the art; outer rings are farther out and larger.
+        XCTAssertTrue(rings[0].allSatisfy { c in [(1, 0), (-1, 0), (0, 1), (0, -1)].contains { sprite.isFilled(c.x + $0.0, c.y + $0.1) } })
+        XCTAssertGreaterThan(rings[2].count, rings[0].count)
+        XCTAssertFalse(sprite.outlineCells.isEmpty)
+        XCTAssertTrue(sprite.outlineCells.allSatisfy { sprite.code(x: $0.x, y: $0.y) == UInt8(ascii: "o") })
+    }
+
+    func testTaskColors() {
+        XCTAssertEqual(QuotaPetArt.taskColor(.waiting), 0xFFB347)
+        XCTAssertEqual(QuotaPetArt.taskColor(.running), 0x5AD19A)
+        XCTAssertEqual(QuotaPetArt.taskColor(.completed), 0x7AA2FF)
+        XCTAssertNotEqual(QuotaPetArt.themeColor(.mochi), QuotaPetArt.themeColor(.jelly))
     }
 
     func testEveryDrawnPixelHasAColor() {
@@ -174,13 +216,12 @@ final class QuotaPetTests: XCTestCase {
         XCTAssertEqual(QuotaWindow(id: "seven_day", title: "7 天", remainingPercent: 1, resetsAt: nil).period, 7 * 86400)
     }
 
-    func testPetModeIsASeparateSwitch() {
+    func testSavedPetFallsBackToTheDefault() {
         XCTAssertEqual(QuotaPetKind.choice(nil), .bit)
         XCTAssertEqual(QuotaPetKind.choice("jelly"), .jelly)
         XCTAssertEqual(QuotaPetKind.choice("unknown"), .bit)
         XCTAssertEqual(QuotaPetKind.choice("off"), .bit)
-        XCTAssertEqual(QuotaPetKind.effective(enabled: true, raw: "mochi"), .mochi)
-        XCTAssertEqual(QuotaPetKind.effective(enabled: false, raw: "mochi"), .off)
+        XCTAssertEqual(QuotaPetKind.allCases, QuotaPetKind.pets)
     }
 
     func testPixelScaleStaysOnWholeDevicePixels() {
@@ -218,5 +259,17 @@ final class QuotaPetTests: XCTestCase {
         XCTAssertEqual(NotchUISize.standard.panelScale, 1)
         XCTAssertEqual(QuotaCompactMetrics.iconSize(height: 32, size: .standard), QuotaCompactMetrics.iconSize(height: 32))
         XCTAssertEqual(QuotaCompactMetrics.iconSize(height: 32, size: .large), QuotaCompactMetrics.iconSize(height: 32, comfortable: true))
+    }
+
+    func testPeekFiresAtKeyMoments() {
+        XCTAssertNil(QuotaPeekRule.event(previous: nil, current: 10, wasPacing: false, pacing: true))
+        XCTAssertNil(QuotaPeekRule.event(previous: 64, current: 60, wasPacing: false, pacing: false))
+        XCTAssertEqual(QuotaPeekRule.event(previous: 52, current: 49, wasPacing: false, pacing: false), .crossed(50))
+        XCTAssertEqual(QuotaPeekRule.event(previous: 55, current: 15, wasPacing: false, pacing: false), .crossed(20))
+        XCTAssertEqual(QuotaPeekRule.event(previous: 3, current: 0, wasPacing: false, pacing: false), .crossed(0))
+        XCTAssertEqual(QuotaPeekRule.event(previous: 5, current: 100, wasPacing: true, pacing: false), .refilled)
+        XCTAssertEqual(QuotaPeekRule.event(previous: 70, current: 68, wasPacing: false, pacing: true), .pacing)
+        XCTAssertNil(QuotaPeekRule.event(previous: 70, current: 68, wasPacing: true, pacing: true))
+        XCTAssertNil(QuotaPeekRule.event(previous: 49, current: 51, wasPacing: false, pacing: false))
     }
 }

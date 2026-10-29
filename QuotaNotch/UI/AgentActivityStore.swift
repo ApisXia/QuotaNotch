@@ -28,7 +28,6 @@ import UserNotifications
     @Published private var acknowledged: [String: String]
     @Published private var dismissed: [String: String]
     @Published private var retainedReadEvents: [String: String] = [:]
-    @Published var compactExpanded = false
     @Published var notchReadEnabled = false
     @Published var filter: AgentFilter = .all
     @Published var expandedTaskID: String?

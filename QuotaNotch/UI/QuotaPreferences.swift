@@ -7,12 +7,12 @@ struct QuotaPreferences: View {
     @ObservedObject private var store = QuotaNotchStore.shared
     @ObservedObject private var claude = ClaudeConnection.shared
     @AppStorage(NotchUISize.defaultsKey) private var sizeRaw = NotchUISize.current.rawValue
-    @AppStorage(QuotaPetKind.enabledKey) private var petEnabled = true
     @AppStorage("quotaNotifications") private var notifications = false
     @AppStorage("quotaAlertThreshold") private var threshold = 20.0
     @AppStorage(QuotaPetKind.defaultsKey) private var petRaw = QuotaPetKind.defaultKind.rawValue
     @AppStorage(QuotaPetTint.defaultsKey) private var tintRaw = QuotaPetTint.original.rawValue
-    private var pet: QuotaPetKind { QuotaPetKind.effective(enabled: petEnabled, raw: petRaw) }
+    @AppStorage(QuotaPetEffect.defaultsKey) private var effectRaw = QuotaPetEffect.soft.rawValue
+    private var pet: QuotaPetKind { QuotaPetKind.choice(petRaw) }
     private var size: NotchUISize { NotchUISize.stored(sizeRaw, legacyComfortable: false) }
     var body: some View {
         Form {
@@ -75,26 +75,26 @@ struct QuotaPreferences: View {
                     }
                 }
             }
-            Toggle("宠物模式", isOn: $petEnabled)
-            if petEnabled {
-                SettingsField("宠物") {
-                    Picker("宠物", selection: Binding(get: { QuotaPetKind.choice(petRaw).rawValue }, set: { petRaw = $0 })) {
-                        Text("麻薯 · 猫").tag(QuotaPetKind.mochi.rawValue)
-                        Text("比特 · 机器人").tag(QuotaPetKind.bit.rawValue)
-                        Text("果冻 · 史莱姆").tag(QuotaPetKind.jelly.rawValue)
-                    }
+            SettingsField("宠物") {
+                Picker("宠物", selection: Binding(get: { QuotaPetKind.choice(petRaw).rawValue }, set: { petRaw = $0 })) {
+                    Text("麻薯 · 猫").tag(QuotaPetKind.mochi.rawValue)
+                    Text("比特 · 机器人").tag(QuotaPetKind.bit.rawValue)
+                    Text("果冻 · 史莱姆").tag(QuotaPetKind.jelly.rawValue)
                 }
-                SettingsField("宠物配色") {
-                    Picker("宠物配色", selection: $tintRaw) {
-                        Text("原色").tag(QuotaPetTint.original.rawValue)
-                        Text("按服务着色").tag(QuotaPetTint.service.rawValue)
-                    }
-                }
-                petPreview
-            } else {
-                Toggle("圆环中显示剩余百分比", isOn: Binding(get: { store.pins.showsNumbers },
-                    set: { value in store.updatePins { $0.showsNumbers = value } }))
             }
+            SettingsField("宠物配色") {
+                Picker("宠物配色", selection: $tintRaw) {
+                    Text("原色").tag(QuotaPetTint.original.rawValue)
+                    Text("按服务着色").tag(QuotaPetTint.service.rawValue)
+                }
+            }
+            SettingsField("提示效果") {
+                Picker("提示效果", selection: $effectRaw) {
+                    Text("柔光").tag(QuotaPetEffect.soft.rawValue)
+                    Text("像素").tag(QuotaPetEffect.pixel.rawValue)
+                }
+            }
+            petPreview
             sizeRow
         }
     }
@@ -125,6 +125,9 @@ struct QuotaPreferences: View {
             (.idle, 72, "充足"), (.working, 64, "正在消耗"), (.pacing, 41, "用得偏快"),
             (.low, 12, "低于 20%"), (.empty, 0, "用完"), (.refilled, 100, "刚重置")
         ]
+        let taskSamples: [(QuotaPetMood, QuotaPetSignal, LocalizedStringKey)] = [
+            (.working, .running, "任务运行中"), (.needsYou, .waiting, "等你批准"), (.celebrate, .none, "任务完成")
+        ]
         return VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 6) {
                 ForEach(Array(samples.enumerated()), id: \.offset) { _, sample in
@@ -138,7 +141,20 @@ struct QuotaPreferences: View {
                     }
                 }
             }
-            Text("宠物只反映额度：身上的计量就是剩余额度。用完前会提醒，额度恢复时开心一下。")
+            HStack(spacing: 6) {
+                ForEach(Array(taskSamples.enumerated()), id: \.offset) { _, sample in
+                    VStack(spacing: 4) {
+                        QuotaPetView(kind: pet, size: .widget, provider: provider,
+                                     window: QuotaWindow(id: "preview", title: "", remainingPercent: 64, resetsAt: nil),
+                                     stale: false, scale: 2, fixedMood: sample.0, fixedSignal: sample.1)
+                            .frame(width: 48, height: 40)
+                            .padding(.horizontal, 21).padding(.vertical, 6)
+                            .background(.black, in: RoundedRectangle(cornerRadius: 8))
+                        Text(sample.2).font(.caption2).foregroundStyle(.secondary).lineLimit(1)
+                    }
+                }
+            }
+            Text("身上的计量就是剩余额度。任务运行时周围有淡淡的波纹，等你批准时会闪烁；播放音乐时，任务显示在宠物右下角。")
                 .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
         }
         .padding(.vertical, 4)

@@ -6,41 +6,12 @@ extension QuotaProvider {
     var accent: Color { brand.color }
 }
 
-/// A missing reading is an empty track and a dash, never a full or zero quota claim.
-struct QuotaRing: View {
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    let provider: QuotaProvider
-    let percent: Double?
-    var stale = false
-    var size: CGFloat = 42
-
-    var body: some View {
-        let ink = QuotaWarningInk(accent: provider.accent, percent: percent, stale: stale)
-        ZStack {
-            Circle().stroke(ink.track, lineWidth: size > 30 ? 3 : 2)
-                .shadow(color: ink.warning.exhausted ? ink.halo : .clear, radius: 1.5)
-            if let percent {
-                Circle().trim(from: 0, to: ink.warning.fraction)
-                    .stroke(ink.color,
-                            style: StrokeStyle(lineWidth: size > 30 ? 3 : 2, lineCap: .round))
-                    .rotationEffect(.degrees(-90))
-                    .shadow(color: ink.halo, radius: 1.5)
-            }
-            QuotaBrandMark(brand: provider.brand, muted: stale)
-                .frame(width: size * 0.48, height: size * 0.48)
-        }
-        .frame(width: size, height: size)
-        .animation(reduceMotion ? nil : .easeInOut(duration: 0.35), value: percent)
-        .accessibilityHidden(true)
-    }
-}
-
 @MainActor
 struct QuotaNotchView: View {
     @ObservedObject private var store = QuotaNotchStore.shared
     @ObservedObject private var claude = ClaudeConnection.shared
     @AppStorage(NotchUISize.defaultsKey) private var sizeRaw = NotchUISize.current.rawValue
-    @AppStorage(QuotaPetKind.enabledKey) private var petEnabled = true
+    @AppStorage(QuotaPetKind.defaultsKey) private var petRaw = QuotaPetKind.defaultKind.rawValue
     private var provider: QuotaProvider { store.selectedProvider }
 
     var body: some View {
@@ -160,12 +131,10 @@ struct QuotaNotchView: View {
                 Text("正在刷新…").font(.system(size: 9)).foregroundStyle(.secondary)
             }
             Menu {
-                Toggle("宠物模式", isOn: $petEnabled)
-                if !petEnabled {
-                    Toggle("圆环中显示剩余百分比", isOn: Binding(
-                        get: { store.pins.showsNumbers },
-                        set: { value in store.updatePins { $0.showsNumbers = value } }
-                    ))
+                Picker("宠物", selection: Binding(get: { QuotaPetKind.choice(petRaw).rawValue }, set: { petRaw = $0 })) {
+                    Text("麻薯 · 猫").tag(QuotaPetKind.mochi.rawValue)
+                    Text("比特 · 机器人").tag(QuotaPetKind.bit.rawValue)
+                    Text("果冻 · 史莱姆").tag(QuotaPetKind.jelly.rawValue)
                 }
                 Picker("大小", selection: $sizeRaw) {
                     Text("小").tag(NotchUISize.small.rawValue)
@@ -201,10 +170,12 @@ struct QuotaNotchView: View {
     }
 }
 
-/// One quota selection shares the cutout with music and temporary task activity.
+/// The closed notch: the quota pet with its numbers, or with the album while music plays.
+/// Tasks show beside the pet and never swap modules, so the notch width stays put.
 @MainActor
 struct QuotaPinnedWings: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.displayScale) private var displayScale
     @ObservedObject private var store = QuotaNotchStore.shared
     @ObservedObject private var music = MusicManager.shared
     @ObservedObject private var activity = AgentActivityStore.shared
@@ -214,133 +185,97 @@ struct QuotaPinnedWings: View {
     let albumArtNamespace: Namespace.ID
     let onSelect: (QuotaProvider) -> Void
     let onMusic: () -> Void
-    @Environment(\.displayScale) private var displayScale
     @AppStorage(NotchUISize.defaultsKey) private var sizeRaw = NotchUISize.current.rawValue
     @AppStorage(QuotaPetKind.defaultsKey) private var petRaw = QuotaPetKind.defaultKind.rawValue
-    @AppStorage(QuotaPetKind.enabledKey) private var petEnabled = true
     @AppStorage(QuotaPetTint.defaultsKey) private var tintRaw = QuotaPetTint.original.rawValue
     private var size: NotchUISize { NotchUISize.stored(sizeRaw, legacyComfortable: false) }
     private var iconSize: CGFloat { QuotaCompactMetrics.iconSize(height: height, size: size) }
-    private var pet: QuotaPetKind { QuotaPetKind.effective(enabled: petEnabled, raw: petRaw) }
-    /// With a pet and nothing else in the notch, the pet takes the left wing and the
-    /// percentage the right one.
-    private var petWithPercent: Bool { pet != .off && !activity.showAccessory && !showsMusic }
-    /// Quota alone in the notch, with or without a pet: both wings take the same width.
-    private var quotaOnly: Bool { !activity.showAccessory && !showsMusic }
-    private var percentWidth: CGFloat { max(iconSize, (size.percentFont * 2.4).rounded()) }
-    /// Music, quota and tasks share one wing. The task widget then takes a slot as wide as
-    /// the pet, so swapping quota and tasks never changes the notch width.
-    private var sharedWing: Bool { showsMusic && activity.showAccessory }
+    private var pet: QuotaPetKind { QuotaPetKind.choice(petRaw) }
     private var petScale: CGFloat {
         QuotaPetArt.pixelScale(size: size, notchHeight: height, displayScale: displayScale)
     }
-    /// Width of the quota module. The ring keeps the pet's slot too, so switching pet mode
-    /// on or off never changes the notch width.
+    /// Width of the pet at its pixel scale.
     private var quotaWidth: CGFloat { petScale > 1 ? 20 * petScale : iconSize }
-    private var pairedWidth: CGFloat { max(quotaWidth, percentWidth) }
-
-    private var tasksExpanded: Bool { showsMusic && activity.compactExpanded && activity.showAccessory }
-    private var metrics: NotchModuleMetrics { NotchModuleMetrics(widgetWidth: iconSize) }
-    /// Both wings match when the pet and percentage share the notch, keeping the camera centered.
-    private var leftWidth: CGFloat {
-        // The album keeps its size but takes a slot as wide as the pet on the right.
-        if showsMusic { return quotaWidth }
-        if quotaOnly { return pairedWidth }
-        return quotaWidth
-    }
-    /// Everything in the right wing: the shared quota/task pair, the task slot, or quota alone.
-    private var rightWingWidth: CGFloat {
-        if sharedWing { return quotaWidth + metrics.additionalWidth }
-        return activity.showAccessory ? quotaWidth : rightPrimaryWidth
-    }
-    private var rightPrimaryWidth: CGFloat {
-        guard activity.showAccessory else { return quotaOnly ? pairedWidth : quotaWidth }
-        return showsMusic ? (tasksExpanded ? metrics.minimalWidth : quotaWidth) : 0
-    }
+    /// The percentage cell also carries the quota bar and up to three task dots.
+    private var percentWidth: CGFloat { max(iconSize, (size.percentFont * 3).rounded()) }
+    /// Both wings take the same slot so the camera stays centered.
+    private var slot: CGFloat { showsMusic ? quotaWidth : max(quotaWidth, percentWidth) }
+    /// Tasks are shown only while task tracking is on and something is visible.
+    private var taskStates: [AgentRunState] { activity.showAccessory ? activity.attention.states : [] }
+    private var petTasks: QuotaPetTasks { QuotaPetTasks(activity.attention, enabled: activity.enabled) }
+    private var needsYou: Bool { activity.enabled && activity.attention.needsAction }
 
     var body: some View {
         if let pin = store.activePin, let provider = pin.provider {
             HStack(spacing: QuotaCompactMetrics.spacing) {
                 Button {
                     if showsMusic { onMusic() }
+                    else if needsYou { openTasks() }
                     else { onSelect(provider) }
                 } label: {
                     Group {
-                        if showsMusic { albumWithActivity }
-                        else if activity.showAccessory || pet != .off { quotaIndicator(pin, provider: provider) }
-                        else {
-                            QuotaBrandMark(brand: provider.brand)
-                                .frame(width: iconSize, height: iconSize)
-                                .frame(width: quotaWidth)
-                                .auditNotchModule("quota")
-                        }
+                        if showsMusic { album }
+                        else { petView(pin, provider: provider) }
                     }
-                    .frame(width: leftWidth, height: height, alignment: showsMusic ? .trailing : .center)
+                    .frame(width: slot, height: height, alignment: showsMusic ? .trailing : .center)
                     .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
-                .help(showsMusic ? QuotaText.localized("打开音乐") : QuotaText.format("打开 %@ 额度", provider.title))
+                .help(showsMusic ? QuotaText.localized("打开音乐") : "\(provider.title) · \(reading(for: pin))")
                 .accessibilityLabel(showsMusic ? QuotaText.localized("打开音乐") : QuotaText.format("打开 %@ 额度", provider.title))
+                .catWing(.left, occupied: slot, height: height, widgetWidth: slot)
 
-                // The walking cat's room is measured from each wing's actual slot, so wider slots keep
-                // the same extra space for it.
-                .catWing(.left, occupied: leftWidth, height: height, widgetWidth: leftWidth)
                 Color.clear.frame(width: centerWidth, height: height).auditNotchFrame("camera")
 
-                AgentCompactDock(primaryWidth: rightPrimaryWidth, height: height, anchorWidth: leftWidth, widgetWidth: iconSize,
-                                 slotWidth: quotaWidth, open: {
-                    BoringViewCoordinator.shared.currentView = .activity
-                    // The hosting notch commits its open state through the action below.
-                    NotificationCenter.default.post(name: .agentOpenNotch, object: nil)
-                }) {
-                    if !activity.showAccessory || showsMusic {
-                        Button {
-                            onSelect(provider)
-                        } label: {
-                            Group {
-                                if tasksExpanded { minimalQuota(pin, provider: provider) }
-                                else if petWithPercent {
-                                    QuotaPetPercent(percent: store.window(for: pin)?.remainingPercent, stale: store.isStale(provider),
-                                                    kind: pet, provider: provider, tint: QuotaPetTint(rawValue: tintRaw) ?? .original,
-                                                    fontSize: size.percentFont)
-                                        .frame(width: rightPrimaryWidth, height: height)
-                                } else { quotaIndicator(pin, provider: provider) }
-                            }
-                            .frame(width: rightPrimaryWidth, height: height)
-                            .contentShape(Rectangle())
+                Button {
+                    if needsYou { openTasks() } else { onSelect(provider) }
+                } label: {
+                    Group {
+                        if showsMusic {
+                            petView(pin, provider: provider)
+                                .overlay(alignment: .bottomTrailing) {
+                                    if !taskStates.isEmpty {
+                                        QuotaPetTaskBadge(states: taskStates)
+                                            .auditNotchModule("tasks", mode: "badge")
+                                    }
+                                }
+                        } else {
+                            QuotaPetSummary(percent: store.window(for: pin)?.remainingPercent, stale: store.isStale(provider),
+                                            kind: pet, provider: provider, tint: QuotaPetTint(rawValue: tintRaw) ?? .original,
+                                            fontSize: size.percentFont, tasks: taskStates)
+                                .auditNotchModule("summary")
                         }
-                        .buttonStyle(.plain)
-                        .help("\(provider.title) · \(reading(for: pin))")
-                        .accessibilityLabel("\(provider.title) \(store.window(for: pin)?.localizedTitle ?? QuotaText.localized("额度"))")
-                        .accessibilityValue(reading(for: pin))
                     }
+                    .frame(width: slot, height: height)
+                    .contentShape(Rectangle())
                 }
-                .catWing(.right, occupied: rightWingWidth, height: height, widgetWidth: sharedWing ? quotaWidth : rightWingWidth)
+                .buttonStyle(.plain)
+                .help("\(provider.title) · \(reading(for: pin))")
+                .accessibilityLabel("\(provider.title) \(store.window(for: pin)?.localizedTitle ?? QuotaText.localized("额度"))")
+                .accessibilityValue(reading(for: pin))
+                .catWing(.right, occupied: slot, height: height, widgetWidth: slot)
             }
             .frame(height: height)
             .animation(reduceMotion ? nil : .smooth(duration: 0.32), value: showsMusic)
-            .animation(reduceMotion ? nil : .smooth(duration: 0.32), value: tasksExpanded)
         }
     }
 
-    private func minimalQuota(_ pin: QuotaPin, provider: QuotaProvider) -> some View {
-        NotchMinimalIcon(metrics: metrics) {
-            if pet != .off {
-                QuotaPetView(kind: pet, size: .minimal, provider: provider, window: store.window(for: pin),
-                             stale: store.isStale(provider))
-            } else {
-                MinimalQuotaGlyph(brand: provider.brand,
-                                  percent: store.window(for: pin)?.remainingPercent,
-                                  stale: store.isStale(provider), size: metrics.minimalIconSize)
-            }
-        }
-        .frame(width: metrics.minimalWidth, height: height)
-        .auditNotchModule("quota", mode: "minimal")
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel(provider.title + " · " + reading(for: pin))
+    private func openTasks() {
+        activity.notchReadEnabled = true
+        BoringViewCoordinator.shared.currentView = .activity
+        // The hosting notch commits its open state through the action below.
+        NotificationCenter.default.post(name: .agentOpenNotch, object: nil)
     }
 
-    private var albumWithActivity: some View {
+    private func petView(_ pin: QuotaPin, provider: QuotaProvider) -> some View {
+        // Very short notches use the 16pt head-only sprite.
+        QuotaPetView(kind: pet, size: iconSize >= 18 || petScale > 1 ? .widget : .minimal, provider: provider,
+                     window: store.window(for: pin), stale: store.isStale(provider), scale: petScale, tasks: petTasks)
+            .frame(width: quotaWidth, height: max(iconSize, 16 * petScale))
+            .auditNotchModule("quota")
+    }
+
+    private var album: some View {
         Image(nsImage: music.albumArt)
             .resizable().scaledToFill()
             .frame(width: iconSize, height: iconSize)
@@ -348,18 +283,15 @@ struct QuotaPinnedWings: View {
             .matchedGeometryEffect(id: "albumArt", in: albumArtNamespace)
             .auditNotchModule("music").auditNotchFrame("album")
             .overlay(alignment: .bottomTrailing) {
-                Group {
-                        AudioSpectrumView(isPlaying: $music.isPlaying)
-                            .frame(width: 16, height: 14)
-                            .scaleEffect(0.45)
-                            .frame(width: 9, height: 7)
-                }
-                .foregroundStyle(.white)
-                .frame(width: 9, height: 7)
-                .padding(1)
-                .background(.black.opacity(0.78), in: RoundedRectangle(cornerRadius: 3))
-                .allowsHitTesting(false)
-                .accessibilityHidden(true)
+                AudioSpectrumView(isPlaying: $music.isPlaying)
+                    .frame(width: 16, height: 14)
+                    .scaleEffect(0.45)
+                    .frame(width: 9, height: 7)
+                    .foregroundStyle(.white)
+                    .padding(1)
+                    .background(.black.opacity(0.78), in: RoundedRectangle(cornerRadius: 3))
+                    .allowsHitTesting(false)
+                    .accessibilityHidden(true)
             }
             .clipped()
     }
@@ -368,50 +300,5 @@ struct QuotaPinnedWings: View {
         guard let window = store.window(for: pin) else { return QuotaText.localized("额度未知") }
         let stale = pin.provider.map { store.isStale($0) } ?? true
         return QuotaText.localized("剩余") + " " + QuotaText.percent(window.remainingPercent) + "%" + (stale ? " · " + QuotaText.localized("旧数据") : "")
-    }
-
-    @ViewBuilder private func quotaIndicator(_ pin: QuotaPin, provider: QuotaProvider) -> some View {
-        if pet != .off {
-            // Drawn at one point per pixel and allowed to overhang the slot slightly; very short
-            // notches use the 16pt head-only sprite.
-            QuotaPetView(kind: pet, size: iconSize >= 18 || petScale > 1 ? .widget : .minimal, provider: provider,
-                         window: store.window(for: pin), stale: store.isStale(provider), scale: petScale)
-                .frame(width: quotaWidth, height: max(iconSize, 16 * petScale))
-                .auditNotchModule("quota")
-        } else {
-            CompactQuotaGauge(brand: provider.brand,
-                              percent: store.window(for: pin)?.remainingPercent,
-                              stale: store.isStale(provider),
-                              showsBrand: showsMusic || activity.showAccessory, showsNumbers: store.pins.showsNumbers, size: iconSize)
-                .frame(width: quotaWidth)
-                .auditNotchModule("quota")
-        }
-    }
-}
-
-/// A brand-centered quota symbol; the arc communicates remaining quota without numeric text.
-struct MinimalQuotaGlyph: View {
-    let brand: QuotaBrand
-    let percent: Double?
-    var stale = false
-    let size: CGFloat
-    @Environment(\.accessibilityReduceMotion) private var reduced
-    var body: some View {
-        let valid = percent?.isFinite == true
-        let ink = QuotaWarningInk(accent: brand.color, percent: percent, stale: stale)
-        let stroke: CGFloat = 1.1
-        ZStack {
-            Circle().inset(by: stroke / 2 + 0.25)
-                .stroke(ink.track, style: StrokeStyle(lineWidth: stroke, dash: !valid || stale ? [1.3, 1.6] : []))
-            if valid {
-                Circle().inset(by: stroke / 2 + 0.25).trim(from: 0, to: ink.warning.fraction)
-                    .stroke(ink.color, style: StrokeStyle(lineWidth: stroke, lineCap: .round))
-                    .rotationEffect(.degrees(-90))
-            }
-            QuotaBrandMark(brand: brand, muted: stale || !valid)
-                .frame(width: size * 0.48, height: size * 0.48)
-        }.frame(width: size, height: size)
-        .animation(reduced ? nil : .easeInOut(duration: 0.3), value: percent)
-        .accessibilityHidden(true)
     }
 }

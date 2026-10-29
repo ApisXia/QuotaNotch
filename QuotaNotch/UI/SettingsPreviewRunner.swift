@@ -17,10 +17,9 @@ struct SettingsPreviewRunner {
         let language = UserDefaults.standard.stringArray(forKey: "AppleLanguages")?.first ?? "en"
         let output = URL(fileURLWithPath: "build/Settings-previews/\(language)")
         try FileManager.default.createDirectory(at: output, withIntermediateDirectories: true)
-        try NotchGestureVerification.run()
-        // Fixtures start at the standard size with the default quota pet.
+        // Fixtures start at the standard size with the default pet.
         UserDefaults.standard.set(NotchUISize.standard.rawValue, forKey: NotchUISize.defaultsKey)
-        UserDefaults.standard.set(true, forKey: QuotaPetKind.enabledKey)
+        UserDefaults.standard.removeObject(forKey: QuotaPetKind.defaultsKey)
         // Old manual sizing preferences must no longer affect the actual screen layout.
         UserDefaults.standard.set(15, forKey: "notchHeight")
         UserDefaults.standard.set(10, forKey: "nonNotchHeight")
@@ -176,44 +175,28 @@ struct SettingsPreviewRunner {
         noDetail.waitingCallID = "question"
         precondition(AgentText.context(noDetail, now: now) == AgentText.t("等待回答", "Awaiting answer"))
         precondition(AgentText.relativeTime(now.addingTimeInterval(-720), now: now) == AgentText.t("12 分钟前", "12m ago"))
-        for height: CGFloat in [24, 32, 38] {
-            let metrics = NotchModuleMetrics(widgetWidth: QuotaCompactMetrics.iconSize(height: height))
-            let samples: [Double?] = [nil, 0, 10, 42, 100]
-            let states: [AgentRunState] = [.unknown, .failed, .waiting, .running, .completed]
-            try capture(HStack(spacing: 16) {
-                ForEach(0..<samples.count, id: \.self) { index in
-                    HStack(spacing: 8) {
-                        NotchMinimalIcon(metrics: metrics) {
-                            MinimalQuotaGlyph(brand: .claude, percent: samples[index], size: metrics.minimalIconSize)
-                        }
-                        NotchMinimalIcon(metrics: metrics) {
-                            AgentPaperGlyph(state: states[index])
-                                .scaleEffect(metrics.minimalIconSize / 16)
-                                .frame(width: metrics.minimalIconSize, height: metrics.minimalIconSize)
-                        }
-                    }
+        // The pet's summary cell and its music-time task tag, at four times the notch size.
+        let summaries: [(Double?, [AgentRunState])] = [
+            (72, []), (41, [.running]), (18, [.waiting, .running, .completed]),
+            (64, [.waiting, .running, .running, .completed, .failed]), (nil, [])
+        ]
+        try capture(VStack(alignment: .leading, spacing: 16) {
+            HStack(spacing: 14) {
+                ForEach(Array(summaries.enumerated()), id: \.offset) { _, sample in
+                    QuotaPetSummary(percent: sample.0, stale: false, kind: .bit, provider: .claude, tint: .original,
+                                    fontSize: 12, tasks: sample.1)
+                        .frame(width: 36, height: 32).scaleEffect(3).frame(width: 120, height: 100)
+                        .background(.black, in: RoundedRectangle(cornerRadius: 10))
                 }
-            }.foregroundStyle(.white).frame(maxWidth: .infinity, maxHeight: .infinity)
-                .background(.black).preferredColorScheme(.dark), width: 280,
-                name: "Minimal-graphics-\(Int(height))", output: output, height: height)
-            try capture(HStack(spacing: 24) {
-                ForEach([QuotaProvider.claude, .codex], id: \.self) { provider in
-                    HStack(spacing: 8) {
-                        MinimalQuotaGlyph(brand: provider.brand, percent: 65, size: metrics.minimalIconSize)
-                        MinimalQuotaGlyph(brand: provider.brand, percent: 65, stale: true, size: metrics.minimalIconSize)
-                    }
-                }
-            }.frame(maxWidth: .infinity, maxHeight: .infinity).background(.black).preferredColorScheme(.dark),
-                width: 220, name: "Minimal-brands-\(Int(height))", output: output, height: height)
-            for expanded in [false, true] {
-                activity.compactExpanded = expanded
-                try capture(AgentCompactDock(primaryWidth: 24, height: height, open: {}) {
-                    Text("62%").font(.system(size: 10)).foregroundStyle(.white)
-                }.padding(.horizontal, 14).background(.black).preferredColorScheme(.dark), width: 180,
-                    name: "Tasks-dock-\(Int(height))-\(expanded)", output: output, height: height)
             }
-        }
-        activity.compactExpanded = false
+            HStack(spacing: 14) {
+                ForEach([AgentRunState.running, .waiting, .completed, .failed], id: \.self) { state in
+                    QuotaPetTaskBadge(states: [state]).scaleEffect(4).frame(width: 80, height: 60)
+                        .background(.black, in: RoundedRectangle(cornerRadius: 10))
+                }
+            }
+        }.padding(16).background(Color(white: 0.16)).preferredColorScheme(.dark), width: 700,
+            name: "Quota-pet-summary", output: output, height: 280)
         activity.configurePreview([])
         try capture(AgentActivityView(), width: 760, name: "Tasks-empty", output: output)
         print("Rendered real settings and task monitor in English/Chinese, narrow/wide and light/dark layouts: \(language)")
@@ -353,16 +336,6 @@ struct SettingsPreviewRunner {
         activity.configurePreview(fixtures)
         activity.notchReadEnabled = false
         vm.close()
-        var compactWidths: [String: Int] = [:]
-        var combinedEdges: [String: (Int, Int)] = [:]
-        func blackEdges(_ bitmap: NSBitmapImageRep) -> (Int, Int) {
-            let row = max(1, Int(5 * CGFloat(bitmap.pixelsHigh) / host.bounds.height))
-            let points = (0..<bitmap.pixelsWide).filter { x in
-                guard let c = bitmap.colorAt(x: x, y: row)?.usingColorSpace(.deviceRGB) else { return false }
-                return max(c.redComponent, max(c.greenComponent, c.blueComponent)) < 0.06
-            }
-            return (points.first ?? 0, points.last ?? 0)
-        }
         func blackWidth(_ bitmap: NSBitmapImageRep) -> Int {
             let row = max(1, Int(5 * CGFloat(bitmap.pixelsHigh) / host.bounds.height))
             let points = (0..<bitmap.pixelsWide).filter { x in
@@ -371,124 +344,96 @@ struct SettingsPreviewRunner {
             }
             return (points.last ?? 0) - (points.first ?? 0)
         }
-        // Expectations describe presence, not the implementation's compactExpanded flag.
+        func snapshot(_ name: String) throws -> NSBitmapImageRep {
+            let bitmap = host.bitmapImageRepForCachingDisplay(in: host.bounds)!
+            host.cacheDisplay(in: host.bounds, to: bitmap)
+            try bitmap.representation(using: .png, properties: [:])!.write(to: output.appendingPathComponent(name))
+            let color = bitmap.colorAt(x: bitmap.pixelsWide / 2, y: 2)!.usingColorSpace(.deviceRGB)!
+            precondition(max(color.redComponent, max(color.greenComponent, color.blueComponent)) < 0.06, "Closed notch detached in \(name)")
+            return bitmap
+        }
+        /// The pet never swaps with tasks: tasks sit beside it (dots) or on it (a tag with music),
+        /// and are hidden whenever quota is.
+        func expectedModules(quota: Bool, music: Bool, tasks: Bool) -> [String: String] {
+            var expected: [String: String] = [:]
+            if music { expected["music"] = "widget" }
+            if quota {
+                expected["quota"] = "widget"
+                if !music { expected["summary"] = "widget" }
+                if music && tasks { expected["tasks"] = "badge" }
+            }
+            return expected
+        }
+        func verifyPet(_ label: String, height: CGFloat, size: NotchUISize, quota: Bool) {
+            let widget = QuotaCompactMetrics.iconSize(height: height, size: quota ? size : .standard)
+            verifyGeometry(label, widget: widget, quota: quotaWidth(height: height, size: size, shared: false))
+            guard let camera = renderedFrames["camera"] else { return }
+            for name in ["summary", "tasks", "music"] {
+                if let frame = renderedFrames[name] {
+                    verifyPresentation(frame.maxX <= camera.minX + 1 || frame.minX >= camera.maxX - 1,
+                                       "\(name) overlaps physical notch in \(label)")
+                }
+            }
+        }
         let cases: [(name: String, quota: Bool, music: Bool, tasks: Bool)] = [
-            ("quota", true, false, true), ("combined", true, true, true),
-            ("music", false, true, true), ("tasks", false, false, true),
-            ("quota-only", true, false, false), ("music-only", false, true, false),
-            ("quota-music", true, true, false), ("empty", false, false, false)
+            ("quota", true, false, false), ("quota-tasks", true, false, true),
+            ("music", true, true, false), ("music-tasks", true, true, true),
+            ("music-only", false, true, false), ("music-only-tasks", false, true, true),
+            ("empty", false, false, false), ("tasks-only", false, false, true)
         ]
-        for scenario in cases {
-            let layout = scenario.name
-            let suffix = layout == "quota" ? "" : "-" + layout
-            QuotaNotchStore.shared.configureSettingsPreview(paused: !scenario.quota)
-            MusicManager.shared.isPlaying = scenario.music
-            MusicManager.shared.isPlayerIdle = !scenario.music
-            activity.configurePreview(scenario.tasks ? fixtures : [])
-            coordinator.musicLiveActivityEnabled = true
-        for headerHeight: CGFloat in [24, 32, 38] {
-            vm.closedNotchSize.height = headerHeight
-            for expanded in [false, true] {
-                AgentActivityStore.shared.compactExpanded = expanded
-                settle(); host.layoutSubtreeIfNeeded()
-                let shared = scenario.quota && scenario.music && scenario.tasks
-                var expected: [String: String] = [:]
-                if scenario.quota { expected["quota"] = shared && expanded ? "minimal" : "widget" }
-                if scenario.music { expected["music"] = "widget" }
-                if scenario.tasks { expected["task"] = shared && !expanded ? "minimal" : "widget" }
-                if shared { expected["divider"] = "switchable" }
-                if scenario.tasks && !scenario.quota && !scenario.music { expected["task-summary"] = "widget" }
-                verifyPresentation(renderedModules == expected,
-                    "Wrong presentation in \(layout), height \(headerHeight), selection \(expanded): \(renderedModules), expected \(expected)")
-                verifyGeometry("\(layout)-\(headerHeight)-\(expanded)", widget: QuotaCompactMetrics.iconSize(height: headerHeight),
-                               quota: quotaWidth(height: headerHeight, size: .standard, shared: scenario.music && scenario.tasks))
-                modeAudit.append(["case": layout, "height": headerHeight, "taskSelected": expanded, "rendered": renderedModules])
-                let bitmap = host.bitmapImageRepForCachingDisplay(in: host.bounds)!
-                host.cacheDisplay(in: host.bounds, to: bitmap)
-                try bitmap.representation(using: .png, properties: [:])!.write(to: output.appendingPathComponent("Notch-closed-\(Int(headerHeight))-\(expanded)\(suffix).png"))
-                let color = bitmap.colorAt(x: bitmap.pixelsWide / 2, y: 2)!.usingColorSpace(.deviceRGB)!
-                precondition(max(color.redComponent, max(color.greenComponent, color.blueComponent)) < 0.06, "Closed notch detached")
-                if layout == "combined" {
-                    combinedEdges["\(Int(headerHeight))-\(expanded)"] = blackEdges(bitmap)
-                }
-                if layout == "tasks" {
-                    let scale = CGFloat(bitmap.pixelsWide) / host.bounds.width
-                    let budget = NotchModuleMetrics(widgetWidth: QuotaCompactMetrics.iconSize(height: headerHeight)).additionalWidth
-                    let widgetPairWidth = compactWidths["music" + String(Int(headerHeight))]!
-                    verifyPresentation(CGFloat(blackWidth(bitmap) - widgetPairWidth) <= budget * scale + 2,
-                                       "Task-only list exceeded the widget plus minimal width budget")
-                }
-                if scenario.tasks {
-                    let key = layout + String(Int(headerHeight))
-                    if !expanded { compactWidths[key] = blackWidth(bitmap) }
-                    else { precondition(abs(blackWidth(bitmap) - compactWidths[key]!) <= 1, "Swapping widget/minimal changed the total width") }
-                }
-            }
-            if layout == "combined" {
-                activity.configurePreview([]); activity.compactExpanded = false
-                settle(); host.layoutSubtreeIfNeeded()
-                let baseline = host.bitmapImageRepForCachingDisplay(in: host.bounds)!
-                host.cacheDisplay(in: host.bounds, to: baseline)
-                let scale = CGFloat(baseline.pixelsWide) / host.bounds.width
-                let budget = NotchModuleMetrics(widgetWidth: QuotaCompactMetrics.iconSize(height: headerHeight)).additionalWidth
-                let baseEdges = blackEdges(baseline)
-                for selection in [false, true] {
-                    let edges = combinedEdges["\(Int(headerHeight))-\(selection)"]!
-                    verifyPresentation(abs(edges.0 - baseEdges.0) <= 1,
-                        "Adding minimal moved the music-side edge at height \(headerHeight): \(edges.0) vs \(baseEdges.0)")
-                    verifyPresentation(abs(CGFloat(edges.1 - baseEdges.1) - budget * scale) <= 2,
-                        "Minimal did not expand only the right side at height \(headerHeight)")
-                }
-                precondition(CGFloat(compactWidths[layout + String(Int(headerHeight))]! - blackWidth(baseline)) <= budget * scale + 2,
-                             "Minimal exceeded its fixed additional-width budget")
-                try baseline.representation(using: .png, properties: [:])!.write(to: output.appendingPathComponent("Notch-closed-\(Int(headerHeight))-widget-only.png"))
-                activity.configurePreview(fixtures)
-            }
-        }
-        }
-        QuotaNotchStore.shared.configureSettingsPreview(paused: false)
-        activity.configurePreview(fixtures)
-        for headerHeight: CGFloat in [24, 32, 38] {
-            vm.closedNotchSize.height = headerHeight
-            for expanded in [false, true] {
-                activity.compactExpanded = expanded
-                for playback in ["playing", "paused", "idle", "resumed"] {
-                    MusicManager.shared.isPlaying = playback == "playing" || playback == "resumed"
-                    MusicManager.shared.isPlayerIdle = playback == "idle"
-                    settle(); host.layoutSubtreeIfNeeded()
-                    let expected = playback == "idle"
-                        ? ["quota": "widget", "task": "widget"]
-                        : ["music": "widget", "quota": expanded ? "minimal" : "widget",
-                           "task": expanded ? "widget" : "minimal", "divider": "switchable"]
-                    verifyPresentation(renderedModules == expected, "Playback transition \(playback) retained the wrong presentation: \(renderedModules)")
-                    verifyGeometry("\(playback)-\(headerHeight)-\(expanded)", widget: QuotaCompactMetrics.iconSize(height: headerHeight),
-                                   quota: quotaWidth(height: headerHeight, size: .standard, shared: playback != "idle"))
-                    modeAudit.append(["case": playback, "height": headerHeight, "taskSelected": expanded, "rendered": renderedModules])
-                    let bitmap = host.bitmapImageRepForCachingDisplay(in: host.bounds)!
-                    host.cacheDisplay(in: host.bounds, to: bitmap)
-                    try bitmap.representation(using: .png, properties: [:])!.write(to: output.appendingPathComponent("Notch-transition-\(Int(headerHeight))-\(expanded)-\(playback).png"))
-                }
-            }
-        }
-        for size in [NotchUISize.large, .small, .standard] {
+        let pairs = [("quota", "quota-tasks"), ("music", "music-tasks"),
+                     ("music-only", "music-only-tasks"), ("empty", "tasks-only")]
+        coordinator.musicLiveActivityEnabled = true
+        for size in [NotchUISize.standard, .large, .small] {
             UserDefaults.standard.set(size.rawValue, forKey: NotchUISize.defaultsKey)
             for headerHeight: CGFloat in [24, 32, 38] {
                 vm.closedNotchSize.height = headerHeight
-                for scenario in cases.reversed() {
+                var widths: [String: Int] = [:]
+                for scenario in cases {
                     QuotaNotchStore.shared.configureSettingsPreview(paused: !scenario.quota)
                     MusicManager.shared.isPlaying = scenario.music
                     MusicManager.shared.isPlayerIdle = !scenario.music
                     activity.configurePreview(scenario.tasks ? fixtures : [])
-                    for expanded in [true, false] {
-                        activity.compactExpanded = expanded
+                    settle(); host.layoutSubtreeIfNeeded()
+                    let label = "\(scenario.name)-\(Int(headerHeight))-\(size.rawValue)"
+                    let expected = expectedModules(quota: scenario.quota, music: scenario.music, tasks: scenario.tasks)
+                    verifyPresentation(renderedModules == expected, "Wrong presentation in \(label): \(renderedModules), expected \(expected)")
+                    verifyPet(label, height: headerHeight, size: size, quota: scenario.quota)
+                    modeAudit.append(["case": scenario.name, "height": headerHeight, "size": size.rawValue, "rendered": renderedModules])
+                    let bitmap = try snapshot("Notch-closed-\(label).png")
+                    widths[scenario.name] = blackWidth(bitmap)
+                    if scenario.name == "music" {
+                        QuotaNotchStore.shared.setPreviewPeek(QuotaNotchStore.peekText(provider: .claude,
+                            window: QuotaWindow(id: "five_hour", title: "5 小时", remainingPercent: 18,
+                                                resetsAt: Date().addingTimeInterval(2 * 3600 + 600)), now: Date()))
                         settle(); host.layoutSubtreeIfNeeded()
-                        let widget = QuotaCompactMetrics.iconSize(height: headerHeight, size: scenario.quota ? size : .standard)
-                        verifyGeometry("reverse-\(scenario.name)-\(headerHeight)-\(expanded)-size=\(size.rawValue)", widget: widget,
-                                       quota: quotaWidth(height: headerHeight, size: size, shared: scenario.music && scenario.tasks))
-                        modeAudit.append(["case": "reverse-" + scenario.name, "height": headerHeight,
-                                          "taskSelected": expanded, "size": size.rawValue, "rendered": renderedModules])
+                        verifyPresentation(renderedModules["peek"] == "widget", "Quota peek missing in \(label)")
+                        verifyPet(label + "-peek", height: headerHeight, size: size, quota: true)
+                        _ = try snapshot("Notch-closed-\(label)-peek.png")
+                        QuotaNotchStore.shared.setPreviewPeek(nil)
                     }
                 }
+                for (plain, busy) in pairs {
+                    verifyPresentation(abs(widths[plain]! - widths[busy]!) <= 1,
+                        "Tasks changed the notch width: \(plain) vs \(busy) at \(headerHeight), \(size.rawValue)")
+                }
+            }
+        }
+        UserDefaults.standard.set(NotchUISize.standard.rawValue, forKey: NotchUISize.defaultsKey)
+        // Music starting and stopping keeps the same modules on each side.
+        QuotaNotchStore.shared.configureSettingsPreview(paused: false)
+        activity.configurePreview(fixtures)
+        for headerHeight: CGFloat in [24, 32, 38] {
+            vm.closedNotchSize.height = headerHeight
+            for playback in ["playing", "paused", "idle", "resumed"] {
+                MusicManager.shared.isPlaying = playback == "playing" || playback == "resumed"
+                MusicManager.shared.isPlayerIdle = playback == "idle"
+                settle(); host.layoutSubtreeIfNeeded()
+                let expected = expectedModules(quota: true, music: playback != "idle", tasks: true)
+                verifyPresentation(renderedModules == expected, "Playback transition \(playback) retained the wrong presentation: \(renderedModules)")
+                verifyPet("\(playback)-\(headerHeight)", height: headerHeight, size: .standard, quota: true)
+                modeAudit.append(["case": playback, "height": headerHeight, "rendered": renderedModules])
+                _ = try snapshot("Notch-transition-\(Int(headerHeight))-\(playback).png")
             }
         }
         try JSONSerialization.data(withJSONObject: modeAudit, options: [.prettyPrinted, .sortedKeys])
@@ -496,7 +441,6 @@ struct SettingsPreviewRunner {
         print("Verified \(modeAudit.count) actual rendered presentations, including playback transitions")
         MusicManager.shared.isPlaying = false
         MusicManager.shared.isPlayerIdle = true
-        AgentActivityStore.shared.compactExpanded = false
         window.orderOut(nil); window.contentView = nil; window.close()
         vm.destroy()
     }
@@ -767,15 +711,11 @@ struct SettingsPreviewRunner {
 
     @MainActor private static func captureCat(output: URL, fixtures: [AgentSession]) throws {
         let savedCat = UserDefaults.standard.object(forKey: "notchCatEnabled")
-        // The walking cat only appears without a quota pet, so its wing budget is measured that way.
-        let savedPet = UserDefaults.standard.object(forKey: QuotaPetKind.enabledKey)
+        // The walking cat only appears while the quota pet is hidden.
         UserDefaults.standard.set(true, forKey: "notchCatEnabled")
-        UserDefaults.standard.set(false, forKey: QuotaPetKind.enabledKey)
         defer {
             if let savedCat { UserDefaults.standard.set(savedCat, forKey: "notchCatEnabled") }
             else { UserDefaults.standard.removeObject(forKey: "notchCatEnabled") }
-            if let savedPet { UserDefaults.standard.set(savedPet, forKey: QuotaPetKind.enabledKey) }
-            else { UserDefaults.standard.removeObject(forKey: QuotaPetKind.enabledKey) }
         }
         let vm = BoringViewModel()
         vm.hideOnClosed = false
@@ -794,16 +734,13 @@ struct SettingsPreviewRunner {
             quota.configureSettingsPreview(paused: mask & 1 == 0)
             music.isPlaying = mask & 2 != 0; music.isPlayerIdle = !music.isPlaying
             activity.configurePreview(mask & 4 != 0 ? fixtures : [])
-            activity.compactExpanded = false
             for height: CGFloat in [24, 32, 38] {
                 vm.close(); vm.closedNotchSize.height = height; vm.hideOnClosed = false
                 for side in CatSide.allCases {
                     var baseline: (Int, Int)?
-                    var baselineCream = 0
                     for active in [false, true] {
-                        let crowded = side == .right && (mask == 7 || mask == 4)
-                        let pose = CatPose(side: side, action: .curious, elapsed: 2, active: active,
-                                           frame: crowded ? "Cat-cheek-rub-2" : nil, width: crowded ? 8 : nil, crowded: crowded)
+                        let petShown = mask & 1 != 0
+                        let pose = CatPose(side: side, action: .curious, elapsed: 2, active: active)
                         let host = NSHostingView(rootView: ContentView(catPreviewPose: pose).environmentObject(vm)
                             .transaction { $0.animation = nil; $0.disablesAnimations = true }
                             .background(Color(red: 0.25, green: 0.15, blue: 0.35)))
@@ -818,19 +755,6 @@ struct SettingsPreviewRunner {
                             return max(c.redComponent, max(c.greenComponent, c.blueComponent)) < 0.06
                         }
                         let edges = (pixels.first!, pixels.last!)
-                        // A stable shell alone does not prove the crowded cat was drawn.
-                        // Count its warm cream pixels, excluding white text and state colors.
-                        var cream = 0
-                        if crowded {
-                            for y in 0..<min(bitmap.pixelsHigh, Int(height * scale)) {
-                                for x in 0..<bitmap.pixelsWide {
-                                    let c = bitmap.colorAt(x: x, y: y)!.usingColorSpace(.deviceRGB)!
-                                    if c.redComponent > 0.85 && c.greenComponent > 0.8 && c.blueComponent > 0.45
-                                        && c.greenComponent - c.blueComponent > 0.04
-                                        && c.redComponent - c.greenComponent < 0.15 { cream += 1 }
-                                }
-                            }
-                        }
                         // Save evidence before checking: failures must still provide a screenshot.
                         try bitmap.representation(using: .png, properties: [:])!.write(to: output.appendingPathComponent("Cat-check-\(mask)-\(Int(height))-\(side.rawValue)-\(active).png"))
                         verifyPresentation(vm.effectiveClosedNotchHeight == height, "Cat fixture height was reset")
@@ -839,11 +763,10 @@ struct SettingsPreviewRunner {
                             let stationary = side == .left ? abs(edges.1 - baseline.1) : abs(edges.0 - baseline.0)
                             verifyPresentation(stationary <= 2, "Cat moved the opposite wing: mask \(mask), \(side), height \(height)")
                             verifyPresentation(change >= -2 && CGFloat(change) <= 32 * scale + 2, "Cat exceeded wing budget")
-                            let full = side == .right && (mask == 7 || mask == 4)
-                            if full { verifyPresentation(cream > baselineCream + 2, "Crowded cat missing from rendered pixels: mask \(mask), height \(height), baseline=\(baselineCream), active=\(cream)") }
-                            verifyPresentation(full ? abs(change) <= 2 : change > 0, "Wrong cat availability: mask \(mask), \(side), height \(height), delta \(change)")
+                            verifyPresentation(petShown ? abs(change) <= 2 : change > 0,
+                                               "Wrong cat availability: mask \(mask), \(side), height \(height), delta \(change)")
                             records.append(["modules": mask, "height": height, "side": side.rawValue, "addedPixels": change])
-                        } else { baseline = edges; baselineCream = cream }
+                        } else { baseline = edges }
                         if active && height == 32 {
                             try bitmap.representation(using: .png, properties: [:])!.write(to: output.appendingPathComponent("Cat-layout-\(mask)-\(side.rawValue).png"))
                         }

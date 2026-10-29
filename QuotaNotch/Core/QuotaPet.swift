@@ -1,20 +1,16 @@
 // QuotaNotch additions, 2026. SPDX-License-Identifier: GPL-3.0-only
 import Foundation
 
-/// A small pixel pet that stands in for the closed-notch quota ring. It only reflects quota.
+/// The small pixel pet that shows quota and tasks in the closed notch.
 enum QuotaPetKind: String, CaseIterable, Sendable {
-    case off, mochi, bit, jelly
-    /// The chosen pet (never `off`); whether it shows is a separate switch.
+    case mochi, bit, jelly
     static let defaultsKey = "quotaPet"
-    static let enabledKey = "quotaPetEnabled"
     static let defaultKind: QuotaPetKind = .bit
     static let pets: [QuotaPetKind] = [.mochi, .bit, .jelly]
+    /// The saved pet; older values such as "off" fall back to the default.
     static func choice(_ raw: String?) -> QuotaPetKind {
-        let kind = raw.flatMap(QuotaPetKind.init(rawValue:)) ?? defaultKind
-        return kind == .off ? defaultKind : kind
+        raw.flatMap(QuotaPetKind.init(rawValue:)) ?? defaultKind
     }
-    /// What the notch shows: the chosen pet while pet mode is on, otherwise the original ring.
-    static func effective(enabled: Bool, raw: String?) -> QuotaPetKind { enabled ? choice(raw) : .off }
 }
 
 /// `original` keeps the drawn colors; `service` tints one detail with the Claude or Codex color.
@@ -25,6 +21,26 @@ enum QuotaPetTint: String, CaseIterable, Sendable {
 
 /// `widget` is the regular quota slot (20×16pt); `minimal` is the 16pt slot shared with tasks.
 enum QuotaPetSize: Sendable { case widget, minimal }
+
+/// How running and waiting tasks show around the pet. Each style uses one shape for both.
+enum QuotaPetEffect: String, CaseIterable, Sendable {
+    /// Soft rings from the middle; waiting adds faster rings and a glow.
+    case soft
+    /// Pixel ripples that follow the pet's outline; waiting recolors the outline itself.
+    case pixel
+    static let defaultsKey = "quotaPetEffect"
+}
+
+/// What the pet knows about tasks.
+struct QuotaPetTasks: Equatable, Sendable {
+    var waiting = 0
+    var running = 0
+    var lastCompletedAt: Date?
+    static let none = QuotaPetTasks()
+}
+
+/// The effect drawn around the pet.
+enum QuotaPetSignal: Equatable, Sendable { case none, running, waiting }
 
 enum QuotaPetMood: String, Sendable, Equatable, CaseIterable {
     /// Plenty left.
@@ -41,8 +57,29 @@ enum QuotaPetMood: String, Sendable, Equatable, CaseIterable {
     case refilled
     /// No fresh reading.
     case stale
+    /// A task waits for approval or an answer.
+    case needsYou
+    /// A task just finished.
+    case celebrate
 
-    var animates: Bool { self == .working || self == .pacing || self == .refilled }
+    var animates: Bool { [.working, .needsYou, .refilled, .celebrate].contains(self) }
+}
+
+/// Combines task and quota state into one pose. Waiting for the user always wins; the
+/// quota keeps showing on the pet's gauge and in the numbers beside it.
+enum QuotaPetBehavior {
+    static let celebrateFor: TimeInterval = 6
+    static func resolve(quota: QuotaPetMood, tasks: QuotaPetTasks, now: Date) -> (mood: QuotaPetMood, signal: QuotaPetSignal) {
+        if tasks.waiting > 0 { return (.needsYou, .waiting) }
+        if quota == .empty { return (.empty, .none) }
+        if quota == .refilled { return (.refilled, .none) }
+        if tasks.running == 0, let done = tasks.lastCompletedAt {
+            let age = now.timeIntervalSince(done)
+            if age >= 0 && age < celebrateFor { return (.celebrate, .none) }
+        }
+        if tasks.running > 0 { return (.working, .running) }
+        return (quota, .none)
+    }
 }
 
 enum QuotaPace {
@@ -57,6 +94,30 @@ enum QuotaPace {
         let remaining = window.remainingPercent, used = 100 - remaining
         guard remaining > 0, used > 0 else { return false }
         return remaining / (used / elapsed) < left
+    }
+}
+
+/// Moments worth a short line below the notch while music takes the quota numbers' place.
+enum QuotaPeekEvent: Equatable, Sendable {
+    case crossed(Int)
+    case refilled
+    case pacing
+}
+
+enum QuotaPeekRule {
+    static let thresholds = [0, 20, 50]
+    static let duration: TimeInterval = 4
+
+    /// Compares two readings of the same window. A refill wins, then the lowest threshold
+    /// crossed on the way down, then the pace turning too fast.
+    static func event(previous: Double?, current: Double, wasPacing: Bool, pacing: Bool) -> QuotaPeekEvent? {
+        guard let previous else { return nil }
+        if current >= previous + 20 { return .refilled }
+        if let threshold = thresholds.first(where: { previous > Double($0) && current <= Double($0) }) {
+            return .crossed(threshold)
+        }
+        if pacing && !wasPacing { return .pacing }
+        return nil
     }
 }
 
@@ -209,10 +270,11 @@ enum QuotaPetArt {
         switch mood {
         case .idle: return Pose(expression: blink ? "closed" : "open", mouth: kind == .bit ? "small" : "cat")
         case .working: return Pose(expression: "down", mouth: "small")
-        case .pacing: return Pose(expression: "wide", mouth: "open")
+        case .pacing: return Pose(expression: "wide", mouth: "small")
+        case .needsYou: return Pose(expression: "wide", mouth: "open")
         case .low: return Pose(expression: blink ? "closed" : "tired", mouth: "flat")
         case .empty, .stale: return Pose(expression: "closed", mouth: "small")
-        case .refilled: return Pose(expression: "happy", mouth: "smile")
+        case .refilled, .celebrate: return Pose(expression: "happy", mouth: "smile")
         }
     }
 
@@ -230,7 +292,7 @@ enum QuotaPetArt {
     private static func full(_ kind: QuotaPetKind, mood: QuotaPetMood, props: Bool,
                              remaining q: Double, frame: Int, blink: Bool) -> Grid {
         var grid = Grid(repeating: [UInt8](repeating: dot, count: 22), count: 18)
-        guard kind != .off, var rows = base[kind] else { return grid }
+        guard var rows = base[kind] else { return grid }
         let ox = 1, oy = 1, even = frame % 2 == 0
         switch kind {
         case .jelly:
@@ -272,10 +334,10 @@ enum QuotaPetArt {
             if even { paint(&grid, ["oc"], ox + 2, oy + 13) } else { paint(&grid, ["co"], ox + 10, oy + 13) }
         case .low:
             paint(&grid, [".d.", "ddd", ".d."], ox + 14, oy + 3)
-        case .refilled:
+        case .refilled, .celebrate:
             paint(&grid, even ? [".w.", "www", ".w."] : ["w.w", ".w.", "w.w"], 18, 1)
             paint(&grid, even ? ["w"] : [".w.", "www", ".w."], 17, 6)
-        case .pacing where kind != .jelly:
+        case .needsYou where kind != .jelly:
             paint(&grid, [".oo.", "occo", "occo", ".oco", "..o."], ox + 15, oy + (even ? 1 : 0))
         default: break
         }
@@ -284,8 +346,6 @@ enum QuotaPetArt {
 
     private static func minimal(_ kind: QuotaPetKind, mood: QuotaPetMood, remaining q: Double, blink: Bool) -> Grid {
         switch kind {
-        case .off:
-            return []
         case .jelly:
             let level = 8 - Int((7 * q / 100).rounded())
             var grid: Grid = smallJelly.enumerated().map { (y: Int, row: String) -> [UInt8] in
@@ -348,6 +408,26 @@ enum QuotaPetArt {
 
     static func brandColor(_ provider: QuotaProvider) -> UInt32 { provider == .claude ? 0xE39B7A : 0x9ED4BF }
 
+    /// Each pet's own color for task effects.
+    static func themeColor(_ kind: QuotaPetKind) -> UInt32 {
+        switch kind {
+        case .mochi: return 0xF6B56B
+        case .bit: return 0x6FF0D8
+        case .jelly: return 0x7AA2FF
+        }
+    }
+
+    /// Dot colors for task states: waiting amber, failed red, running green, finished blue.
+    static func taskColor(_ state: AgentRunState) -> UInt32 {
+        switch state {
+        case .waiting: return 0xFFB347
+        case .failed: return 0xFF6B5E
+        case .running: return 0x5AD19A
+        case .completed: return 0x7AA2FF
+        case .interrupted, .unknown: return 0x8B95A7
+        }
+    }
+
     /// Points per sprite pixel. Only whole device pixels keep the art crisp: 1.5 needs a
     /// Retina display, 2 needs a tall notch.
     static func pixelScale(size: NotchUISize, notchHeight: CGFloat, displayScale: CGFloat) -> CGFloat {
@@ -365,7 +445,6 @@ enum QuotaPetArt {
         let palette = palette(kind, provider: provider, tint: tint, remaining: remaining)
         let warning: UInt32? = remaining < 20 ? 0xFF5A4F : (remaining < 35 ? 0xF4D35E : nil)
         switch kind {
-        case .off: return 0xFFFFFF
         case .mochi: return warning ?? (tint == .service ? brandColor(provider) : palette[UInt8(ascii: "f")] ?? 0xF0B85A)
         case .bit: return palette[UInt8(ascii: "m")] ?? 0x5AD19A
         case .jelly: return palette[UInt8(ascii: "f")] ?? 0x7AA2FF
@@ -375,7 +454,6 @@ enum QuotaPetArt {
     static func palette(_ kind: QuotaPetKind, provider: QuotaProvider, tint: QuotaPetTint, remaining: Double) -> [UInt8: UInt32] {
         var colors: [Character: UInt32]
         switch kind {
-        case .off: return [:]
         case .mochi:
             colors = ["o": 0x3B2C27, "c": 0xFFF4E4, "s": 0xEFD6B4, "g": 0x8F8782, "p": 0xF4A49B, "e": 0x2A1F1C, "w": 0xFFFFFF,
                       "m": 0xC96F66, "B": 0x4A6DBB, "f": 0xF0B85A, "k": 0x2E3A52, "x": 0x3A3226, "a": 0x9AA6B8, "d": 0x5B7FE0]
@@ -393,7 +471,6 @@ enum QuotaPetArt {
             case .bit: colors["e"] = brand
             case .jelly: colors["f"] = brand; colors["F"] = lighten(brand)
             case .mochi: colors["B"] = brand
-            case .off: break
             }
         }
         if kind == .bit {
@@ -434,5 +511,50 @@ enum QuotaPetArt {
             return Date(timeIntervalSinceReferenceDate: candidates.first { $0 > t + 0.0005 }!)
         }
         return date.addingTimeInterval(60)
+    }
+}
+
+struct QuotaPetCell: Equatable, Hashable, Sendable {
+    let x: Int
+    let y: Int
+}
+
+extension QuotaPetSprite {
+    func isFilled(_ x: Int, _ y: Int) -> Bool {
+        x >= 0 && y >= 0 && x < width && y < height && code(x: x, y: y) != UInt8(ascii: ".")
+    }
+
+    /// Empty cells at each step (1...maxDistance) away from the art, following its outline.
+    /// Coordinates are relative to the sprite and may be negative.
+    func contours(maxDistance: Int) -> [[QuotaPetCell]] {
+        let m = maxDistance, w = width + 2 * m, h = height + 2 * m
+        var distance = [Int](repeating: -1, count: w * h)
+        var queue: [(Int, Int)] = []
+        for y in 0..<h { for x in 0..<w where isFilled(x - m, y - m) { distance[y * w + x] = 0; queue.append((x, y)) } }
+        var index = 0
+        while index < queue.count {
+            let (x, y) = queue[index]; index += 1
+            let next = distance[y * w + x] + 1
+            guard next <= m else { continue }
+            for (dx, dy) in [(1, 0), (-1, 0), (0, 1), (0, -1)] {
+                let nx = x + dx, ny = y + dy
+                guard nx >= 0, ny >= 0, nx < w, ny < h, distance[ny * w + nx] == -1 else { continue }
+                distance[ny * w + nx] = next
+                queue.append((nx, ny))
+            }
+        }
+        var rings = [[QuotaPetCell]](repeating: [], count: m)
+        for y in 0..<h { for x in 0..<w {
+            let d = distance[y * w + x]
+            if d >= 1 { rings[d - 1].append(QuotaPetCell(x: x - m, y: y - m)) }
+        } }
+        return rings
+    }
+
+    /// The art's own outline pixels.
+    var outlineCells: [QuotaPetCell] {
+        var cells: [QuotaPetCell] = []
+        for y in 0..<height { for x in 0..<width where code(x: x, y: y) == UInt8(ascii: "o") { cells.append(QuotaPetCell(x: x, y: y)) } }
+        return cells
     }
 }

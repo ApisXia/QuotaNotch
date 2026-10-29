@@ -12,6 +12,10 @@ struct AgentAttentionSummary: Equatable {
     var primaryState: AgentRunState = .unknown
     var primaryCount = 0
     var needsAction = false
+    /// States of the tasks counted above, most urgent first.
+    var states: [AgentRunState] = []
+    /// When the most recent counted task finished.
+    var lastCompletedAt: Date?
     var isVisible: Bool { count > 0 }
 
     static func make(_ sessions: [AgentSession], acknowledged: [String: String]) -> Self {
@@ -33,6 +37,8 @@ struct AgentAttentionSummary: Equatable {
             }
         }
         result.kind = kinds.count > 1 ? .mixed : AgentAttentionKind(rawValue: kinds.first ?? "completed") ?? .other
+        result.states = eligible.map(\.state).sorted { $0.priority < $1.priority }
+        result.lastCompletedAt = eligible.filter { $0.state == .completed }.map(\.updatedAt).max()
         if let primary = AgentTaskOnlySummary.emphasis(eligible) {
             result.primaryState = primary.state
             result.primaryCount = eligible.filter { $0.state == primary.state }.count

@@ -34,21 +34,9 @@ struct ContentView: View {
 
 
     @State private var measuredClosedWidth: CGFloat = 0
-    // Anchor the physical notch using the same state that chooses the rendered wings.
-    // A late child preference can be reset to zero by surrounding layout containers.
-    private var taskWingOffset: CGFloat {
-        guard vm.notchState == .closed, agentStore.showAccessory,
-              vm.effectiveClosedNotchHeight > 0, !eventPresentation.replacesPrimary else { return 0 }
-        let asymmetric = compactPresentation == .combined || compactPresentation == .none
-        guard asymmetric else { return 0 }
-        let widget = QuotaCompactMetrics.iconSize(height: vm.effectiveClosedNotchHeight)
-        return NotchModuleMetrics(widgetWidth: widget).additionalWidth / 2
-    }
     @StateObject private var cat = NotchCatDirector()
     @AppStorage("notchCatEnabled") private var catEnabled = false
     @AppStorage("notchCatTaskCues") private var catTaskCues = true
-    @AppStorage(QuotaPetKind.defaultsKey) private var quotaPetRaw = QuotaPetKind.defaultKind.rawValue
-    @AppStorage(QuotaPetKind.enabledKey) private var quotaPetEnabled = true
     @AppStorage(NotchUISize.defaultsKey) private var notchSizeRaw = NotchUISize.current.rawValue
     private var panelScale: CGFloat { NotchUISize.stored(notchSizeRaw, legacyComfortable: false).panelScale }
     // Deterministic poses are injected only by the isolated screenshot runner.
@@ -57,8 +45,8 @@ struct ContentView: View {
     @State private var catSpaces: [CatSide: CatWingSpace] = [:]
     @ObservedObject private var catRuntime = NotchCatRuntime.shared
     private var catCanAppear: Bool {
-        // Only one pet at a time: the quota pet replaces the walking cat.
-        catEnabled && (catPreviewPose != nil || QuotaPetKind.effective(enabled: quotaPetEnabled, raw: quotaPetRaw) == .off)
+        // Only one pet at a time: the walking cat appears only while the quota pet is hidden.
+        catEnabled && !showQuotaWings
             && (!reduceMotion || catPreviewPose != nil) && !catRuntime.suspended && vm.notchState == .closed
             && !vm.hideOnClosed && vm.effectiveClosedNotchHeight >= 24
             && !eventPresentation.replacesPrimary && eventPresentation.accessory == nil
@@ -267,8 +255,7 @@ struct ContentView: View {
                             hover: { cat.edgePointer($0) }, summon: { cat.summon($0) },
                             cancel: { cat.cancelSummon() })
                     }
-                    .offset(x: vm.notchState == .closed ? taskWingOffset + catWingOffset : 0)
-                    .animation(reduceMotion ? nil : .smooth(duration: 0.32), value: taskWingOffset)
+                    .offset(x: vm.notchState == .closed ? catWingOffset : 0)
                 
     }
 
@@ -290,6 +277,7 @@ struct ContentView: View {
                             .environment(\.notchCatPose, displayedCatPose)
                         closedAccessoryContent
                     }
+                    .animation(reduceMotion ? nil : .smooth(duration: 0.3), value: quotaStore.peek)
                 } else {
                     BoringHeader()
                         .frame(maxWidth: .infinity, alignment: .leading)
@@ -336,14 +324,8 @@ struct ContentView: View {
             }
             .transition(.opacity)
         } else if compactPresentation == .music {
-            if agentStore.showAccessory {
-                musicAndTaskWings
-            } else {
-                MusicLiveActivity().contentShape(Rectangle()).onTapGesture { coordinator.currentView = .home; doOpen() }
-            }
-        } else if agentStore.showAccessory && vm.effectiveClosedNotchHeight > 0 && !eventPresentation.replacesPrimary {
-            AgentTaskOnlyWings(centerWidth: vm.closedNotchSize.width - cornerRadiusInsets.closed.top,
-                               height: vm.effectiveClosedNotchHeight, open: openTasks)
+            // Tasks show beside the quota pet, so they stay hidden while quota is.
+            MusicLiveActivity().contentShape(Rectangle()).onTapGesture { coordinator.currentView = .home; doOpen() }
         } else {
             HStack(spacing: 0) {
                 Color.clear.frame(width: 0).catWing(.left, occupied: 0, height: vm.effectiveClosedNotchHeight)
@@ -390,26 +372,19 @@ struct ContentView: View {
                 .padding(.bottom, 10)
                 .transition(.opacity)
             }
+        } else if compactPresentation == .combined && !vm.hideOnClosed, let peek = quotaStore.peek {
+            // Music hides the numbers, so key quota moments get a short line, like a song title.
+            Text(verbatim: peek)
+                .font(.system(size: 12, weight: .medium))
+                .monospacedDigit()
+                .lineLimit(1)
+                .foregroundStyle(.gray)
+                .frame(height: 16)
+                .padding(.top, 8)
+                .padding(.bottom, 10)
+                .transition(.opacity)
+                .auditNotchModule("peek")
         }
-    }
-
-    @ViewBuilder
-    private var musicAndTaskWings: some View {
-        let height = vm.effectiveClosedNotchHeight
-        let size = max(0, height - 12)
-        return HStack(spacing: QuotaCompactMetrics.spacing) {
-            Button { coordinator.currentView = .home; doOpen() } label: {
-                Image(nsImage: musicManager.albumArt).resizable().scaledToFill()
-                    .frame(width: size, height: size)
-                    .clipShape(RoundedRectangle(cornerRadius: MusicPlayerImageSizes.cornerRadiusInset.closed))
-                    .frame(width: size, height: height)
-                    .auditNotchModule("music").auditNotchFrame("album")
-            }.buttonStyle(.plain)
-                .catWing(.left, occupied: size, height: height)
-            Color.clear.frame(width: vm.closedNotchSize.width - cornerRadiusInsets.closed.top, height: height).auditNotchFrame("camera")
-            AgentCompactDock(primaryWidth: 0, height: height, anchorWidth: size, widgetWidth: size, open: openTasks) { EmptyView() }
-                .catWing(.right, occupied: size, height: height)
-        }.frame(height: height)
     }
 
     func MusicLiveActivity() -> some View {
@@ -512,12 +487,6 @@ struct ContentView: View {
         .auditNotchModule("music")
     }
 
-    private func openTasks() {
-        agentStore.notchReadEnabled = true
-        coordinator.currentView = .activity
-        doOpen()
-    }
-
     private func doOpen() {
         withAnimation(animationSpring) {
             vm.open()
@@ -527,10 +496,6 @@ struct ContentView: View {
     private func openFromPointer(explicit: Bool = false) {
         guard vm.notchState == .closed else { return }
         agentStore.notchReadEnabled = explicit
-        if agentStore.showAccessory && (compactPresentation == .none ||
-            (compactPresentation == .combined && agentStore.compactExpanded)) {
-            coordinator.currentView = .activity; doOpen(); return
-        }
         let presentation = compactPresentation
         let screen = vm.screenUUID.flatMap { NSScreen.screen(withUUID: $0) } ?? NSScreen.main
         let midpoint = screen?.frame.midX ?? NSEvent.mouseLocation.x
@@ -540,8 +505,13 @@ struct ContentView: View {
         switch target {
         case .home: coordinator.currentView = .home
         case .quota:
-            if let provider = quotaStore.activePin?.provider { quotaStore.selectedProvider = provider }
-            coordinator.currentView = .aiUsage
+            // A task waiting for you takes the pet's side, like tapping the pet does.
+            if agentStore.enabled && agentStore.attention.needsAction {
+                coordinator.currentView = .activity
+            } else {
+                if let provider = quotaStore.activePin?.provider { quotaStore.selectedProvider = provider }
+                coordinator.currentView = .aiUsage
+            }
         case nil: break
         }
         doOpen()
