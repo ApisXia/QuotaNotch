@@ -213,10 +213,20 @@ struct ContentView: View {
         return CGSize(width: max(0, vm.notchSize.width - 2 * (corner + 12)), height: max(0, vm.notchSize.height - 12))
     }
 
+    /// Opened pages are laid out at their final width from the first frame. The shell then
+    /// widens around them from the center and reveals them, instead of dragging leading-aligned
+    /// content outward with its left edge.
+    private var openContentWidth: CGFloat? {
+        // The open size, not vm.notchSize, so pages keep their width while fading out on close.
+        let corner = NotchStyle.scalesCorners ? cornerRadiusInsets.opened.top : cornerRadiusInsets.opened.bottom
+        let inner = openNotchSize.width - 2 * (corner + 12)
+        guard inner > 0 else { return nil }
+        return inner / max(0.5, panelScale)
+    }
+
     @ViewBuilder
     func NotchLayout() -> some View {
-        // Centered, so the closed wings fade out in place over the camera while the shell widens,
-        // instead of being pulled to the left edge. Opened content keeps its leading alignment.
+        // Centered, so the closed wings fade out in place over the camera while the shell widens.
         VStack(alignment: .center, spacing: vm.notchState == .open ? 8 : 0) {
             Group {
                 if vm.notchState == .closed {
@@ -227,7 +237,7 @@ struct ContentView: View {
                     .animation(reduceMotion ? nil : .smooth(duration: 0.3), value: quotaStore.peek)
                 } else {
                     BoringHeader()
-                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .frame(width: openContentWidth, alignment: .leading)
                 }
             }
             .zIndex(2)
@@ -243,7 +253,7 @@ struct ContentView: View {
                         AgentNotchView()
                     }
                 }
-                .frame(maxWidth: .infinity, alignment: .leading)
+                .frame(width: openContentWidth, alignment: .leading)
                 .transition(
                     reduceMotion ? .identity : .scale(scale: 0.8, anchor: .top)
                     .combined(with: .opacity)
