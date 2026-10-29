@@ -25,7 +25,8 @@ struct QuotaWindow: Sendable, Equatable, Identifiable {
     var duration: TimeInterval? = nil
     /// The reported length, or the known length of Claude's fixed windows.
     var period: TimeInterval? {
-        duration ?? ["five_hour": 5 * 3600, "seven_day": 7 * 86400][id]
+        let known: [String: TimeInterval] = ["five_hour": 5 * 3600, "seven_day": 7 * 86400]
+        return duration ?? known[id]
     }
     var localizedTitle: String {
         for suffix in [" 小时", " 天"] where title.hasSuffix(suffix) {
