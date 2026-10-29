@@ -203,14 +203,15 @@ struct QuotaPinnedWings: View {
     /// Tasks are shown only while task tracking is on and something is visible.
     private var taskStates: [AgentRunState] { activity.showAccessory ? activity.attention.states : [] }
     private var petTasks: QuotaPetTasks { QuotaPetTasks(activity.attention, enabled: activity.enabled) }
-    private var needsYou: Bool { activity.enabled && activity.attention.needsAction }
+    /// While tasks show beside the pet, tapping it opens them.
+    private var opensTasks: Bool { activity.showAccessory }
 
     var body: some View {
         if let pin = store.activePin, let provider = pin.provider {
             HStack(spacing: QuotaCompactMetrics.spacing) {
                 Button {
                     if showsMusic { onMusic() }
-                    else if needsYou { openTasks() }
+                    else if opensTasks { openTasks() }
                     else { onSelect(provider) }
                 } label: {
                     Group {
@@ -227,7 +228,7 @@ struct QuotaPinnedWings: View {
                 Color.clear.frame(width: centerWidth, height: height).auditNotchFrame("camera")
 
                 Button {
-                    if needsYou { openTasks() } else { onSelect(provider) }
+                    if opensTasks { openTasks() } else { onSelect(provider) }
                 } label: {
                     Group {
                         if showsMusic {

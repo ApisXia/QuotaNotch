@@ -458,8 +458,8 @@ struct ContentView: View {
         switch target {
         case .home: coordinator.currentView = .home
         case .quota:
-            // A task waiting for you takes the pet's side, like tapping the pet does.
-            if agentStore.enabled && agentStore.attention.needsAction {
+            // While tasks show beside the pet, the pet's side opens them, like tapping the pet.
+            if showQuotaWings && agentStore.showAccessory {
                 coordinator.currentView = .activity
             } else {
                 if let provider = quotaStore.activePin?.provider { quotaStore.selectedProvider = provider }
