@@ -165,3 +165,29 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
         run: bash scripts/publish-release.sh
+
+  # Manual branch builds become a private draft release, so the installer can be fetched
+  # directly. Drafts are visible only to maintainers and never publish anything.
+  test-build:
+    needs: build
+    if: github.event_name == 'workflow_dispatch' && github.ref != 'refs/heads/main' && inputs.preview_only != true
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: QuotaNotch-macOS-${{ github.sha }}
+          path: release-files
+      - name: Replace the draft test build
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          branch="${GITHUB_REF_NAME//\//-}"
+          tag="test-$branch"
+          gh release delete "$tag" --yes 2>/dev/null || true
+          gh release create "$tag" --draft --target "$GITHUB_SHA" \
+            --title "Test build · $GITHUB_REF_NAME · ${GITHUB_SHA::7}" \
+            --notes "Draft test build from $GITHUB_REF_NAME ($GITHUB_SHA). Not a release." \
+            release-files/*.dmg
