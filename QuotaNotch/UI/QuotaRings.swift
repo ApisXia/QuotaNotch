@@ -217,7 +217,8 @@ struct QuotaPinnedWings: View {
 
     private var tasksExpanded: Bool { showsMusic && activity.compactExpanded && activity.showAccessory }
     private var metrics: NotchModuleMetrics { NotchModuleMetrics(widgetWidth: iconSize) }
-    private var leftWidth: CGFloat { iconSize }
+    /// Both wings match when the percentage needs more room, keeping the camera centered.
+    private var leftWidth: CGFloat { petWithPercent ? percentWidth : iconSize }
     private var rightPrimaryWidth: CGFloat {
         guard activity.showAccessory else { return petWithPercent ? percentWidth : iconSize }
         return showsMusic ? (tasksExpanded ? metrics.minimalWidth : iconSize) : 0
