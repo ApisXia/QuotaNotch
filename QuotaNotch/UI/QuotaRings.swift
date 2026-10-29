@@ -223,7 +223,6 @@ struct QuotaPinnedWings: View {
                 .buttonStyle(.plain)
                 .help(showsMusic ? QuotaText.localized("打开音乐") : "\(provider.title) · \(reading(for: pin))")
                 .accessibilityLabel(showsMusic ? QuotaText.localized("打开音乐") : QuotaText.format("打开 %@ 额度", provider.title))
-                .catWing(.left, occupied: slot, height: height, widgetWidth: slot)
 
                 Color.clear.frame(width: centerWidth, height: height).auditNotchFrame("camera")
 
@@ -253,7 +252,6 @@ struct QuotaPinnedWings: View {
                 .help("\(provider.title) · \(reading(for: pin))")
                 .accessibilityLabel("\(provider.title) \(store.window(for: pin)?.localizedTitle ?? QuotaText.localized("额度"))")
                 .accessibilityValue(reading(for: pin))
-                .catWing(.right, occupied: slot, height: height, widgetWidth: slot)
             }
             .frame(height: height)
             .animation(reduceMotion ? nil : .smooth(duration: 0.32), value: showsMusic)

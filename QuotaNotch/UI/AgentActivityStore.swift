@@ -179,14 +179,6 @@ import UserNotifications
                       session.state.isUnreadEvent,
                       now.timeIntervalSince(session.updatedAt) < 60 {
                 sendNotification(session)
-                if baseline {
-                    let cue: CatAction? = session.state == .completed ? .completed :
-                        (session.state == .waiting || session.state == .failed ? .attention : nil)
-                    if let cue {
-                        NotchCatRuntime.shared.enqueue(CatCue(sessionID: session.identity, eventID: session.eventID,
-                                                              action: cue, occurredAt: session.updatedAt))
-                    }
-                }
             }
             lastEvents[session.identity] = session.eventID
         }

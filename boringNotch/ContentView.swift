@@ -34,33 +34,8 @@ struct ContentView: View {
 
 
     @State private var measuredClosedWidth: CGFloat = 0
-    @StateObject private var cat = NotchCatDirector()
-    @AppStorage("notchCatEnabled") private var catEnabled = false
-    @AppStorage("notchCatTaskCues") private var catTaskCues = true
     @AppStorage(NotchUISize.defaultsKey) private var notchSizeRaw = NotchUISize.current.rawValue
     private var panelScale: CGFloat { NotchUISize.stored(notchSizeRaw, legacyComfortable: false).panelScale }
-    // Deterministic poses are injected only by the isolated screenshot runner.
-    var catPreviewPose: CatPose? = nil
-
-    @State private var catSpaces: [CatSide: CatWingSpace] = [:]
-    @ObservedObject private var catRuntime = NotchCatRuntime.shared
-    private var catCanAppear: Bool {
-        // Only one pet at a time: the walking cat appears only while the quota pet is hidden.
-        catEnabled && !showQuotaWings
-            && (!reduceMotion || catPreviewPose != nil) && !catRuntime.suspended && vm.notchState == .closed
-            && !vm.hideOnClosed && vm.effectiveClosedNotchHeight >= 24
-            && !eventPresentation.replacesPrimary && eventPresentation.accessory == nil
-            && !coordinator.expandingView.show
-    }
-    private var displayedCatPose: CatPose { catCanAppear ? (catPreviewPose ?? cat.pose) : CatPose() }
-    private var catWingOffset: CGFloat {
-        let pose = displayedCatPose
-        guard pose.active, !pose.crowded, let space = catSpaces[pose.side], space.canPeek else { return 0 }
-        return min(space.room, pose.reservedWidth) * (pose.side == .left ? -0.5 : 0.5)
-    }
-    private var catRunID: String {
-        "\(catCanAppear)|\(vm.screenUUID ?? "")"
-    }
     @ObservedObject private var agentStore = AgentActivityStore.shared
 
     // Shared interactive spring for movement/resizing to avoid conflicting animations
@@ -124,7 +99,6 @@ struct ContentView: View {
                     }
                     .contentShape(Rectangle())
                     .onHover { hovering in
-                        cat.pointer(hovering)
                         if vm.notchState == .open { handleHover(hovering) }
                     }
                     .onGeometryChange(for: CGFloat.self) { geometry in
@@ -167,35 +141,15 @@ struct ContentView: View {
                 // Match the actual camera gap so this hover target cannot cover wing controls.
                 Color.clear.frame(width: max(0, vm.closedNotchSize.width - cornerRadiusInsets.closed.top), height: vm.effectiveClosedNotchHeight)
                     .contentShape(Rectangle())
-                    .onHover { cat.pointer($0, source: "camera"); handleHover($0) }
+                    .onHover { handleHover($0) }
                     .onTapGesture { openFromPointer(explicit: true) }
             }
-        }
-        .onPreferenceChange(CatWingSpacesKey.self) { catSpaces = $0; cat.updateSpaces($0) }
-        .onChange(of: catEnabled) { _, enabled in
-            if !enabled { cat.stop(); cat.clearCues() }
-        }
-        .onChange(of: reduceMotion) { _, reduced in if reduced { cat.clearCues() } }
-        .onChange(of: catTaskCues) { _, enabled in if !enabled { cat.clearCues() } }
-        .onChange(of: agentStore.unread.map(\.eventID)) { _, _ in cat.revalidateCue() }
-        .onDisappear { cat.stop() }
-        .onAppear {
-            #if SETTINGS_PREVIEW
-            if let preview = catPreviewPose {
-                print("Cat fixture: active=\(preview.active) eligible=\(catCanAppear) enabled=\(catEnabled) reduced=\(reduceMotion) suspended=\(catRuntime.suspended) closed=\(vm.notchState == .closed) hidden=\(vm.hideOnClosed) height=\(vm.effectiveClosedNotchHeight) replacement=\(eventPresentation.replacesPrimary) accessory=\(String(describing: eventPresentation.accessory)) expanding=\(coordinator.expandingView.show)")
-            }
-            #endif
-        }
-        .task(id: catRunID) {
-            guard catCanAppear else { cat.stop(); return }
-            await cat.run(spaces: catSpaces, screen: vm.screenUUID)
         }
         .onReceive(NotificationCenter.default.publisher(for: .agentOpenNotch)) { _ in
             coordinator.currentView = .activity; agentStore.notchReadEnabled = true
             if vm.notchState == .closed { doOpen() }
         }
         .onChange(of: vm.notchState) { _, state in
-            if state == .open { cat.pointer(false, source: "camera") }
             if state == .closed {
                 agentStore.notchReadEnabled = false
                 agentStore.expandedTaskID = nil
@@ -250,12 +204,6 @@ struct ContentView: View {
                         .bottom,
                         vm.effectiveClosedNotchHeight == 0 ? 10 : 0
                     )
-                    .background {
-                        CatEdgeRubRegion(enabled: catCanAppear && catPreviewPose == nil,
-                            hover: { cat.edgePointer($0) }, summon: { cat.summon($0) },
-                            cancel: { cat.cancelSummon() })
-                    }
-                    .offset(x: vm.notchState == .closed ? catWingOffset : 0)
                 
     }
 
@@ -274,7 +222,6 @@ struct ContentView: View {
                 if vm.notchState == .closed {
                     PrimaryNotchLayout {
                         closedPrimaryContent
-                            .environment(\.notchCatPose, displayedCatPose)
                         closedAccessoryContent
                     }
                     .animation(reduceMotion ? nil : .smooth(duration: 0.3), value: quotaStore.peek)
@@ -328,9 +275,9 @@ struct ContentView: View {
             MusicLiveActivity().contentShape(Rectangle()).onTapGesture { coordinator.currentView = .home; doOpen() }
         } else {
             HStack(spacing: 0) {
-                Color.clear.frame(width: 0).catWing(.left, occupied: 0, height: vm.effectiveClosedNotchHeight)
+                Color.clear.frame(width: 0)
                 Color.clear.frame(width: vm.closedNotchSize.width - 20, height: vm.effectiveClosedNotchHeight).auditNotchFrame("camera")
-                Color.clear.frame(width: 0).catWing(.right, occupied: 0, height: vm.effectiveClosedNotchHeight)
+                Color.clear.frame(width: 0)
             }
         }
     }
@@ -405,7 +352,6 @@ struct ContentView: View {
                 )
 
                 .auditNotchFrame("album")
-                .catWing(.left, occupied: size, height: height)
             Rectangle()
                 .fill(.black)
                 .overlay(
@@ -478,7 +424,6 @@ struct ContentView: View {
                 ),
                 alignment: .center
             )
-            .catWing(.right, occupied: size, height: height)
         }
         .frame(
             height: vm.effectiveClosedNotchHeight,

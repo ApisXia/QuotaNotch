@@ -87,14 +87,12 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     @MainActor
     func onScreenLocked(_ notification: Notification) {
         isScreenLocked = true
-        NotchCatRuntime.shared.setLocked(true)
         cleanupWindows()
     }
 
     @MainActor
     func onScreenUnlocked(_ notification: Notification) {
         isScreenLocked = false
-        NotchCatRuntime.shared.setLocked(false)
         adjustWindowPosition(changeAlpha: true)
     }
     

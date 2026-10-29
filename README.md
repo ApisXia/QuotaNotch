@@ -10,11 +10,11 @@ AI quota, coding task activity, music and calendar in your MacBook notch.
 
 Native UI preview with sample data.
 
-- Optional pixel cat, off by default; enable it in settings and rub a notch edge to invite it out.
-- Unified task status icons and a Read all action; independent wing sizing keeps music anchored.
+- A pixel pet (cat, robot or slime) shows your remaining quota and reacts to tasks: a soft ripple while one runs, a blink when one needs you.
+- Unified task status icons and a Read all action.
 - Claude and Codex quota.
 - Follow local Codex and Claude Code tasks across projects, with source labels and approval-wait awareness.
-- Pin one quota beside music and task activity. Click widgets to open their panels; swipe across the open header to change pages.
+- Pin one quota beside music; tasks show as dots next to it, or as a small tag on the pet while music plays. Click widgets to open their panels; swipe across the open header to change pages.
 - Keep read task history for 1 hour, 5 hours (default), or 1 day.
 - Low quota gradually turns yellow, then red, with a subtle glow.
 - Calendar, reminders, English and Simplified Chinese.
