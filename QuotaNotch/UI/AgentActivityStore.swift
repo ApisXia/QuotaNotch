@@ -77,6 +77,7 @@ import UserNotifications
         claudeHome = ProcessInfo.processInfo.environment["CLAUDE_CONFIG_DIR"].map { URL(fileURLWithPath: $0) } ?? FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".claude")
         claudeRepository = ClaudeActivityRepository(home: claudeHome, hooks: Self.support.appendingPathComponent("claude-events"))
         #if !SETTINGS_PREVIEW
+        AgentHookHelper.refreshIfInstalled()
         wakeObserver = NSWorkspace.shared.notificationCenter.addObserver(forName: NSWorkspace.didWakeNotification,
             object: nil, queue: .main) { [weak self] _ in Task { @MainActor in await self?.refresh(force: true) } }
         #endif

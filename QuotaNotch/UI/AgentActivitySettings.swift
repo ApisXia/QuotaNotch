@@ -68,37 +68,30 @@ struct AgentActivitySettings: View {
     }
     private func checkHooks() {
         let data = try? Data(contentsOf: configHome.appendingPathComponent(configFile))
-        hookInstalled = data.flatMap { String(data: $0, encoding: .utf8) }?.contains(AgentHookConfiguration.marker) == true
+        hookInstalled = AgentHookConfiguration.isInstalled(data)
     }
     private func updateHooks(install: Bool) {
         busy = true
         defer { busy = false }
         do {
-            let fm = FileManager.default
-            let config = configHome.appendingPathComponent(configFile).resolvingSymlinksInPath()
-            let previous = fm.fileExists(atPath: config.path) ? try Data(contentsOf: config) : nil
-            guard previous == nil || previous!.count < 4 * 1024 * 1024 else { throw CocoaError(.fileReadTooLarge) }
             let support = AgentActivityStore.support
-            try fm.createDirectory(at: support, withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700])
-            let helper = support.appendingPathComponent("QuotaNotchMonitorHook")
-            if install {
-                let bundled = Bundle.main.bundleURL.appendingPathComponent("Contents/Helpers/QuotaNotchMonitorHook")
-                let binary = try Data(contentsOf: bundled)
-                try binary.write(to: helper, options: .atomic)
-                try fm.setAttributes([.posixPermissions: 0o700], ofItemAtPath: helper.path)
+            try FileManager.default.createDirectory(at: support, withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700])
+            let helper = AgentHookHelper.installedURL
+            if install { try AgentHookHelper.installBundledCopy() }
+            let eventDirectory = support.appendingPathComponent(provider == .codex ? "events" : "claude-events").path
+            try ConfigurationFileWriter.update(configHome.appendingPathComponent(configFile),
+                backup: support.appendingPathComponent("\(provider.rawValue)-hooks-before-quotanotch.json")) { previous in
+                try AgentHookConfiguration.updating(previous, helper: install ? helper.path : nil,
+                                                    eventDirectory: eventDirectory, provider: provider)
             }
-            let updated = try AgentHookConfiguration.updating(previous, helper: install ? helper.path : nil,
-                eventDirectory: support.appendingPathComponent(provider == .codex ? "events" : "claude-events").path, provider: provider)
-            if let previous {
-                guard try Data(contentsOf: config) == previous else { throw CocoaError(.fileWriteFileExists) }
-                try previous.write(to: support.appendingPathComponent("\(provider.rawValue)-hooks-before-quotanotch.json"), options: .atomic)
-                try fm.setAttributes([.posixPermissions: 0o600], ofItemAtPath: support.appendingPathComponent("\(provider.rawValue)-hooks-before-quotanotch.json").path)
-            }
-            try fm.createDirectory(at: configHome, withIntermediateDirectories: true)
-            try updated.write(to: config, options: .atomic)
-            try fm.setAttributes([.posixPermissions: 0o600], ofItemAtPath: config.path)
             message = install ? AgentText.t("已安装。请在相应应用审阅并信任连接，等待批准的检测才会生效。", "Installed. Review and trust the connection in the selected app to enable approval-wait detection.") : AgentText.t("已移除 QuotaNotch 的事件连接，其他配置已保留。", "Removed QuotaNotch hooks; other configuration is preserved.")
             checkHooks()
+        } catch ConfigurationFileWriter.Failure.changedDuringEdit {
+            message = AgentText.t("配置文件刚被其他程序修改，请再试一次。", "The configuration file just changed in another app. Try again.")
+        } catch ConfigurationFileWriter.Failure.tooLarge {
+            message = AgentText.t("配置文件过大，未作修改。", "The configuration file is too large; nothing was changed.")
+        } catch CocoaError.fileReadCorruptFile {
+            message = AgentText.t("配置文件不是有效的 JSON，未作修改。", "The configuration file is not valid JSON; nothing was changed.")
         } catch { message = error.localizedDescription }
     }
     private func chooseHome() {
