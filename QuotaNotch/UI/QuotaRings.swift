@@ -248,6 +248,11 @@ struct QuotaPinnedWings: View {
         if quotaOnly { return pairedWidth }
         return quotaWidth
     }
+    /// Everything in the right wing: the shared quota/task pair, the task slot, or quota alone.
+    private var rightWingWidth: CGFloat {
+        if sharedWing { return quotaWidth + metrics.additionalWidth }
+        return activity.showAccessory ? quotaWidth : rightPrimaryWidth
+    }
     private var rightPrimaryWidth: CGFloat {
         guard activity.showAccessory else { return quotaOnly ? pairedWidth : quotaWidth }
         return showsMusic ? (tasksExpanded ? metrics.minimalWidth : quotaWidth) : 0
@@ -277,7 +282,9 @@ struct QuotaPinnedWings: View {
                 .help(showsMusic ? QuotaText.localized("打开音乐") : QuotaText.format("打开 %@ 额度", provider.title))
                 .accessibilityLabel(showsMusic ? QuotaText.localized("打开音乐") : QuotaText.format("打开 %@ 额度", provider.title))
 
-                .catWing(.left, occupied: leftWidth, height: height, widgetWidth: iconSize)
+                // The walking cat's room is measured from each wing's actual slot, so wider slots keep
+                // the same extra space for it.
+                .catWing(.left, occupied: leftWidth, height: height, widgetWidth: leftWidth)
                 Color.clear.frame(width: centerWidth, height: height).auditNotchFrame("camera")
 
                 AgentCompactDock(primaryWidth: rightPrimaryWidth, height: height, anchorWidth: leftWidth, widgetWidth: iconSize,
@@ -308,7 +315,7 @@ struct QuotaPinnedWings: View {
                         .accessibilityValue(reading(for: pin))
                     }
                 }
-                .catWing(.right, occupied: sharedWing ? quotaWidth + metrics.additionalWidth : iconSize, height: height, widgetWidth: iconSize)
+                .catWing(.right, occupied: rightWingWidth, height: height, widgetWidth: sharedWing ? quotaWidth : rightWingWidth)
             }
             .frame(height: height)
             .animation(reduceMotion ? nil : .smooth(duration: 0.32), value: showsMusic)
