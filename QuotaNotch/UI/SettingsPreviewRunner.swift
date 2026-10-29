@@ -117,6 +117,22 @@ struct SettingsPreviewRunner {
         try verifyCatRubRegion()
         try captureCat(output: output, fixtures: fixtures)
         try captureNotchSwitching(output: output)
+        // Every quota pet in every state, widget and minimal, four times the notch size.
+        try capture(VStack(alignment: .leading, spacing: 16) {
+            ForEach([QuotaPetKind.mochi, .bit, .jelly], id: \.self) { kind in
+                HStack(spacing: 12) {
+                    ForEach(QuotaPetMood.allCases, id: \.self) { mood in
+                        VStack(spacing: 8) {
+                            QuotaPetPixels(sprite: QuotaPetArt.sprite(kind, size: .widget, mood: mood, remaining: mood == .low ? 12 : (mood == .empty ? 0 : 64)),
+                                           palette: QuotaPetArt.palette(kind, provider: .claude, tint: .original, remaining: mood == .low ? 12 : 64), scale: 4)
+                            QuotaPetPixels(sprite: QuotaPetArt.sprite(kind, size: .minimal, mood: mood, remaining: mood == .low ? 12 : (mood == .empty ? 0 : 64)),
+                                           palette: QuotaPetArt.palette(kind, provider: .claude, tint: .original, remaining: mood == .low ? 12 : 64), scale: 4)
+                        }
+                        .padding(8).background(.black, in: RoundedRectangle(cornerRadius: 8))
+                    }
+                }
+            }
+        }.padding(16).background(Color(white: 0.16)), width: 1000, name: "Quota-pets", output: output, height: 560)
         try captureTaskPanel(output: output, fixtures: fixtures)
         for dark in [true, false] {
             try capture(VStack(alignment: .leading, spacing: 12) {
@@ -738,10 +754,15 @@ struct SettingsPreviewRunner {
 
     @MainActor private static func captureCat(output: URL, fixtures: [AgentSession]) throws {
         let savedCat = UserDefaults.standard.object(forKey: "notchCatEnabled")
+        // The walking cat only appears without a quota pet, so its wing budget is measured that way.
+        let savedPet = UserDefaults.standard.object(forKey: QuotaPetKind.defaultsKey)
         UserDefaults.standard.set(true, forKey: "notchCatEnabled")
+        UserDefaults.standard.set(QuotaPetKind.off.rawValue, forKey: QuotaPetKind.defaultsKey)
         defer {
             if let savedCat { UserDefaults.standard.set(savedCat, forKey: "notchCatEnabled") }
             else { UserDefaults.standard.removeObject(forKey: "notchCatEnabled") }
+            if let savedPet { UserDefaults.standard.set(savedPet, forKey: QuotaPetKind.defaultsKey) }
+            else { UserDefaults.standard.removeObject(forKey: QuotaPetKind.defaultsKey) }
         }
         let vm = BoringViewModel()
         vm.hideOnClosed = false
