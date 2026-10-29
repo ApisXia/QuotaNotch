@@ -29,7 +29,7 @@ struct AgentActivitySettings: View {
                     .font(.callout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
             } header: { Text(AgentText.t("任务历史", "Task history")) }
             Section {
-                Toggle(AgentText.t("完成和等待时发送系统通知", "Notify when finished or waiting"), isOn: Binding(get: { store.notifications }, set: { enabled in
+                Toggle(AgentText.t("完成和等待时发送系统通知（只显示项目和状态）", "Notify when finished or waiting (project and status only)"), isOn: Binding(get: { store.notifications }, set: { enabled in
                     if enabled { Task { await store.requestNotifications() } } else { store.notifications = false }
                 }))
                 Text(AgentText.t("刘海始终保留进行中和待处理任务的摘要。系统通知可以额外提醒你，首次启动不会重播历史通知。", "The notch keeps a summary of active tasks. Optional system notifications alert you to changes; old notifications are not replayed on launch."))

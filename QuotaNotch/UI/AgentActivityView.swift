@@ -398,7 +398,7 @@ struct AgentTaskRow: View {
         let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 900, height: 580),
                               styleMask: [.titled, .closable, .miniaturizable, .resizable], backing: .buffered, defer: false)
         super.init(window: window)
-        window.title = AgentText.t("QuotaNotch Future · 任务监控", "QuotaNotch Future · Task monitor")
+        window.title = AgentText.t("QuotaNotch · 任务监控", "QuotaNotch · Task monitor")
         window.contentView = NSHostingView(rootView: AgentActivityView())
         window.contentMinSize = NSSize(width: 760, height: 460)
         window.setFrameAutosaveName("QuotaNotchActivityWindow")

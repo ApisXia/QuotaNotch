@@ -213,7 +213,8 @@ import UserNotifications
         guard notifications, !isMonitorVisible else { return }
         let content = UNMutableNotificationContent()
         content.title = session.projectName + " · " + AgentText.state(session.state)
-        content.body = session.displayTitle
+        // Untitled tasks are titled with the start of the prompt; keep that off the lock screen.
+        content.body = session.provider == .claude ? "Claude Code" : "Codex"
         content.threadIdentifier = session.groupID
         content.userInfo = ["quotaNotchAgentID": session.id, "quotaNotchAgentIdentity": session.identity]
         if Date().timeIntervalSince(lastNotificationSound) > 8 {
@@ -261,7 +262,9 @@ final class AgentNotificationDelegate: NSObject, UNUserNotificationCenterDelegat
 }
 
 enum AgentText {
-    static var chinese: Bool { QuotaLanguage.locale.identifier.hasPrefix("zh") || (QuotaLanguage.atLaunch == .system && Locale.preferredLanguages.first?.hasPrefix("zh") == true) }
+    /// Follows the localization the app bundle actually resolved, like the string catalog does,
+    /// so task text never ends up in a different language from the rest of the UI.
+    static var chinese: Bool { Bundle.main.preferredLocalizations.first?.hasPrefix("zh") == true }
     static func t(_ zh: String, _ en: String) -> String { chinese ? zh : en }
     static func state(_ state: AgentRunState) -> String {
         switch state {
