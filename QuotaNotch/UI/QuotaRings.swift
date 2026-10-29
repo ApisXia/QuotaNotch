@@ -241,7 +241,8 @@ struct QuotaPinnedWings: View {
     private var metrics: NotchModuleMetrics { NotchModuleMetrics(widgetWidth: iconSize) }
     /// Both wings match when the pet and percentage share the notch, keeping the camera centered.
     private var leftWidth: CGFloat {
-        if showsMusic { return iconSize }
+        // The album keeps its size but takes a slot as wide as the pet on the right.
+        if showsMusic { return quotaWidth }
         if petWithPercent { return pairedWidth }
         return activity.showAccessory || pet != .off ? quotaWidth : iconSize
     }
@@ -269,7 +270,7 @@ struct QuotaPinnedWings: View {
                                 .auditNotchModule("quota")
                         }
                     }
-                    .frame(width: leftWidth, height: height)
+                    .frame(width: leftWidth, height: height, alignment: showsMusic ? .trailing : .center)
                     .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
@@ -280,7 +281,7 @@ struct QuotaPinnedWings: View {
                 Color.clear.frame(width: centerWidth, height: height).auditNotchFrame("camera")
 
                 AgentCompactDock(primaryWidth: rightPrimaryWidth, height: height, anchorWidth: leftWidth, widgetWidth: iconSize,
-                                 slotWidth: sharedWing ? quotaWidth : nil, open: {
+                                 slotWidth: pet != .off ? quotaWidth : nil, open: {
                     BoringViewCoordinator.shared.currentView = .activity
                     // The hosting notch commits its open state through the action below.
                     NotificationCenter.default.post(name: .agentOpenNotch, object: nil)

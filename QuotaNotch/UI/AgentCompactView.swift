@@ -228,8 +228,8 @@ struct AgentCompactDock<Primary: View>: View {
     var hasPrimary = true
     var anchorWidth: CGFloat? = nil
     var widgetWidth: CGFloat? = nil
-    /// Width of the task widget's slot when it trades places with a wider quota module, so
-    /// swapping the two never changes the notch width. The glyph keeps `widgetWidth`.
+    /// Width of the task widget's slot when the quota module beside or opposite it is wider,
+    /// keeping the wings symmetric and swaps width-neutral. The glyph keeps `widgetWidth`.
     var slotWidth: CGFloat? = nil
     let open: () -> Void
     @ViewBuilder let primary: () -> Primary
@@ -245,7 +245,7 @@ struct AgentCompactDock<Primary: View>: View {
     private var separator: CGFloat { sharesWing && visible ? metrics.dividerWidth : 0 }
     private var taskWidth: CGFloat {
         guard visible else { return 0 }
-        return showsTaskWidget ? max(metrics.widgetWidth, sharesWing ? (slotWidth ?? 0) : 0) : metrics.minimalWidth
+        return showsTaskWidget ? max(metrics.widgetWidth, slotWidth ?? 0) : metrics.minimalWidth
     }
     private var extra: CGFloat { separator + taskWidth }
     private var motion: Animation? { reduced ? nil : .smooth(duration: 0.32) }
