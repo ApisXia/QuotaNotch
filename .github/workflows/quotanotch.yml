@@ -49,7 +49,14 @@ jobs:
           swift --version
           git rev-parse HEAD
       - name: Fixture tests (no user accounts or credentials)
-        run: swift test --parallel
+        run: |
+          set -o pipefail
+          if ! swift test --parallel 2>&1 | tee test.log; then
+            # Raw logs are not always retrievable; surface the failures as an annotation.
+            summary=$(grep -E "error:|failed|XCTAssert|Fatal error" test.log | head -40 | sed 's/%/%25/g' | awk '{printf "%s%%0A", $0}')
+            echo "::error title=swift test::${summary}"
+            exit 1
+          fi
       - name: Render native compact UX fixtures
         run: |
           mkdir -p build/QuotaNotch-dist
