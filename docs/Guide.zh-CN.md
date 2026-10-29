@@ -23,7 +23,7 @@
 
 应用标识独立为 `com.apisxia.quotanotch`，不会替换原版 Boring Notch；使用时请退出原版，避免同时占用刘海。当前采用临时签名，尚未 Apple 公证；原版自动更新已关闭。
 
-在 AI 额度设置中启用监控。Claude 需点击 **连接 Claude Code**：QuotaNotch 会在 `~/.claude/settings.json` 中加入一个小的状态栏命令，只记录 Claude Code 本来就提供给 Pro / Max 订阅用户的 5 小时和 7 天用量。原有状态栏命令会保留并照常显示；断开后文件逐字节恢复。QuotaNotch 不读取 Claude Code 的钥匙串项目或令牌。注意：只要设置了自定义状态栏，Claude Code 底部就不再显示部分快捷键提示（如 esc to interrupt）。Codex 需先运行 `codex login`。凭据保留在本机。缺失或过期的数据明确标记，不推算不存在的 token 总数、费用或模型额度。只查询已启用的来源。
+首次启动时 QuotaNotch 会引导你连接 AI 工具，之后可在 **设置 → 连接** 中更改。Claude 需点击 **连接**：QuotaNotch 会在 `~/.claude/settings.json` 中加入一个小的状态栏命令，只记录 Claude Code 本来就提供给 Pro / Max 订阅用户的 5 小时和 7 天用量。原有状态栏命令会保留并照常显示；断开后文件逐字节恢复。QuotaNotch 不读取 Claude Code 的钥匙串项目或令牌。注意：只要设置了自定义状态栏，Claude Code 底部就不再显示部分快捷键提示（如 esc to interrupt）。Codex 需先运行 `codex login`。凭据保留在本机。缺失或过期的数据明确标记，不推算不存在的 token 总数、费用或模型额度。只查询已启用的来源。
 
 ## 任务监控
 
@@ -31,7 +31,7 @@
 
 点击任务，在固定高度的 panel 内展开紧凑详情；在展开后的顶部整行左右滑动，切换音乐、额度和任务页面。三者共存时音乐在左，额度与任务共享右侧；点击分隔线或在右侧滑动可交换 widget／minimal。
 
-可在「设置 → 任务监控」安装事件连接，改善等待批准的识别。安装后需在相应编程应用中审阅并信任 hooks；连接只观察状态，不会替你批准操作。不支持 Claude Chat／Cowork，也不覆盖没有本地活动记录的远程任务。
+可在「设置 → 连接」安装任务事件，任务等你批准时刘海会立即提示。安装后需在相应编程应用中审阅并信任 hooks；连接只观察状态，不会替你批准操作。不支持 Claude Chat／Cowork，也不覆盖没有本地活动记录的远程任务。
 
 ## 构建与验证
 

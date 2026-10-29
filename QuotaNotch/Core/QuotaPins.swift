@@ -9,10 +9,12 @@ struct QuotaPin: Codable, Hashable, Sendable {
 
 struct QuotaPins: Codable, Equatable, Sendable {
     var selected: QuotaPin?
-    var automatic = false
+    /// New installs show the lowest fresh window; saved preferences keep their choice.
+    var automatic = true
     var candidates: [QuotaPin] = []
     var showsNumbers = false
     var hasPins: Bool { selected?.provider != nil }
+    // `candidates` is no longer edited: automatic mode compares every fresh window.
 
     init(selected: QuotaPin? = nil, showsNumbers: Bool = false) {
         self.selected = selected
@@ -24,7 +26,7 @@ struct QuotaPins: Codable, Equatable, Sendable {
     init(from decoder: Decoder) throws {
         let values = try decoder.container(keyedBy: CodingKeys.self)
         showsNumbers = try values.decodeIfPresent(Bool.self, forKey: .showsNumbers) ?? false
-        automatic = try values.decodeIfPresent(Bool.self, forKey: .automatic) ?? false
+        automatic = try values.decodeIfPresent(Bool.self, forKey: .automatic) ?? true
         candidates = try values.decodeIfPresent([QuotaPin].self, forKey: .candidates) ?? []
         if values.contains(.selected) {
             selected = try values.decodeIfPresent(QuotaPin.self, forKey: .selected)

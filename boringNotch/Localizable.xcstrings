@@ -1,6 +1,454 @@
 {
   "sourceLanguage" : "en",
   "strings" : {
+    "AI 额度设置…" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "AI Usage Settings…" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "AI 额度设置…" } }
+      }
+    },
+    "Accessibility access is used only for volume and brightness keys. No data is collected or shared." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Accessibility access is used only for volume and brightness keys. No data is collected or shared." } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "辅助功能权限只用于音量和亮度按键，不收集也不共享任何数据。" } }
+      }
+    },
+    "Enable Accessibility Access" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Enable Accessibility Access" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "允许辅助功能访问" } }
+      }
+    },
+    "Enable Calendar Access" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Enable Calendar Access" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "允许访问日历" } }
+      }
+    },
+    "Enable Reminders Access" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Enable Reminders Access" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "允许访问提醒事项" } }
+      }
+    },
+    "Optional: lets QuotaNotch show volume and brightness changes in the notch instead of the system overlay." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Optional: lets QuotaNotch show volume and brightness changes in the notch instead of the system overlay." } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "可选：让 QuotaNotch 在刘海中显示音量和亮度变化，代替系统浮层。" } }
+      }
+    },
+    "QuotaNotch can show your reminders next to your calendar events. Reminders access is needed to display them." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "QuotaNotch can show your reminders next to your calendar events. Reminders access is needed to display them." } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "QuotaNotch 可以在日历事件旁显示你的提醒事项，需要提醒事项访问权限。" } }
+      }
+    },
+    "QuotaNotch can show your upcoming events in the notch. Calendar access is needed to display your schedule." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "QuotaNotch can show your upcoming events in the notch. Calendar access is needed to display your schedule." } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "QuotaNotch 可以在刘海中显示即将到来的日程，需要日历访问权限。" } }
+      }
+    },
+    "Your calendar data is only used to show your events and is never shared." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Your calendar data is only used to show your events and is never shared." } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "日历数据只用于显示你的日程，绝不会共享。" } }
+      }
+    },
+    "Your reminders data is only used to show your reminders and is never shared." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Your reminders data is only used to show your reminders and is never shared." } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "提醒事项数据只用于显示提醒，绝不会共享。" } }
+      }
+    },
+    "QuotaNotch 在刘海中显示 Claude 和 Codex 的剩余额度与任务进度，全部在本机读取。" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "QuotaNotch shows remaining Claude and Codex quota and task progress in the notch, all read locally on this Mac." } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "QuotaNotch 在刘海中显示 Claude 和 Codex 的剩余额度与任务进度，全部在本机读取。" } }
+      }
+    },
+    "不再在刘海中显示" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Stop showing in the notch" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "不再在刘海中显示" } }
+      }
+    },
+    "不显示" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Nothing" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "不显示" } }
+      }
+    },
+    "任务" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Tasks" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "任务" } }
+      }
+    },
+    "任务事件（可选）" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Task events (optional)" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "任务事件（可选）" } }
+      }
+    },
+    "任务在等你批准时，刘海能立即提示。不装也能看到任务进度。" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "The notch can tell you right away when a task waits for approval. Task progress works without it." } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "任务在等你批准时，刘海能立即提示。不装也能看到任务进度。" } }
+      }
+    },
+    "任务等你批准时立即提示" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Alert me when a task needs approval" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "任务等你批准时立即提示" } }
+      }
+    },
+    "低额度通知" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Low quota alerts" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "低额度通知" } }
+      }
+    },
+    "刘海" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Notch" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "刘海" } }
+      }
+    },
+    "刚刚" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "just now" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "刚刚" } }
+      }
+    },
+    "前往连接" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Open Connections" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "前往连接" } }
+      }
+    },
+    "剩余额度低于阈值时通知" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Notify when remaining quota drops below" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "剩余额度低于阈值时通知" } }
+      }
+    },
+    "可选：为 Claude Code 和 Codex 安装任务事件" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Optional: installs task events for Claude Code and Codex" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "可选：为 Claude Code 和 Codex 安装任务事件" } }
+      }
+    },
+    "启用" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Enable" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "启用" } }
+      }
+    },
+    "圆环中显示剩余百分比" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Show remaining percent in the ring" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "圆环中显示剩余百分比" } }
+      }
+    },
+    "在 Claude Code 中发送一条消息后显示" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Appears after you send a message in Claude Code" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "在 Claude Code 中发送一条消息后显示" } }
+      }
+    },
+    "在 settings.json 的 statusLine 中加入 QuotaNotch 的小程序。原有状态栏命令会保留并照常显示；没有时显示一行剩余额度。断开后文件逐字节恢复。注意：只要设置了状态栏，Claude Code 底部就不再显示部分快捷键提示（如 esc to interrupt）。" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Adds QuotaNotch's small helper to statusLine in settings.json. An existing status line command is kept and still shown; otherwise a one-line quota summary appears. Disconnecting restores the file exactly. Note: with any status line, Claude Code hides some footer hints such as \"esc to interrupt\"." } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "在 settings.json 的 statusLine 中加入 QuotaNotch 的小程序。原有状态栏命令会保留并照常显示；没有时显示一行剩余额度。断开后文件逐字节恢复。注意：只要设置了状态栏，Claude Code 底部就不再显示部分快捷键提示（如 esc to interrupt）。" } }
+      }
+    },
+    "在终端运行 codex login" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Run codex login in Terminal" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "在终端运行 codex login" } }
+      }
+    },
+    "安装" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Install" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "安装" } }
+      }
+    },
+    "已安装" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Installed" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "已安装" } }
+      }
+    },
+    "已登录" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Signed in" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "已登录" } }
+      }
+    },
+    "已连接，在 Claude Code 中发送一条消息后显示额度" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Connected. Quota appears after you send a message in Claude Code" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "已连接，在 Claude Code 中发送一条消息后显示额度" } }
+      }
+    },
+    "所有 AI 服务已关闭" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "All AI services are off" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "所有 AI 服务已关闭" } }
+      }
+    },
+    "收起刘海时显示哪个额度" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Which quota the closed notch shows" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "收起刘海时显示哪个额度" } }
+      }
+    },
+    "收起时" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Closed notch" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "收起时" } }
+      }
+    },
+    "收起时在刘海中显示" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Show in the closed notch" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "收起时在刘海中显示" } }
+      }
+    },
+    "收起时显示" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Closed notch shows" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "收起时显示" } }
+      }
+    },
+    "数据目录" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Data folder" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "数据目录" } }
+      }
+    },
+    "数据目录已保存，重启 QuotaNotch 后生效。" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Data folder saved. Restart QuotaNotch to apply." } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "数据目录已保存，重启 QuotaNotch 后生效。" } }
+      }
+    },
+    "更改…" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Change…" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "更改…" } }
+      }
+    },
+    "未安装" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Not installed" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "未安装" } }
+      }
+    },
+    "未登录：在终端运行 codex login" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Not signed in: run codex login in Terminal" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "未登录：在终端运行 codex login" } }
+      }
+    },
+    "未连接" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Not connected" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "未连接" } }
+      }
+    },
+    "每个额度周期最多提醒一次，额度恢复时再提醒一次。" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "At most one alert per quota period, plus one when it recovers." } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "每个额度周期最多提醒一次，额度恢复时再提醒一次。" } }
+      }
+    },
+    "移除" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Remove" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "移除" } }
+      }
+    },
+    "稍后再说" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Not now" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "稍后再说" } }
+      }
+    },
+    "继续" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Continue" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "继续" } }
+      }
+    },
+    "自动（剩余最少的额度）" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Automatic (lowest remaining)" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "自动（剩余最少的额度）" } }
+      }
+    },
+    "诊断" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Diagnostics" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "诊断" } }
+      }
+    },
+    "读取 Claude Code 状态栏中的 5 小时和 7 天用量，不读取钥匙串或令牌。需要 Pro 或 Max 订阅。" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Reads 5-hour and 7-day usage from Claude Code's status line, never the Keychain or tokens. Requires Pro or Max." } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "读取 Claude Code 状态栏中的 5 小时和 7 天用量，不读取钥匙串或令牌。需要 Pro 或 Max 订阅。" } }
+      }
+    },
+    "读取本机 Codex CLI 的登录状态查询用量，只读不改。" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Uses the local Codex CLI sign-in to look up usage. Read-only." } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "读取本机 Codex CLI 的登录状态查询用量，只读不改。" } }
+      }
+    },
+    "连接" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Connections" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "连接" } }
+      }
+    },
+    "连接 Claude Code 会修改它的 settings.json，随时可以在 设置 → 连接 中断开并恢复。" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Connecting Claude Code edits its settings.json. You can disconnect and restore it anytime in Settings → Connections." } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "连接 Claude Code 会修改它的 settings.json，随时可以在 设置 → 连接 中断开并恢复。" } }
+      }
+    },
+    "连接…" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Connections…" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "连接…" } }
+      }
+    },
+    "连接会修改什么" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "What connecting changes" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "连接会修改什么" } }
+      }
+    },
+    "连接你的 AI 工具" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Connect your AI tools" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "连接你的 AI 工具" } }
+      }
+    },
+    "连接后显示 5 小时和 7 天额度" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Connect to show 5-hour and 7-day quota" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "连接后显示 5 小时和 7 天额度" } }
+      }
+    },
+    "连接方式、任务事件和诊断都在“连接”中。" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Connection methods, task events and diagnostics are in Connections." } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "连接方式、任务事件和诊断都在“连接”中。" } }
+      }
+    },
+    "配置文件不是有效的 JSON，未作修改。" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "The configuration file is not valid JSON; nothing was changed." } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "配置文件不是有效的 JSON，未作修改。" } }
+      }
+    },
+    "配置文件刚被其他程序修改，请再试一次。" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "The configuration file just changed in another app. Try again." } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "配置文件刚被其他程序修改，请再试一次。" } }
+      }
+    },
+    "配置文件过大，未作修改。" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "The configuration file is too large; nothing was changed." } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "配置文件过大，未作修改。" } }
+      }
+    },
+    "阈值" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Threshold" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "阈值" } }
+      }
+    },
+    "已安装。请在 Codex 中审阅并信任这些 hooks 后生效。" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Installed. Review and trust these hooks in Codex to enable them." } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "已安装。请在 Codex 中审阅并信任这些 hooks 后生效。" } }
+      }
+    },
+    "已安装。新开的 Claude Code 会话会使用它；如有提示，请审阅并信任这些 hooks。" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Installed. New Claude Code sessions use it; review and trust the hooks if asked." } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "已安装。新开的 Claude Code 会话会使用它；如有提示，请审阅并信任这些 hooks。" } }
+      }
+    },
     "尚未收到 Claude Code 的用量" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -13499,7 +13947,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "needs_review",
-            "value" : "不是现在"
+            "value" : "以后再说"
           }
         }
       }

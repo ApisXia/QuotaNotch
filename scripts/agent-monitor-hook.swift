@@ -54,7 +54,8 @@ func runStatusLine(directory: URL, chained: String?) -> Never {
             var copy: [String: Any] = ["used_percentage": used]
             if let reset = window["resets_at"] as? NSNumber { copy["resets_at"] = reset }
             windows[key] = copy
-            summary.append("\(label) \(Int(used.doubleValue.rounded()))%")
+            // QuotaNotch speaks in remaining quota everywhere, including here.
+            summary.append("\(label) \(Int((100 - used.doubleValue).rounded()))% left")
         }
         if !windows.isEmpty {
             let url = directory.appendingPathComponent(session + ".json")

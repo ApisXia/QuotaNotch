@@ -23,7 +23,7 @@ Requires **macOS 15+**, Apple Silicon or Intel. Download a QuotaNotch DMG from a
 
 The app has a separate identity (`com.apisxia.quotanotch`) and does not replace Boring Notch. Quit the original while using QuotaNotch so both do not occupy the notch. Builds are ad-hoc signed and are not Apple notarized. Upstream automatic updates are disabled.
 
-Enable monitoring in AI quota settings. For Claude, click **Connect Claude Code**: QuotaNotch adds a small status line command to `~/.claude/settings.json` that records only the 5-hour and 7-day usage Claude Code already shows to Pro and Max subscribers. Your existing status line command is kept and still displayed; Disconnect restores the file exactly. QuotaNotch never reads Claude Code's Keychain item or tokens. Note that with any custom status line, Claude Code hides some footer hints such as "esc to interrupt". For Codex, sign in with `codex login`. Credentials remain local. Missing or stale quota is identified; no token totals, costs or unsupported model breakdowns are invented. Only enabled providers are polled.
+On first launch QuotaNotch asks you to connect your tools; you can change this later in **Settings → Connections**. For Claude, click **Connect**: QuotaNotch adds a small status line command to `~/.claude/settings.json` that records only the 5-hour and 7-day usage Claude Code already shows to Pro and Max subscribers. Your existing status line command is kept and still displayed; Disconnect restores the file exactly. QuotaNotch never reads Claude Code's Keychain item or tokens. Note that with any custom status line, Claude Code hides some footer hints such as "esc to interrupt". For Codex, sign in with `codex login`. Credentials remain local. Missing or stale quota is identified; no token totals, costs or unsupported model breakdowns are invented. Only enabled providers are polled.
 
 ## Task monitoring
 
@@ -31,7 +31,7 @@ Follow local Codex desktop, VS Code extension and CLI sessions, and Claude Code 
 
 Click a task to expand compact inline details in the same fixed-height panel. Swipe anywhere in the open header row to switch Music, Quota and Tasks. When all three modules are present, music stays left while quota and tasks share the right wing; click the divider or swipe that wing to exchange widget/minimal.
 
-Optional event connections in Settings → Task monitor improve approval-wait detection. Review and trust the hooks in the relevant coding app after installation. Hooks only observe state and never approve operations. Claude Chat/Cowork and remote sessions without local activity records are not covered.
+Optional task events in Settings → Connections let the notch tell you right away when a task waits for approval. Review and trust the hooks in the relevant coding app after installation. Hooks only observe state and never approve operations. Claude Chat/Cowork and remote sessions without local activity records are not covered.
 
 ## Build and verification
 

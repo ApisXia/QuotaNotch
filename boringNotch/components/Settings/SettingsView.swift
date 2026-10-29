@@ -15,12 +15,13 @@ struct SettingsView: View {
         NavigationSplitView {
             List(selection: $selectedTab) {
                 NavigationLink(value: "General") { Label("通用", systemImage: "gearshape") }
+                NavigationLink(value: "Appearance") { Label("刘海", systemImage: "rectangle.topthird.inset.filled") }
+                NavigationLink(value: "Connections") { Label("连接", systemImage: "link") }
                 NavigationLink(value: "Quota") { Label("AI 额度", systemImage: "chart.pie") }
-                NavigationLink(value: "Activity") { Label(AgentText.t("任务监控", "Task monitor"), systemImage: "square.stack.3d.up") }
+                NavigationLink(value: "Activity") { Label("任务", systemImage: "square.stack.3d.up") }
                 NavigationLink(value: "Media") { Label("音乐", systemImage: "music.note") }
                 NavigationLink(value: "Calendar") { Label("Calendars & Reminders", systemImage: "calendar") }
-                NavigationLink(value: "Appearance") { Label("外观", systemImage: "circle.lefthalf.filled") }
-                NavigationLink(value: "System") { Label("System Indicators", systemImage: "slider.horizontal.3") }
+                NavigationLink(value: "System") { Label("Volume & Brightness", systemImage: "slider.horizontal.3") }
                 NavigationLink(value: "About") { Label("关于", systemImage: "info.circle") }
             }
             .listStyle(.sidebar)
@@ -28,6 +29,7 @@ struct SettingsView: View {
         } detail: {
             Group {
                 switch selectedTab {
+                case "Connections": ConnectionsSettings()
                 case "Quota": QuotaPreferences()
                 case "Activity": AgentActivitySettings()
                 case "Media": Media()
@@ -60,12 +62,6 @@ struct SettingsView: View {
 struct GeneralSettings: View {
     @State private var language = QuotaLanguage.stored()
     private let startingLanguage = QuotaLanguage.atLaunch
-    @State private var screens: [(uuid: String, name: String)] = []
-    @ObservedObject private var coordinator = BoringViewCoordinator.shared
-    @Default(.showOnAllDisplays) private var showOnAllDisplays
-    @Default(.automaticallySwitchDisplay) private var automaticallySwitchDisplay
-    @Default(.hideNotchOption) private var hideNotchOption
-
     var body: some View {
         Form {
             Section("语言 / Language") {
@@ -86,6 +82,26 @@ struct GeneralSettings: View {
                 Defaults.Toggle(key: .menubarIcon) { Text("Show menu bar icon").fixedSize(horizontal: false, vertical: true) }
                 LaunchAtLogin.Toggle(QuotaText.localized("Launch at login"))
             }
+            Section("快捷键") {
+                SettingsField("展开／收起刘海") { KeyboardShortcuts.Recorder(for: .toggleNotchOpen) }
+                SettingsField("显示音乐信息") { KeyboardShortcuts.Recorder(for: .toggleSneakPeek) }
+
+            }
+        }
+        .navigationTitle("General")
+    }
+}
+
+/// Where the notch appears and how it reacts. Shown at the top of Settings → Notch.
+struct NotchDisplaySettings: View {
+    @State private var screens: [(uuid: String, name: String)] = []
+    @ObservedObject private var coordinator = BoringViewCoordinator.shared
+    @Default(.showOnAllDisplays) private var showOnAllDisplays
+    @Default(.automaticallySwitchDisplay) private var automaticallySwitchDisplay
+    @Default(.hideNotchOption) private var hideNotchOption
+
+    var body: some View {
+        Group {
             Section("Displays") {
                 Defaults.Toggle(key: .showOnAllDisplays) { Text("Show on all displays").fixedSize(horizontal: false, vertical: true) }
                     .onChange(of: showOnAllDisplays) {
@@ -129,14 +145,7 @@ struct GeneralSettings: View {
 
                 Defaults.Toggle(key: .hideFromScreenRecording) { Text("Hide from screen recording").fixedSize(horizontal: false, vertical: true) }
             }
-            Section("快捷键") {
-                SettingsField("展开／收起刘海") { KeyboardShortcuts.Recorder(for: .toggleNotchOpen) }
-                SettingsField("显示音乐信息") { KeyboardShortcuts.Recorder(for: .toggleSneakPeek) }
-
-            }
         }
-        .navigationTitle("General")
-        .toolbar { Button("Quit app") { NSApp.terminate(self) } }
         .onAppear { reloadScreens() }
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didChangeScreenParametersNotification)) { _ in reloadScreens() }
     }
@@ -146,7 +155,6 @@ struct GeneralSettings: View {
             screen.displayUUID.map { (uuid: $0, name: screen.localizedName) }
         }
     }
-
 }
 
 struct HUD: View {
@@ -180,7 +188,7 @@ struct HUD: View {
             }
             .disabled(!hudReplacement || !accessibilityAuthorized)
         }
-        .navigationTitle("System Indicators")
+        .navigationTitle("Volume & Brightness")
         #if !SETTINGS_PREVIEW
         .task { accessibilityAuthorized = await XPCHelperClient.shared.isAccessibilityAuthorized() }
         .onAppear { XPCHelperClient.shared.startMonitoringAccessibilityAuthorization() }
@@ -422,6 +430,7 @@ struct Appearance: View {
     
     var body: some View {
         Form {
+            NotchDisplaySettings()
             NotchCatSettings()
             Section {
                 VStack(alignment: .leading, spacing: 16) {
@@ -532,7 +541,7 @@ struct Appearance: View {
 
         }
         .accentColor(.effectiveAccent)
-        .navigationTitle("Appearance")
+        .navigationTitle("刘海")
         .onAppear {
             loadCustomColor()
         }

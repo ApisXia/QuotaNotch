@@ -9,6 +9,7 @@ import SwiftUI
 
 enum OnboardingStep {
     case welcome
+    case connectTools
     case calendarPermission
     case remindersPermission
     case accessibilityPermission
@@ -29,6 +30,14 @@ struct OnboardingView: View {
             case .welcome:
                 WelcomeView {
                     withAnimation(.easeInOut(duration: 0.6)) {
+                        step = .connectTools
+                    }
+                }
+                .transition(.opacity)
+
+            case .connectTools:
+                OnboardingConnectView {
+                    withAnimation(.easeInOut(duration: 0.6)) {
                         step = .calendarPermission
                     }
                 }
@@ -37,9 +46,9 @@ struct OnboardingView: View {
             case .calendarPermission:
                 PermissionRequestView(
                     icon: Image(systemName: "calendar"),
-                    title: "Enable Calendar Access",
-                    description: "Boring Notch can show all your upcoming events in one place. Access to your calendar is needed to display your schedule.",
-                    privacyNote: "Your calendar data is only used to show your events and is never shared.",
+                    title: QuotaText.localized("Enable Calendar Access"),
+                    description: QuotaText.localized("QuotaNotch can show your upcoming events in the notch. Calendar access is needed to display your schedule."),
+                    privacyNote: QuotaText.localized("Your calendar data is only used to show your events and is never shared."),
                     onAllow: {
                         Task {
                                 await requestCalendarPermission()
@@ -59,9 +68,9 @@ struct OnboardingView: View {
                 case .remindersPermission:
                     PermissionRequestView(
                         icon: Image(systemName: "checklist"),
-                        title: "Enable Reminders Access",
-                        description: "Boring Notch can show your scheduled reminders alongside your calendar events. Access to Reminders is needed to display your reminders.",
-                        privacyNote: "Your reminders data is only used to show your reminders and is never shared.",
+                        title: QuotaText.localized("Enable Reminders Access"),
+                        description: QuotaText.localized("QuotaNotch can show your reminders next to your calendar events. Reminders access is needed to display them."),
+                        privacyNote: QuotaText.localized("Your reminders data is only used to show your reminders and is never shared."),
                         onAllow: {
                             Task {
                                 await requestRemindersPermission()
@@ -81,9 +90,9 @@ struct OnboardingView: View {
             case .accessibilityPermission:
                 PermissionRequestView(
                     icon: Image(systemName: "hand.raised.fill"),
-                    title: "Enable Accessibility Access",
-                    description: "Accessibility access is required to replace system notifications with the Boring Notch HUD. This allows the app to intercept media and brightness events to display custom HUD overlays.",
-                    privacyNote: "Accessibility access is used only to improve media and brightness notifications. No data is collected or shared.",
+                    title: QuotaText.localized("Enable Accessibility Access"),
+                    description: QuotaText.localized("Optional: lets QuotaNotch show volume and brightness changes in the notch instead of the system overlay."),
+                    privacyNote: QuotaText.localized("Accessibility access is used only for volume and brightness keys. No data is collected or shared."),
                     onAllow: {
                         Task {
                             await requestAccessibilityPermission()

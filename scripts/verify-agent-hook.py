@@ -37,7 +37,7 @@ with tempfile.TemporaryDirectory() as temp:
             "rate_limits": {"five_hour": {"used_percentage": 23.5, "resets_at": 1738425600},
                             "seven_day": {"used_percentage": 41.2, "resets_at": 1738857600}}}
     r = subprocess.run([sys.argv[1], "statusline", str(usage)], input=json.dumps(line), text=True, capture_output=True, timeout=3)
-    assert r.returncode == 0 and r.stdout.strip() == "5h 24% · 7d 41%", r.stdout
+    assert r.returncode == 0 and r.stdout.strip() == "5h 77% left · 7d 59% left", r.stdout
     record = usage / (identity + ".json")
     saved = json.loads(record.read_text())
     assert "DO_NOT_PERSIST" not in record.read_text() and "cost" not in record.read_text()

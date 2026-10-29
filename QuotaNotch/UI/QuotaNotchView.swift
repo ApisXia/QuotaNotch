@@ -37,11 +37,47 @@ final class QuotaNotchStore: ObservableObject {
             }
     }
 
+    /// Every window QuotaNotch currently has a reading for, across enabled services.
+    var availablePins: [QuotaPin] {
+        visibleProviders.flatMap { provider in
+            (results[provider]?.snapshot?.windows ?? []).map { QuotaPin(providerID: provider.rawValue, windowID: $0.id) }
+        }
+    }
     var automaticPin: QuotaPin? {
         guard enabled && pins.automatic else { return nil }
-        return QuotaAutomaticSelection.select(candidates: pins.candidates.filter {
-            $0.provider.map { providerEnabled($0) } ?? false
-        }, results: results, now: now)
+        return QuotaAutomaticSelection.select(candidates: availablePins, results: results, now: now)
+    }
+
+    /// What the closed notch shows: the lowest fresh window, nothing, or one fixed window.
+    enum NotchChoice: Hashable { case automatic, none, fixed(QuotaPin) }
+    var notchChoice: NotchChoice {
+        get {
+            if pins.automatic { return .automatic }
+            return pins.selected.map { .fixed($0) } ?? .none
+        }
+        set {
+            updatePins { pins in
+                switch newValue {
+                case .automatic: pins.automatic = true
+                case .none: pins.automatic = false; pins.selected = nil
+                case .fixed(let pin): pins.automatic = false; pins.selected = pin
+                }
+            }
+        }
+    }
+    func title(for pin: QuotaPin) -> String {
+        let window = window(for: pin)?.localizedTitle ?? QuotaText.localized([
+            "five_hour": "5 小时", "seven_day": "7 天", "primary_window": "主窗口", "secondary_window": "次窗口"
+        ][pin.windowID] ?? pin.windowID)
+        return (pin.provider?.title ?? pin.providerID) + " · " + window
+    }
+    var notchChoiceTitle: String {
+        switch notchChoice {
+        case .automatic:
+            return QuotaText.localized("自动") + (activePin.map { " · " + title(for: $0) } ?? "")
+        case .none: return QuotaText.localized("不显示")
+        case .fixed(let pin): return title(for: pin)
+        }
     }
     var activePin: QuotaPin? {
         automaticPin ?? pins.selected.flatMap { pin in
@@ -122,7 +158,9 @@ final class QuotaNotchStore: ObservableObject {
 
     @Published private(set) var results: [QuotaProvider: QuotaResult] = [:]
     @Published private(set) var refreshing = false
-    @Published private(set) var enabled = UserDefaults.standard.bool(forKey: "quotaNotchEnabled")
+    /// Quota is always on; individual services can be turned off. Claude only reads a local
+    /// file now, so there is no cost to monitoring by default. (Kept for the preview runner.)
+    @Published private(set) var enabled = true
     @Published var selectedProvider: QuotaProvider = .claude
     @Published private(set) var pins: QuotaPins = {
         guard let data = UserDefaults.standard.data(forKey: "quotaNotchPins"),
@@ -184,7 +222,6 @@ final class QuotaNotchStore: ObservableObject {
     func setEnabled(_ value: Bool) {
         generation += 1
         enabled = value
-        UserDefaults.standard.set(value, forKey: "quotaNotchEnabled")
         if value { start() }
         else {
             polling?.cancel()
