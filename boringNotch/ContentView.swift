@@ -335,9 +335,7 @@ struct ContentView: View {
     }
 
     func MusicLiveActivity() -> some View {
-        let height = vm.effectiveClosedNotchHeight
-        let size = max(0, height - 12)
-        return HStack(spacing: QuotaCompactMetrics.spacing) {
+        HStack(spacing: QuotaCompactMetrics.spacing) {
             Image(nsImage: musicManager.albumArt)
                 .resizable()
                 .clipped()
