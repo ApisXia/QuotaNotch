@@ -18,6 +18,9 @@ struct SettingsPreviewRunner {
         let output = URL(fileURLWithPath: "build/Settings-previews/\(language)")
         try FileManager.default.createDirectory(at: output, withIntermediateDirectories: true)
         try NotchGestureVerification.run()
+        // Fixtures start at the standard size with the default quota pet.
+        UserDefaults.standard.set(NotchUISize.standard.rawValue, forKey: NotchUISize.defaultsKey)
+        UserDefaults.standard.set(true, forKey: QuotaPetKind.enabledKey)
         // Old manual sizing preferences must no longer affect the actual screen layout.
         UserDefaults.standard.set(15, forKey: "notchHeight")
         UserDefaults.standard.set(10, forKey: "nonNotchHeight")
@@ -237,7 +240,14 @@ struct SettingsPreviewRunner {
             .onPreferenceChange(NotchModuleFrameAuditKey.self) { renderedFrames = $0 }
             .transaction { $0.animation = nil; $0.disablesAnimations = true }
             .background(Color(red: 0.25, green: 0.15, blue: 0.35)))
-        func verifyGeometry(_ label: String, widget: CGFloat) {
+        /// The quota module is the pet at its pixel scale, except in the shared music wing.
+        func quotaWidth(height: CGFloat, size: NotchUISize, shared: Bool) -> CGFloat {
+            let icon = QuotaCompactMetrics.iconSize(height: height, size: size)
+            let scale = shared ? 1 : QuotaPetArt.pixelScale(size: size, notchHeight: height,
+                                                            displayScale: host.window?.backingScaleFactor ?? 1)
+            return scale > 1 ? 20 * scale : icon
+        }
+        func verifyGeometry(_ label: String, widget: CGFloat, quota: CGFloat? = nil) {
             guard let camera = renderedFrames["camera"] else { fatalError("Missing camera geometry in \(label)") }
             verifyPresentation(abs(camera.midX - host.bounds.midX) <= 1, "Physical notch shifted in \(label): \(camera)")
             if let album = renderedFrames["album"] {
@@ -247,7 +257,7 @@ struct SettingsPreviewRunner {
             }
             for name in ["quota", "task"] {
                 if let mode = renderedModules[name], let frame = renderedFrames[name] {
-                    let expected = mode == "minimal" ? CGFloat(16) : widget
+                    let expected = mode == "minimal" ? CGFloat(16) : (name == "quota" ? (quota ?? widget) : widget)
                     verifyPresentation(abs(frame.width - expected) <= 1, "\(name) width changed in \(label): \(frame.width) vs \(expected)")
                     verifyPresentation(frame.maxX <= camera.minX + 1 || frame.minX >= camera.maxX - 1,
                         "\(name) overlaps physical notch in \(label)")
@@ -390,7 +400,8 @@ struct SettingsPreviewRunner {
                 if scenario.tasks && !scenario.quota && !scenario.music { expected["task-summary"] = "widget" }
                 verifyPresentation(renderedModules == expected,
                     "Wrong presentation in \(layout), height \(headerHeight), selection \(expanded): \(renderedModules), expected \(expected)")
-                verifyGeometry("\(layout)-\(headerHeight)-\(expanded)", widget: QuotaCompactMetrics.iconSize(height: headerHeight))
+                verifyGeometry("\(layout)-\(headerHeight)-\(expanded)", widget: QuotaCompactMetrics.iconSize(height: headerHeight),
+                               quota: quotaWidth(height: headerHeight, size: .standard, shared: scenario.music && scenario.tasks))
                 modeAudit.append(["case": layout, "height": headerHeight, "taskSelected": expanded, "rendered": renderedModules])
                 let bitmap = host.bitmapImageRepForCachingDisplay(in: host.bounds)!
                 host.cacheDisplay(in: host.bounds, to: bitmap)
@@ -450,7 +461,8 @@ struct SettingsPreviewRunner {
                         : ["music": "widget", "quota": expanded ? "minimal" : "widget",
                            "task": expanded ? "widget" : "minimal", "divider": "switchable"]
                     verifyPresentation(renderedModules == expected, "Playback transition \(playback) retained the wrong presentation: \(renderedModules)")
-                    verifyGeometry("\(playback)-\(headerHeight)-\(expanded)", widget: QuotaCompactMetrics.iconSize(height: headerHeight))
+                    verifyGeometry("\(playback)-\(headerHeight)-\(expanded)", widget: QuotaCompactMetrics.iconSize(height: headerHeight),
+                                   quota: quotaWidth(height: headerHeight, size: .standard, shared: playback != "idle"))
                     modeAudit.append(["case": playback, "height": headerHeight, "taskSelected": expanded, "rendered": renderedModules])
                     let bitmap = host.bitmapImageRepForCachingDisplay(in: host.bounds)!
                     host.cacheDisplay(in: host.bounds, to: bitmap)
@@ -458,8 +470,8 @@ struct SettingsPreviewRunner {
                 }
             }
         }
-        for comfortable in [true, false] {
-            UserDefaults.standard.set(comfortable, forKey: "quotaComfortable")
+        for size in [NotchUISize.large, .small, .standard] {
+            UserDefaults.standard.set(size.rawValue, forKey: NotchUISize.defaultsKey)
             for headerHeight: CGFloat in [24, 32, 38] {
                 vm.closedNotchSize.height = headerHeight
                 for scenario in cases.reversed() {
@@ -470,10 +482,11 @@ struct SettingsPreviewRunner {
                     for expanded in [true, false] {
                         activity.compactExpanded = expanded
                         settle(); host.layoutSubtreeIfNeeded()
-                        let widget = QuotaCompactMetrics.iconSize(height: headerHeight, comfortable: scenario.quota && comfortable)
-                        verifyGeometry("reverse-\(scenario.name)-\(headerHeight)-\(expanded)-comfortable=\(comfortable)", widget: widget)
+                        let widget = QuotaCompactMetrics.iconSize(height: headerHeight, size: scenario.quota ? size : .standard)
+                        verifyGeometry("reverse-\(scenario.name)-\(headerHeight)-\(expanded)-size=\(size.rawValue)", widget: widget,
+                                       quota: quotaWidth(height: headerHeight, size: size, shared: scenario.music && scenario.tasks))
                         modeAudit.append(["case": "reverse-" + scenario.name, "height": headerHeight,
-                                          "taskSelected": expanded, "comfortable": comfortable, "rendered": renderedModules])
+                                          "taskSelected": expanded, "size": size.rawValue, "rendered": renderedModules])
                     }
                 }
             }
@@ -755,14 +768,14 @@ struct SettingsPreviewRunner {
     @MainActor private static func captureCat(output: URL, fixtures: [AgentSession]) throws {
         let savedCat = UserDefaults.standard.object(forKey: "notchCatEnabled")
         // The walking cat only appears without a quota pet, so its wing budget is measured that way.
-        let savedPet = UserDefaults.standard.object(forKey: QuotaPetKind.defaultsKey)
+        let savedPet = UserDefaults.standard.object(forKey: QuotaPetKind.enabledKey)
         UserDefaults.standard.set(true, forKey: "notchCatEnabled")
-        UserDefaults.standard.set(QuotaPetKind.off.rawValue, forKey: QuotaPetKind.defaultsKey)
+        UserDefaults.standard.set(false, forKey: QuotaPetKind.enabledKey)
         defer {
             if let savedCat { UserDefaults.standard.set(savedCat, forKey: "notchCatEnabled") }
             else { UserDefaults.standard.removeObject(forKey: "notchCatEnabled") }
-            if let savedPet { UserDefaults.standard.set(savedPet, forKey: QuotaPetKind.defaultsKey) }
-            else { UserDefaults.standard.removeObject(forKey: QuotaPetKind.defaultsKey) }
+            if let savedPet { UserDefaults.standard.set(savedPet, forKey: QuotaPetKind.enabledKey) }
+            else { UserDefaults.standard.removeObject(forKey: QuotaPetKind.enabledKey) }
         }
         let vm = BoringViewModel()
         vm.hideOnClosed = false

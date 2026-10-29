@@ -6,12 +6,14 @@ import KeyboardShortcuts
 struct QuotaPreferences: View {
     @ObservedObject private var store = QuotaNotchStore.shared
     @ObservedObject private var claude = ClaudeConnection.shared
-    @AppStorage("quotaComfortable") private var comfortable = false
+    @AppStorage(NotchUISize.defaultsKey) private var sizeRaw = NotchUISize.current.rawValue
+    @AppStorage(QuotaPetKind.enabledKey) private var petEnabled = true
     @AppStorage("quotaNotifications") private var notifications = false
     @AppStorage("quotaAlertThreshold") private var threshold = 20.0
     @AppStorage(QuotaPetKind.defaultsKey) private var petRaw = QuotaPetKind.defaultKind.rawValue
     @AppStorage(QuotaPetTint.defaultsKey) private var tintRaw = QuotaPetTint.original.rawValue
-    private var pet: QuotaPetKind { QuotaPetKind.stored(petRaw) }
+    private var pet: QuotaPetKind { QuotaPetKind.effective(enabled: petEnabled, raw: petRaw) }
+    private var size: NotchUISize { NotchUISize.stored(sizeRaw, legacyComfortable: false) }
     var body: some View {
         Form {
             providersSection
@@ -73,15 +75,15 @@ struct QuotaPreferences: View {
                     }
                 }
             }
-            SettingsField("额度宠物") {
-                Picker("额度宠物", selection: $petRaw) {
-                    Text("不用宠物（圆环）").tag(QuotaPetKind.off.rawValue)
-                    Text("麻薯 · 猫").tag(QuotaPetKind.mochi.rawValue)
-                    Text("比特 · 机器人").tag(QuotaPetKind.bit.rawValue)
-                    Text("果冻 · 史莱姆").tag(QuotaPetKind.jelly.rawValue)
+            Toggle("宠物模式", isOn: $petEnabled)
+            if petEnabled {
+                SettingsField("宠物") {
+                    Picker("宠物", selection: Binding(get: { QuotaPetKind.choice(petRaw).rawValue }, set: { petRaw = $0 })) {
+                        Text("麻薯 · 猫").tag(QuotaPetKind.mochi.rawValue)
+                        Text("比特 · 机器人").tag(QuotaPetKind.bit.rawValue)
+                        Text("果冻 · 史莱姆").tag(QuotaPetKind.jelly.rawValue)
+                    }
                 }
-            }
-            if pet != .off {
                 SettingsField("宠物配色") {
                     Picker("宠物配色", selection: $tintRaw) {
                         Text("原色").tag(QuotaPetTint.original.rawValue)
@@ -93,8 +95,27 @@ struct QuotaPreferences: View {
                 Toggle("圆环中显示剩余百分比", isOn: Binding(get: { store.pins.showsNumbers },
                     set: { value in store.updatePins { $0.showsNumbers = value } }))
             }
-            Toggle("大字模式", isOn: $comfortable)
+            sizeRow
         }
+    }
+
+    /// Three steps: standard keeps the original sizes and only enlarges the pet; small and
+    /// large also resize the closed icons and the opened panel.
+    private var sizeRow: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text("大小")
+            Slider(value: Binding(get: { Double(size.index) },
+                                  set: { sizeRaw = NotchUISize.allCases[min(2, max(0, Int($0.rounded())))].rawValue }),
+                   in: 0...2, step: 1)
+                .labelsHidden()
+            HStack {
+                Text("小"); Spacer(); Text("标准"); Spacer(); Text("大")
+            }
+            .font(.caption).foregroundStyle(.secondary)
+            Text("标准：只放大宠物。小和大会一起调整刘海里的图标和展开后的面板。")
+                .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+        }
+        .padding(.vertical, 3)
     }
 
     /// The chosen pet in each quota state, drawn twice the notch size.

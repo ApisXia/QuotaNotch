@@ -6,7 +6,8 @@ import SwiftUI
 let quotaNeutralBar = Color(white: 0.86)
 
 struct QuotaWindowTile: View {
-    @AppStorage("quotaComfortable") private var comfortable = false
+    /// The panel scales as a whole now (Settings → Size), so text keeps its base size.
+    private let comfortable = false
     let title: String
     let percent: Double
     let reset: Date?
@@ -79,7 +80,8 @@ struct QuotaWindowTile: View {
 }
 
 struct QuotaProviderTab: View {
-    @AppStorage("quotaComfortable") private var comfortable = false
+    /// The panel scales as a whole now (Settings → Size), so text keeps its base size.
+    private let comfortable = false
     let title: String
     let brand: QuotaBrand
     let selected: Bool

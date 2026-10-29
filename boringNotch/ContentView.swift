@@ -48,6 +48,9 @@ struct ContentView: View {
     @AppStorage("notchCatEnabled") private var catEnabled = false
     @AppStorage("notchCatTaskCues") private var catTaskCues = true
     @AppStorage(QuotaPetKind.defaultsKey) private var quotaPetRaw = QuotaPetKind.defaultKind.rawValue
+    @AppStorage(QuotaPetKind.enabledKey) private var quotaPetEnabled = true
+    @AppStorage(NotchUISize.defaultsKey) private var notchSizeRaw = NotchUISize.current.rawValue
+    private var panelScale: CGFloat { NotchUISize.stored(notchSizeRaw, legacyComfortable: false).panelScale }
     // Deterministic poses are injected only by the isolated screenshot runner.
     var catPreviewPose: CatPose? = nil
 
@@ -55,7 +58,7 @@ struct ContentView: View {
     @ObservedObject private var catRuntime = NotchCatRuntime.shared
     private var catCanAppear: Bool {
         // Only one pet at a time: the quota pet replaces the walking cat.
-        catEnabled && (catPreviewPose != nil || QuotaPetKind.stored(quotaPetRaw) == .off)
+        catEnabled && (catPreviewPose != nil || QuotaPetKind.effective(enabled: quotaPetEnabled, raw: quotaPetRaw) == .off)
             && (!reduceMotion || catPreviewPose != nil) && !catRuntime.suspended && vm.notchState == .closed
             && !vm.hideOnClosed && vm.effectiveClosedNotchHeight >= 24
             && !eventPresentation.replacesPrimary && eventPresentation.accessory == nil
@@ -229,6 +232,7 @@ struct ContentView: View {
     private var styledNotch: some View {
          NotchLayout()
                     .frame(alignment: .top)
+                    .modifier(NotchPanelScale(scale: vm.notchState == .open ? panelScale : 1, inner: openPanelInnerSize))
                     .padding(
                         .horizontal,
                         vm.notchState == .open
@@ -266,6 +270,12 @@ struct ContentView: View {
                     .offset(x: vm.notchState == .closed ? taskWingOffset + catWingOffset : 0)
                     .animation(reduceMotion ? nil : .smooth(duration: 0.32), value: taskWingOffset)
                 
+    }
+
+    /// The space inside the opened shell, after its corner and edge padding.
+    private var openPanelInnerSize: CGSize {
+        let corner = NotchStyle.scalesCorners ? cornerRadiusInsets.opened.top : cornerRadiusInsets.opened.bottom
+        return CGSize(width: max(0, vm.notchSize.width - 2 * (corner + 12)), height: max(0, vm.notchSize.height - 12))
     }
 
     @ViewBuilder
@@ -591,4 +601,18 @@ struct ContentView: View {
     return ContentView()
         .environmentObject(vm)
         .frame(width: vm.notchSize.width, height: vm.notchSize.height)
+}
+
+/// Lays the opened panel out at its standard size and scales it to the chosen size, so every
+/// control and text grows or shrinks together. The view structure is the same at every scale.
+struct NotchPanelScale: ViewModifier {
+    let scale: CGFloat
+    let inner: CGSize
+    func body(content: Content) -> some View {
+        let active = scale != 1 && inner.width > 0 && inner.height > 0
+        content
+            .frame(width: active ? inner.width / scale : nil, height: active ? inner.height / scale : nil, alignment: .top)
+            .scaleEffect(active ? scale : 1, anchor: .top)
+            .frame(width: active ? inner.width : nil, height: active ? inner.height : nil, alignment: .top)
+    }
 }

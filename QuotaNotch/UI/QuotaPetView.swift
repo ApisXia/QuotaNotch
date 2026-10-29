@@ -95,21 +95,39 @@ extension Color {
     }
 }
 
-/// The remaining percentage beside the pet when quota has both wings to itself.
+/// The remaining percentage beside the pet when quota has both wings to itself, with a
+/// horizontal bar in the pet's own gauge color underneath.
 struct QuotaPetPercent: View {
     let percent: Double?
     let stale: Bool
+    let kind: QuotaPetKind
+    let provider: QuotaProvider
+    let tint: QuotaPetTint
+    var fontSize: CGFloat = 12
     var body: some View {
+        let value = percent.map { min(100, max(0, $0)) }
         let ink: Color = {
-            guard let percent, !stale else { return .gray }
-            if percent < 20 { return Color(quotaPetRGB: 0xFF6B5E) }
-            if percent < 35 { return Color(quotaPetRGB: 0xF4D35E) }
+            guard let value, !stale else { return .gray }
+            if value < 20 { return Color(quotaPetRGB: 0xFF6B5E) }
+            if value < 35 { return Color(quotaPetRGB: 0xF4D35E) }
             return .white
         }()
-        Text(percent.map { QuotaText.percent($0) + "%" } ?? "—")
-            .font(.system(size: 12, weight: .semibold, design: .rounded))
-            .monospacedDigit()
-            .lineLimit(1).minimumScaleFactor(0.7)
-            .foregroundStyle(ink)
+        let bar: Color = value.map { stale ? .gray : Color(quotaPetRGB: QuotaPetArt.gaugeColor(kind, provider: provider, tint: tint, remaining: $0)) } ?? .gray
+        VStack(spacing: max(2, fontSize * 0.2)) {
+            Text(value.map { QuotaText.percent($0) + "%" } ?? "—")
+                .font(.system(size: fontSize, weight: .semibold, design: .rounded))
+                .monospacedDigit()
+                .lineLimit(1).minimumScaleFactor(0.7)
+                .foregroundStyle(ink)
+            GeometryReader { proxy in
+                ZStack(alignment: .leading) {
+                    Capsule().fill(Color.white.opacity(0.18))
+                    Capsule().fill(bar).frame(width: proxy.size.width * CGFloat((value ?? 0) / 100))
+                }
+            }
+            .frame(height: fontSize >= 13 ? 3 : 2)
+        }
+        .padding(.horizontal, 1)
+        .fixedSize(horizontal: false, vertical: true)
     }
 }

@@ -174,10 +174,49 @@ final class QuotaPetTests: XCTestCase {
         XCTAssertEqual(QuotaWindow(id: "seven_day", title: "7 天", remainingPercent: 1, resetsAt: nil).period, 7 * 86400)
     }
 
-    func testStoredKindFallsBackToDefault() {
-        XCTAssertEqual(QuotaPetKind.stored(nil), .bit)
-        XCTAssertEqual(QuotaPetKind.stored("jelly"), .jelly)
-        XCTAssertEqual(QuotaPetKind.stored("unknown"), .bit)
-        XCTAssertEqual(QuotaPetKind.stored("off"), .off)
+    func testPetModeIsASeparateSwitch() {
+        XCTAssertEqual(QuotaPetKind.choice(nil), .bit)
+        XCTAssertEqual(QuotaPetKind.choice("jelly"), .jelly)
+        XCTAssertEqual(QuotaPetKind.choice("unknown"), .bit)
+        XCTAssertEqual(QuotaPetKind.choice("off"), .bit)
+        XCTAssertEqual(QuotaPetKind.effective(enabled: true, raw: "mochi"), .mochi)
+        XCTAssertEqual(QuotaPetKind.effective(enabled: false, raw: "mochi"), .off)
+    }
+
+    func testPixelScaleStaysOnWholeDevicePixels() {
+        XCTAssertEqual(QuotaPetArt.pixelScale(size: .standard, notchHeight: 32, displayScale: 2), 1.5)
+        XCTAssertEqual(QuotaPetArt.pixelScale(size: .standard, notchHeight: 32, displayScale: 1), 1)
+        XCTAssertEqual(QuotaPetArt.pixelScale(size: .small, notchHeight: 32, displayScale: 2), 1)
+        XCTAssertEqual(QuotaPetArt.pixelScale(size: .large, notchHeight: 32, displayScale: 2), 1.5)
+        XCTAssertEqual(QuotaPetArt.pixelScale(size: .large, notchHeight: 38, displayScale: 1), 2)
+        XCTAssertEqual(QuotaPetArt.pixelScale(size: .large, notchHeight: 24, displayScale: 2), 1)
+        for size in NotchUISize.allCases {
+            for height: CGFloat in [24, 32, 38] {
+                for display: CGFloat in [1, 2] {
+                    let scale = QuotaPetArt.pixelScale(size: size, notchHeight: height, displayScale: display)
+                    XCTAssertEqual((scale * display).truncatingRemainder(dividingBy: 1), 0)
+                    XCTAssertLessThanOrEqual(16 * scale, height)
+                }
+            }
+        }
+    }
+
+    func testGaugeColorFollowsThePet() {
+        XCTAssertEqual(QuotaPetArt.gaugeColor(.mochi, provider: .claude, tint: .original, remaining: 80), 0xF0B85A)
+        XCTAssertEqual(QuotaPetArt.gaugeColor(.mochi, provider: .claude, tint: .service, remaining: 80), 0xE39B7A)
+        XCTAssertEqual(QuotaPetArt.gaugeColor(.bit, provider: .codex, tint: .original, remaining: 80), 0x5AD19A)
+        XCTAssertEqual(QuotaPetArt.gaugeColor(.bit, provider: .codex, tint: .service, remaining: 80), 0x9ED4BF)
+        XCTAssertEqual(QuotaPetArt.gaugeColor(.jelly, provider: .claude, tint: .original, remaining: 80), 0x7AA2FF)
+        XCTAssertEqual(QuotaPetArt.gaugeColor(.jelly, provider: .claude, tint: .original, remaining: 10), 0xFF5A4F)
+        XCTAssertEqual(QuotaPetArt.gaugeColor(.mochi, provider: .claude, tint: .original, remaining: 30), 0xF4D35E)
+    }
+
+    func testSizeSettingMigratesLargerDisplay() {
+        XCTAssertEqual(NotchUISize.stored(nil, legacyComfortable: true), .large)
+        XCTAssertEqual(NotchUISize.stored(nil, legacyComfortable: false), .standard)
+        XCTAssertEqual(NotchUISize.stored("small", legacyComfortable: true), .small)
+        XCTAssertEqual(NotchUISize.standard.panelScale, 1)
+        XCTAssertEqual(QuotaCompactMetrics.iconSize(height: 32, size: .standard), QuotaCompactMetrics.iconSize(height: 32))
+        XCTAssertEqual(QuotaCompactMetrics.iconSize(height: 32, size: .large), QuotaCompactMetrics.iconSize(height: 32, comfortable: true))
     }
 }

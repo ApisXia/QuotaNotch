@@ -11,8 +11,15 @@ import SwiftUI
 
 
 let shadowPadding: CGFloat = 20
-let openNotchSize: CGSize = .init(width: 640, height: 190)
-let windowSize: CGSize = .init(width: openNotchSize.width, height: openNotchSize.height + shadowPadding)
+let openNotchBaseSize: CGSize = .init(width: 640, height: 190)
+/// The opened panel at the chosen size (Settings → AI Usage → Size).
+var openNotchSize: CGSize {
+    let scale = NotchUISize.current.panelScale
+    return CGSize(width: (openNotchBaseSize.width * scale).rounded(), height: (openNotchBaseSize.height * scale).rounded())
+}
+/// Windows are created once, so they always have room for the largest panel.
+let windowSize: CGSize = .init(width: (openNotchBaseSize.width * NotchUISize.largestPanelScale).rounded(),
+                               height: (openNotchBaseSize.height * NotchUISize.largestPanelScale).rounded() + shadowPadding)
 let cornerRadiusInsets: (opened: (top: CGFloat, bottom: CGFloat), closed: (top: CGFloat, bottom: CGFloat)) = (opened: (top: 19, bottom: 24), closed: (top: 6, bottom: 14))
 
 enum MusicPlayerImageSizes {

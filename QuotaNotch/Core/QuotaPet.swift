@@ -4,9 +4,17 @@ import Foundation
 /// A small pixel pet that stands in for the closed-notch quota ring. It only reflects quota.
 enum QuotaPetKind: String, CaseIterable, Sendable {
     case off, mochi, bit, jelly
+    /// The chosen pet (never `off`); whether it shows is a separate switch.
     static let defaultsKey = "quotaPet"
+    static let enabledKey = "quotaPetEnabled"
     static let defaultKind: QuotaPetKind = .bit
-    static func stored(_ raw: String?) -> QuotaPetKind { raw.flatMap(QuotaPetKind.init(rawValue:)) ?? defaultKind }
+    static let pets: [QuotaPetKind] = [.mochi, .bit, .jelly]
+    static func choice(_ raw: String?) -> QuotaPetKind {
+        let kind = raw.flatMap(QuotaPetKind.init(rawValue:)) ?? defaultKind
+        return kind == .off ? defaultKind : kind
+    }
+    /// What the notch shows: the chosen pet while pet mode is on, otherwise the original ring.
+    static func effective(enabled: Bool, raw: String?) -> QuotaPetKind { enabled ? choice(raw) : .off }
 }
 
 /// `original` keeps the drawn colors; `service` tints one detail with the Claude or Codex color.
@@ -339,6 +347,30 @@ enum QuotaPetArt {
     // MARK: Colors (0xRRGGBB)
 
     static func brandColor(_ provider: QuotaProvider) -> UInt32 { provider == .claude ? 0xE39B7A : 0x9ED4BF }
+
+    /// Points per sprite pixel. Only whole device pixels keep the art crisp: 1.5 needs a
+    /// Retina display, 2 needs a tall notch.
+    static func pixelScale(size: NotchUISize, notchHeight: CGFloat, displayScale: CGFloat) -> CGFloat {
+        guard notchHeight >= 30 else { return 1 }
+        let retina = displayScale >= 2
+        switch size {
+        case .small: return 1
+        case .standard: return retina ? 1.5 : 1
+        case .large: return notchHeight >= 36 ? 2 : (retina ? 1.5 : 1)
+        }
+    }
+
+    /// The color of the pet's own gauge (food, chest meter, water), for the bar beside it.
+    static func gaugeColor(_ kind: QuotaPetKind, provider: QuotaProvider, tint: QuotaPetTint, remaining: Double) -> UInt32 {
+        let palette = palette(kind, provider: provider, tint: tint, remaining: remaining)
+        let warning: UInt32? = remaining < 20 ? 0xFF5A4F : (remaining < 35 ? 0xF4D35E : nil)
+        switch kind {
+        case .off: return 0xFFFFFF
+        case .mochi: return warning ?? (tint == .service ? brandColor(provider) : palette[UInt8(ascii: "f")] ?? 0xF0B85A)
+        case .bit: return palette[UInt8(ascii: "m")] ?? 0x5AD19A
+        case .jelly: return palette[UInt8(ascii: "f")] ?? 0x7AA2FF
+        }
+    }
 
     static func palette(_ kind: QuotaPetKind, provider: QuotaProvider, tint: QuotaPetTint, remaining: Double) -> [UInt8: UInt32] {
         var colors: [Character: UInt32]
