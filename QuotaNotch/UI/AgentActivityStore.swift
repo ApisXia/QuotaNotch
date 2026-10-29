@@ -142,22 +142,34 @@ import UserNotifications
         snapshot.sessions += claudeSnapshot.sessions
         snapshot.sessions.sort {
             if $0.state.priority != $1.state.priority { return $0.state.priority < $1.state.priority }
-            return $0.updatedAt > $1.updatedAt
+            if $0.updatedAt != $1.updatedAt { return $0.updatedAt > $1.updatedAt }
+            return $0.identity < $1.identity // stable order, so unchanged polls compare equal
         }
         snapshot.truncated = codexSnapshot.truncated || claudeSnapshot.truncated
         snapshot.hasSessionDirectory = snapshot.hasSessionDirectory || claudeSnapshot.hasSessionDirectory
         snapshot.issue = [codexSnapshot.issue, claudeSnapshot.issue].compactMap { $0 }.joined(separator: "\n")
         if snapshot.issue?.isEmpty == true { snapshot.issue = nil }
         guard enabled, !Task.isCancelled else { return }
-        now = Date(); issue = snapshot.issue.map { message in
+        // Every @Published write re-renders the always-visible notch, so only write real changes.
+        // `now` only drives history aging, which needs minute precision at most.
+        let latest = AgentCurrentSessions.latest(snapshot.sessions)
+        let changed = latest != sessions
+        let current = Date()
+        if changed || current.timeIntervalSince(now) >= 30 { now = current }
+        let newIssue = snapshot.issue.map { message in
             switch message {
             case "Some task records could not be read. Retrying automatically.": return AgentText.t("部分任务记录暂时无法读取，正在自动重试。", message)
             case "Codex metadata is unavailable. Using local task records.": return AgentText.t("Codex 项目资料暂时不可用，正在使用本地任务记录。", message)
             default: return message
             }
-        }; truncated = snapshot.truncated
-        connected = snapshot.hasDatabase || snapshot.hasSessionDirectory
-        sessions = AgentCurrentSessions.latest(snapshot.sessions); ready = true
+        }
+        if issue != newIssue { issue = newIssue }
+        if truncated != snapshot.truncated { truncated = snapshot.truncated }
+        let isConnected = snapshot.hasDatabase || snapshot.hasSessionDirectory
+        if connected != isConnected { connected = isConnected }
+        if changed { sessions = latest }
+        if !ready { ready = true }
+        guard changed || !baseline else { return }
         for session in sessions {
             if !baseline && lastEvents[session.identity] == nil {
                 // Starting the app must not replay yesterday's completions.

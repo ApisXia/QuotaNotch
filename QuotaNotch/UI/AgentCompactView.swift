@@ -17,7 +17,11 @@ struct AgentPaperGlyph: View {
     @Environment(\.colorScheme) private var scheme
     @State private var origin = Date()
     @State private var completionSettled = false
-    private var moving: Bool { state == .running || state == .waiting || state == .failed || (state == .completed && !completionSettled) }
+    /// A failure pulses briefly, then holds still: an unread failure can sit in the notch for hours.
+    @State private var failureSettled = false
+    private var moving: Bool {
+        state == .running || state == .waiting || (state == .failed && !failureSettled) || (state == .completed && !completionSettled)
+    }
     private var ink: Color { Color.primary }
     private var paperBackground: Color { scheme == .dark ? .black : .white }
 
@@ -29,7 +33,14 @@ struct AgentPaperGlyph: View {
         }
         .accessibilityHidden(true)
         .task(id: state) {
-            origin = Date(); completionSettled = false
+            origin = Date(); completionSettled = false; failureSettled = false
+            if state == .failed {
+                completionSettled = true
+                try? await Task.sleep(for: .seconds(8))
+                if !Task.isCancelled { failureSettled = true }
+                return
+            }
+            failureSettled = true
             guard state == .completed else { completionSettled = true; return }
             try? await Task.sleep(for: .milliseconds(350))
             if !Task.isCancelled { completionSettled = true }

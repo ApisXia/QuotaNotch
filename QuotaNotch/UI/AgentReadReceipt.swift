@@ -18,16 +18,25 @@ struct AgentReadReceipt: NSViewRepresentable {
         func configure(_ session: AgentSession, notch: Bool) {
             if self.session?.eventID != session.eventID { visibleSince = nil; acknowledged = false }
             self.session = session; self.notch = notch
+            startTimerIfNeeded()
         }
         override func viewDidMoveToWindow() {
-            super.viewDidMoveToWindow(); timer?.invalidate(); timer = nil
+            super.viewDidMoveToWindow(); stopTimer()
+            startTimerIfNeeded()
+        }
+        /// Polls visibility only while this row still has an unread event to acknowledge.
+        private func startTimerIfNeeded() {
             #if !SETTINGS_PREVIEW
-            if window != nil { timer = Timer.scheduledTimer(withTimeInterval: 0.25, repeats: true) { [weak self] _ in
+            guard timer == nil, window != nil, !acknowledged, let session,
+                  AgentActivityStore.shared.isUnread(session) else { return }
+            timer = Timer.scheduledTimer(withTimeInterval: 0.25, repeats: true) { [weak self] _ in
                 MainActor.assumeIsolated { self?.check() }
-            } }
+            }
             #endif
         }
+        private func stopTimer() { timer?.invalidate(); timer = nil }
         func check() {
+            if acknowledged || session.map({ !AgentActivityStore.shared.isUnread($0) }) ?? true { stopTimer(); return }
             guard !acknowledged, let session, let window, window.isVisible, !isHiddenOrHasHiddenAncestor,
                   (notch ? AgentActivityStore.shared.notchReadEnabled : window.isKeyWindow),
                   bounds.width > 1, bounds.height > 1,
@@ -35,6 +44,7 @@ struct AgentReadReceipt: NSViewRepresentable {
             if visibleSince == nil { visibleSince = Date() }
             guard Date().timeIntervalSince(visibleSince!) >= 0.85 else { return }
             AgentActivityStore.shared.markRead(session, keepVisible: true); acknowledged = true
+            stopTimer()
         }
         deinit { timer?.invalidate() }
     }

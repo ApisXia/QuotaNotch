@@ -12,6 +12,10 @@ actor ClaudeActivityRepository {
     private var cursors: [String: AgentLogCursor] = [:]
     private var cache: [String: AgentSession] = [:]
     private var inodes: [String: UInt64] = [:]
+    /// Finished results and the hook-file time they were built from, so unchanged
+    /// transcripts are not reopened (and their repository root not re-resolved) every poll.
+    private var processed: [String: AgentSession] = [:]
+    private var hookStamps: [String: Date] = [:]
     init(home: URL, hooks: URL) { self.home = home; self.hooks = hooks }
 
     func scan(now: Date = Date(), force: Bool = false) -> AgentActivitySnapshot {
@@ -33,6 +37,8 @@ actor ClaudeActivityRepository {
             cache = cache.filter { paths.contains($0.key) }
             cursors = cursors.filter { paths.contains($0.key) }
             inodes = inodes.filter { paths.contains($0.key) }
+            processed = processed.filter { paths.contains($0.key) }
+            hookStamps = hookStamps.filter { paths.contains($0.key) }
             discovered = now
         }
         result.truncated = discoveryTruncated
@@ -41,6 +47,16 @@ actor ClaudeActivityRepository {
             do {
                 let attrs = try fm.attributesOfItem(atPath: url.path)
                 let size = attrs[.size] as? UInt64 ?? 0, inode = attrs[.systemFileNumber] as? UInt64 ?? 0
+                let hookID = cache[url.path]?.id ?? url.deletingPathExtension().lastPathComponent
+                let hookURL = hooks.appendingPathComponent(hookID + ".json")
+                let hookStamp = (try? fm.attributesOfItem(atPath: hookURL.path)[.modificationDate]) as? Date ?? .distantPast
+                if !force, inodes[url.path] == inode, cursors[url.path]?.offset == size,
+                   hookStamps[url.path] == hookStamp, var done = processed[url.path] {
+                    guard !done.excluded, done.updatedAt != .distantPast else { continue }
+                    if done.state == .running && now.timeIntervalSince(done.updatedAt) > 12 * 3600 { done.state = .unknown }
+                    if unique[done.id].map({ $0.updatedAt > done.updatedAt }) != true { unique[done.id] = done }
+                    continue
+                }
                 var cursor = cursors[url.path] ?? AgentLogCursor()
                 var session = cache[url.path] ?? AgentSession(id: url.deletingPathExtension().lastPathComponent)
                 session.provider = .claude; session.rolloutPath = url.path
@@ -58,11 +74,15 @@ actor ClaudeActivityRepository {
                 }
                 try file.seek(toOffset: cursor.offset)
                 cursor.consume(try file.read(upToCount: 2 * 1024 * 1024) ?? Data()) { ClaudeActivityParser.apply($0, to: &session) }
-                if let data = try? Data(contentsOf: hooks.appendingPathComponent(session.id + ".json")), data.count < 16384,
+                if let attributes = try? fm.attributesOfItem(atPath: hooks.appendingPathComponent(session.id + ".json").path),
+                   (attributes[.size] as? NSNumber)?.intValue ?? .max < 16384,
+                   let data = try? Data(contentsOf: hooks.appendingPathComponent(session.id + ".json")),
                    let event = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] {
                     ClaudeActivityParser.applyHook(event, to: &session)
                 }
                 cursors[url.path] = cursor; cache[url.path] = session; inodes[url.path] = inode
+                hookStamps[url.path] = hookStamp
+                processed[url.path] = session
                 guard !session.excluded, session.updatedAt != .distantPast else { continue }
                 if session.state == .running && now.timeIntervalSince(session.updatedAt) > 12 * 3600 { session.state = .unknown }
 
@@ -70,6 +90,7 @@ actor ClaudeActivityRepository {
                 session.projectName = URL(fileURLWithPath: session.projectRoot).lastPathComponent
                 if session.projectName.isEmpty { session.projectName = "Claude Code" }
                 if session.title.isEmpty { session.title = String(session.userPrompt.prefix(120)) }
+                processed[url.path] = session
                 if unique[session.id].map({ $0.updatedAt > session.updatedAt }) != true { unique[session.id] = session }
             } catch { result.issue = "Some Claude Code task records could not be read. Retrying automatically." }
         }
