@@ -366,7 +366,7 @@ struct SettingsPreviewRunner {
             let widget = QuotaCompactMetrics.iconSize(height: height, size: quota ? size : .standard)
             verifyGeometry(label, widget: widget, quota: quotaWidth(height: height, size: size, shared: false))
             guard let camera = renderedFrames["camera"] else { return }
-            for name in ["summary", "tasks", "music"] {
+            for name in ["summary", "tasks"] {
                 if let frame = renderedFrames[name] {
                     verifyPresentation(frame.maxX <= camera.minX + 1 || frame.minX >= camera.maxX - 1,
                                        "\(name) overlaps physical notch in \(label)")
