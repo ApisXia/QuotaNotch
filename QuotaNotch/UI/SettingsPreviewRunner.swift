@@ -17,6 +17,7 @@ struct SettingsPreviewRunner {
         let language = UserDefaults.standard.stringArray(forKey: "AppleLanguages")?.first ?? "en"
         let output = URL(fileURLWithPath: "build/Settings-previews/\(language)")
         try FileManager.default.createDirectory(at: output, withIntermediateDirectories: true)
+        try NotchGestureVerification.run()
         // Old manual sizing preferences must no longer affect the actual screen layout.
         UserDefaults.standard.set(15, forKey: "notchHeight")
         UserDefaults.standard.set(10, forKey: "nonNotchHeight")

@@ -48,6 +48,11 @@ struct SettingsView: View {
         .frame(minWidth: 700, minHeight: 500)
         .background(Color(NSColor.windowBackgroundColor))
         .tint(settingsAccent)
+        .onAppear {
+            // A page saved by an older build may no longer exist.
+            let pages = ["General", "Appearance", "Connections", "Quota", "Activity", "Media", "Calendar", "System", "About"]
+            if !pages.contains(selectedTab) { selectedTab = "General" }
+        }
     }
 
     private var settingsAccent: Color {

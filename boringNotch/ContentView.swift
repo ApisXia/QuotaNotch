@@ -170,7 +170,8 @@ struct ContentView: View {
                 }
             }
             if vm.notchState == .closed {
-                Color.clear.frame(width: vm.closedNotchSize.width, height: vm.effectiveClosedNotchHeight)
+                // Match the actual camera gap so this hover target cannot cover wing controls.
+                Color.clear.frame(width: max(0, vm.closedNotchSize.width - cornerRadiusInsets.closed.top), height: vm.effectiveClosedNotchHeight)
                     .contentShape(Rectangle())
                     .onHover { cat.pointer($0, source: "camera"); handleHover($0) }
                     .onTapGesture { openFromPointer(explicit: true) }
