@@ -104,7 +104,8 @@ struct QuotaNotchView: View {
             VStack(alignment: .leading, spacing: 3) {
                 Text(LocalizedStringKey(result.failure?.message ?? "等待可用额度 · 不显示估算数据"))
                     .foregroundStyle(.orange).font(.system(size: 11)).lineLimit(2)
-                if result.failure == .notSignedIn || result.failure == .expired || result.failure == .credentialsUnavailable {
+                if result.failure == .notSignedIn || result.failure == .expired || result.failure == .credentialsUnavailable
+                    || result.failure == .notConnected {
                     Text(LocalizedStringKey(provider.loginHint)).font(.system(size: 10)).foregroundStyle(.secondary).lineLimit(1)
                 }
             }
@@ -198,7 +199,7 @@ struct QuotaNotchView: View {
             .menuStyle(.borderlessButton).fixedSize()
             .help("显示设置与状态说明").accessibilityLabel("额度显示设置")
             TimelineView(.periodic(from: .now, by: 1)) { context in
-                Button { Task { await store.refresh(providerOnly: provider) } } label: {
+                Button { Task { await store.refresh(providerOnly: provider, manual: true) } } label: {
                     Label("刷新", systemImage: "arrow.clockwise")
                 }
                 .disabled(store.refreshing || (store.results[provider]?.nextAttempt ?? .distantPast) > context.date)

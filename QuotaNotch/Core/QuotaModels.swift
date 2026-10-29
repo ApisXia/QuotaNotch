@@ -7,9 +7,13 @@ enum QuotaProvider: String, CaseIterable, Sendable, Identifiable {
     var id: String { rawValue }
     var title: String { switch self { case .claude: return "Claude"; case .codex: return "Codex" } }
     var loginHint: String {
-        self == .claude ? "在本机 Claude Code 中运行 /login，然后刷新。" : "在本机终端运行 codex login，然后刷新。"
+        self == .claude ? "在设置 → AI 额度中连接 Claude Code，然后在 Claude Code 里发送一条消息。" : "在本机终端运行 codex login，然后刷新。"
     }
-    var interval: TimeInterval { self == .claude ? 900 : 300 }
+    /// How often to look again. Claude only reads a local file written by its status line.
+    var interval: TimeInterval { self == .claude ? 30 : 300 }
+    /// When a reading should be presented as old. Claude's numbers only change when Claude Code
+    /// talks to the server, so an idle hour is normal.
+    var staleAfter: TimeInterval { self == .claude ? 3 * 3600 : interval + 60 }
 }
 
 struct QuotaWindow: Sendable, Equatable, Identifiable {
@@ -34,6 +38,8 @@ struct QuotaSnapshot: Sendable, Equatable {
 
 enum QuotaFailure: Error, Sendable, Equatable {
     case notSignedIn, expired, credentialsUnavailable, network, invalidResponse
+    /// Claude Code's status line has not reported usage to QuotaNotch.
+    case notConnected
     case http(Int)
     case rateLimited(Date)
 
@@ -41,11 +47,20 @@ enum QuotaFailure: Error, Sendable, Equatable {
         switch self {
         case .notSignedIn: return QuotaText.localized("未找到本机 CLI 登录凭据")
         case .expired: return QuotaText.localized("登录已过期或没有用量读取权限，请重新登录")
-        case .credentialsUnavailable: return QuotaText.localized("无法读取本机凭据，请检查文件或钥匙串权限")
+        case .credentialsUnavailable: return QuotaText.localized("无法读取本机凭据文件，请检查文件权限")
         case .network: return QuotaText.localized("网络连接失败，稍后可重试")
         case .invalidResponse: return QuotaText.localized("用量接口没有返回可识别的数据")
+        case .notConnected: return QuotaText.localized("尚未收到 Claude Code 的用量")
         case .http(let code): return QuotaText.format("用量服务暂不可用（HTTP %d）", code)
         case .rateLimited: return QuotaText.localized("服务端限流，等待重试时间")
+        }
+    }
+
+    /// Failures after which an older reading must not be shown as current.
+    var clearsSnapshot: Bool {
+        switch self {
+        case .notSignedIn, .expired, .credentialsUnavailable, .notConnected: return true
+        case .network, .invalidResponse, .http, .rateLimited: return false
         }
     }
 }
@@ -63,12 +78,15 @@ enum QuotaParser {
         }
         var windows: [QuotaWindow] = []
         if provider == .claude {
-            for (key, title) in [("five_hour", "5 小时"), ("seven_day", "7 天"),
-                                 ("seven_day_sonnet", "Sonnet · 7 天"), ("seven_day_opus", "Opus · 7 天")] {
+            // The `rate_limits` object Claude Code passes to its status line command.
+            for (key, title) in [("five_hour", "5 小时"), ("seven_day", "7 天")] {
                 guard let window = root[key] as? [String: Any],
-                      let used = number(window["utilization"]), (0...100).contains(used) else { continue }
-                windows.append(QuotaWindow(id: key, title: title, remainingPercent: 100 - used,
-                                           resetsAt: isoDate(window["resets_at"] as? String)))
+                      let used = number(window["used_percentage"]), (0...100).contains(used) else { continue }
+                var reset = number(window["resets_at"]).flatMap { $0 > 0 ? Date(timeIntervalSince1970: $0) : nil }
+                var remaining = 100 - used
+                // The window rolled over after this reading: nothing has been used in the new one yet.
+                if let date = reset, date <= now { remaining = 100; reset = nil }
+                windows.append(QuotaWindow(id: key, title: title, remainingPercent: remaining, resetsAt: reset))
             }
         } else if let limits = root["rate_limit"] as? [String: Any] {
             for (key, fallback) in [("primary_window", "主窗口"), ("secondary_window", "次窗口")] {

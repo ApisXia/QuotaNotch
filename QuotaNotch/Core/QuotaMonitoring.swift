@@ -4,7 +4,7 @@ import Foundation
 extension QuotaResult {
     func isStale(provider: QuotaProvider, now: Date) -> Bool {
         guard let snapshot else { return true }
-        return failure != nil || now.timeIntervalSince(snapshot.fetchedAt) > provider.interval + 60
+        return failure != nil || now.timeIntervalSince(snapshot.fetchedAt) > provider.staleAfter
     }
 }
 

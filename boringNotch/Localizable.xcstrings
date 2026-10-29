@@ -1,6 +1,69 @@
 {
   "sourceLanguage" : "en",
   "strings" : {
+    "尚未收到 Claude Code 的用量" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "No usage from Claude Code yet" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "尚未收到 Claude Code 的用量" } }
+      }
+    },
+    "已连接 Claude Code 状态栏" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Connected to the Claude Code status line" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "已连接 Claude Code 状态栏" } }
+      }
+    },
+    "断开" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Disconnect" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "断开" } }
+      }
+    },
+    "连接 Claude Code" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Connect Claude Code" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "连接 Claude Code" } }
+      }
+    },
+    "在 Claude Code 中发送消息后，额度会随之更新。原有的状态栏命令会继续显示。" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Quota updates after you send a message in Claude Code. Your existing status line command keeps showing." } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "在 Claude Code 中发送消息后，额度会随之更新。原有的状态栏命令会继续显示。" } }
+      }
+    },
+    "QuotaNotch 通过 Claude Code 的状态栏读取 5 小时和 7 天额度，不读取钥匙串或登录凭据。连接会修改 Claude Code 的 settings.json，原有状态栏命令会被保留并照常显示；没有状态栏时会显示一行额度。启用状态栏后，Claude Code 底部的部分快捷键提示（如 esc to interrupt）将不再显示。需要 Claude Pro 或 Max 订阅。" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "QuotaNotch reads 5-hour and 7-day quota from Claude Code's status line, never from the Keychain or your login. Connecting edits Claude Code's settings.json; an existing status line command is kept and still shown, otherwise a one-line quota summary appears. With a status line, Claude Code hides some footer hints such as \"esc to interrupt\". Requires Claude Pro or Max." } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "QuotaNotch 通过 Claude Code 的状态栏读取 5 小时和 7 天额度，不读取钥匙串或登录凭据。连接会修改 Claude Code 的 settings.json，原有状态栏命令会被保留并照常显示；没有状态栏时会显示一行额度。启用状态栏后，Claude Code 底部的部分快捷键提示（如 esc to interrupt）将不再显示。需要 Claude Pro 或 Max 订阅。" } }
+      }
+    },
+    "Claude Code 的设置刚被修改，请再试一次。" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Claude Code's settings just changed. Try again." } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "Claude Code 的设置刚被修改，请再试一次。" } }
+      }
+    },
+    "Claude Code 的 settings.json 不是有效的 JSON，未作修改。" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Claude Code's settings.json is not valid JSON; nothing was changed." } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "Claude Code 的 settings.json 不是有效的 JSON，未作修改。" } }
+      }
+    },
+    "这个 QuotaNotch 版本缺少状态栏组件，请使用 Releases 中的安装包。" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "This QuotaNotch build is missing the status line helper. Use a build from Releases." } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "这个 QuotaNotch 版本缺少状态栏组件，请使用 Releases 中的安装包。" } }
+      }
+    },
     "任务监控" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -21829,19 +21892,19 @@
         }
       }
     },
-    "在本机 Claude Code 中运行 /login，然后刷新。" : {
+    "在设置 → AI 额度中连接 Claude Code，然后在 Claude Code 里发送一条消息。" : {
       "extractionState" : "manual",
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Run /login in Claude Code on this Mac, then refresh."
+            "value" : "Connect Claude Code in Settings → AI Usage, then send a message in Claude Code."
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "在本机 Claude Code 中运行 /login，然后刷新。"
+            "value" : "在设置 → AI 额度中连接 Claude Code，然后在 Claude Code 里发送一条消息。"
           }
         }
       }
@@ -21897,19 +21960,19 @@
         }
       }
     },
-    "无法读取本机凭据，请检查文件或钥匙串权限" : {
+    "无法读取本机凭据文件，请检查文件权限" : {
       "extractionState" : "manual",
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Cannot read local credentials. Check file or Keychain access."
+            "value" : "Can't read the local credentials file. Check its permissions."
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "无法读取本机凭据，请检查文件或钥匙串权限"
+            "value" : "无法读取本机凭据文件，请检查文件权限"
           }
         }
       }

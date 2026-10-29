@@ -42,80 +42,117 @@ actor QuotaClient {
     private let credentials: any QuotaCredentialSource
     private let transport: any QuotaTransport
     private let clock: @Sendable () -> Date
+    private let claudeUsage: any ClaudeUsageSource
     private let claudeFallback: (any ClaudeQuotaFallback)?
     private var results: [QuotaProvider: QuotaResult] = [:]
+    private var failures: [QuotaProvider: Int] = [:]
     private var inFlight: [QuotaProvider: Task<QuotaResult, Never>] = [:]
 
     init(credentials: any QuotaCredentialSource = LocalQuotaCredentials(),
          transport: any QuotaTransport = QuotaURLTransport(),
          clock: @escaping @Sendable () -> Date = { Date() },
+         claudeUsage: any ClaudeUsageSource = ClaudeStatusLineUsage(directory: ClaudeStatusLineUsage.defaultDirectory),
          claudeFallback: (any ClaudeQuotaFallback)? = nil) {
         self.credentials = credentials
         self.transport = transport
         self.clock = clock
+        self.claudeUsage = claudeUsage
         self.claudeFallback = claudeFallback
     }
 
     /// All callers, including manual refresh and multiple displays, share the same cooldown.
-    func refresh(_ provider: QuotaProvider) async -> QuotaResult {
+    /// `manual` lets a user-initiated Claude refresh run the slow CLI fallback when the status
+    /// line has nothing recent; scheduled refreshes never start a process.
+    func refresh(_ provider: QuotaProvider, manual: Bool = false) async -> QuotaResult {
         if let task = inFlight[provider] { return await task.value }
         let now = clock()
         if let result = results[provider], result.nextAttempt > now { return result }
         let old = results[provider]?.snapshot
+        let attempt = failures[provider, default: 0] + 1
         let credentials = self.credentials
         let transport = self.transport
-        let claudeFallback = self.claudeFallback
+        let claudeUsage = self.claudeUsage
+        let claudeFallback = manual ? self.claudeFallback : nil
         let clock = self.clock
         let task = Task<QuotaResult, Never> {
             do {
                 try Task.checkCancellation()
+                let snapshot: QuotaSnapshot
                 if provider == .claude {
-                    let snapshot = try await ClaudeQuotaProbe(credentials: credentials, transport: transport,
-                        fallback: claudeFallback, clock: clock).fetch()
-                    return QuotaResult(snapshot: snapshot, failure: nil,
-                        nextAttempt: clock().addingTimeInterval(provider.interval))
+                    snapshot = try await Self.claudeSnapshot(usage: claudeUsage, fallback: claudeFallback, now: now)
+                } else {
+                    snapshot = try await Self.codexSnapshot(credentials: credentials, transport: transport, now: now)
                 }
-                let credential = try await credentials.load(provider)
-                if let expiry = credential.expiresAt, expiry <= now { throw QuotaFailure.expired }
-                let endpoint = "https://chatgpt.com/backend-api/wham/usage"
-                var request = URLRequest(url: URL(string: endpoint)!)
-                request.timeoutInterval = 20
-                request.cachePolicy = .reloadIgnoringLocalCacheData
-                request.setValue("Bearer \(credential.accessToken)", forHTTPHeaderField: "Authorization")
-                request.setValue("application/json", forHTTPHeaderField: "Accept")
-                request.setValue("QuotaNotch", forHTTPHeaderField: "User-Agent")
-                if let accountID = credential.accountID {
-                    request.setValue(accountID, forHTTPHeaderField: "ChatGPT-Account-Id")
-                }
-                try Task.checkCancellation()
-                let response = try await transport.send(request)
-                switch response.status {
-                case 200: break
-                case 401, 403: throw QuotaFailure.expired
-                case 429: throw QuotaFailure.rateLimited(Self.retryDate(response.retryAfter, now: now))
-                default: throw QuotaFailure.http(response.status)
-                }
-                let snapshot = try QuotaParser.parse(response.data, provider: provider, now: now)
-                return QuotaResult(snapshot: snapshot, failure: nil, nextAttempt: now.addingTimeInterval(provider.interval))
+                return QuotaResult(snapshot: snapshot, failure: nil,
+                                   nextAttempt: clock().addingTimeInterval(provider.interval))
             } catch {
                 // Never surface server bodies, headers, URLs with credentials, or raw errors.
                 let failure = error as? QuotaFailure ?? .network
-                let retry: Date
-                if case .rateLimited(let date) = failure { retry = date }
-                else { retry = now.addingTimeInterval(60) }
-                let clear: Bool
-                switch failure {
-                case .notSignedIn, .expired, .credentialsUnavailable: clear = true
-                default: clear = false
-                }
-                return QuotaResult(snapshot: clear ? nil : old, failure: failure, nextAttempt: retry)
+                return QuotaResult(snapshot: failure.clearsSnapshot ? nil : old, failure: failure,
+                                   nextAttempt: Self.nextAttempt(after: failure, provider: provider,
+                                                                 attempt: attempt, now: clock()))
             }
         }
         inFlight[provider] = task
         let result = await task.value
         inFlight[provider] = nil
         results[provider] = result
+        failures[provider] = result.failure == nil ? 0 : attempt
         return result
+    }
+
+    private static func claudeSnapshot(usage: any ClaudeUsageSource, fallback: (any ClaudeQuotaFallback)?,
+                                       now: Date) async throws -> QuotaSnapshot {
+        let reported: QuotaSnapshot?
+        do { reported = try await usage.latest(now: now) }
+        catch QuotaFailure.notConnected { reported = nil }
+        // A manual refresh may ask Claude Code's /usage screen when the status line is silent or old.
+        if let fallback, reported.map({ now.timeIntervalSince($0.fetchedAt) > 600 }) ?? true {
+            do { return try await fallback.fetch(now: now) }
+            catch QuotaFailure.rateLimited(let date) { throw QuotaFailure.rateLimited(date) }
+            catch {}
+        }
+        guard let reported else { throw QuotaFailure.notConnected }
+        return reported
+    }
+
+    private static func codexSnapshot(credentials: any QuotaCredentialSource, transport: any QuotaTransport,
+                                      now: Date) async throws -> QuotaSnapshot {
+        let credential = try await credentials.load(.codex)
+        if let expiry = credential.expiresAt, expiry <= now { throw QuotaFailure.expired }
+        var request = URLRequest(url: URL(string: "https://chatgpt.com/backend-api/wham/usage")!)
+        request.timeoutInterval = 20
+        request.cachePolicy = .reloadIgnoringLocalCacheData
+        request.setValue("Bearer \(credential.accessToken)", forHTTPHeaderField: "Authorization")
+        request.setValue("application/json", forHTTPHeaderField: "Accept")
+        request.setValue("QuotaNotch", forHTTPHeaderField: "User-Agent")
+        if let accountID = credential.accountID {
+            request.setValue(accountID, forHTTPHeaderField: "ChatGPT-Account-Id")
+        }
+        try Task.checkCancellation()
+        let response = try await transport.send(request)
+        switch response.status {
+        case 200: break
+        // Only 401 means the login itself was rejected; a 403 can come from an edge proxy.
+        case 401: throw QuotaFailure.expired
+        case 429: throw QuotaFailure.rateLimited(retryDate(response.retryAfter, now: now))
+        default: throw QuotaFailure.http(response.status)
+        }
+        return try QuotaParser.parse(response.data, provider: .codex, now: now)
+    }
+
+    /// Local readings are retried at the normal pace; a rejected login waits for the user;
+    /// server and network errors back off exponentially (1, 2, 4 … 30 minutes).
+    static func nextAttempt(after failure: QuotaFailure, provider: QuotaProvider, attempt: Int, now: Date) -> Date {
+        switch failure {
+        case .rateLimited(let date): return max(date, now.addingTimeInterval(60))
+        case .notConnected: return now.addingTimeInterval(provider.interval)
+        case .notSignedIn, .credentialsUnavailable: return now.addingTimeInterval(60)
+        case .expired: return now.addingTimeInterval(900)
+        case .network, .invalidResponse, .http:
+            let exponent = min(max(attempt - 1, 0), 5)
+            return now.addingTimeInterval(min(1800, 60 * pow(2, Double(exponent))))
+        }
     }
 
     static func retryDate(_ raw: String?, now: Date) -> Date {

@@ -208,7 +208,7 @@ final class QuotaNotchStore: ObservableObject {
         }
     }
 
-    func refresh(providerOnly: QuotaProvider? = nil) async {
+    func refresh(providerOnly: QuotaProvider? = nil, manual: Bool = false) async {
         #if SETTINGS_PREVIEW
         return // This executable only renders fixture data, even if an action requests a refresh.
         #endif
@@ -224,7 +224,7 @@ final class QuotaNotchStore: ObservableObject {
         defer { refreshing = false }
         await withTaskGroup(of: (QuotaProvider, QuotaResult).self) { group in
             for provider in providers {
-                group.addTask { [client] in (provider, await client.refresh(provider)) }
+                group.addTask { [client] in (provider, await client.refresh(provider, manual: manual)) }
             }
             for await (provider, result) in group {
                 guard enabled, generation == requestGeneration, !Task.isCancelled, providerEnabled(provider) else { continue }

@@ -10,11 +10,20 @@ private func fixture(_ name: String) throws -> Data {
 }
 
 final class QuotaParserTests: XCTestCase {
-    func testClaudeWindowsAndBothDateFormats() throws {
+    func testClaudeStatusLineRateLimits() throws {
         let result = try QuotaParser.parse(fixture("claude"), provider: .claude, now: fixtureNow)
-        XCTAssertEqual(result.windows.map(\.remainingPercent), [58, 25])
-        XCTAssertTrue(result.windows.allSatisfy { $0.resetsAt != nil })
+        XCTAssertEqual(result.windows.map(\.id), ["five_hour", "seven_day"])
+        XCTAssertEqual(result.windows.map(\.remainingPercent), [58, 24.5])
+        XCTAssertEqual(result.windows[0].resetsAt, Date(timeIntervalSince1970: 1_789_401_600))
         XCTAssertEqual(result.fetchedAt, fixtureNow)
+    }
+
+    func testClaudeWindowPastItsResetCountsAsUnused() throws {
+        let data = Data(#"{"five_hour":{"used_percentage":90,"resets_at":1789399000},"seven_day":{"used_percentage":10}}"#.utf8)
+        let result = try QuotaParser.parse(data, provider: .claude, now: fixtureNow)
+        XCTAssertEqual(result.windows.map(\.remainingPercent), [100, 90])
+        XCTAssertNil(result.windows[0].resetsAt)
+        XCTAssertNil(result.windows[1].resetsAt)
     }
 
     func testCodexActualDurationsAndResets() throws {
@@ -33,14 +42,15 @@ final class QuotaParserTests: XCTestCase {
     }
 
     func testRejectsBooleanNegativeOverHundredAndStringPercent() {
-        for value in ["true", "-1", "101", "\"42\"", "null"] {
-            let data = Data("{\"five_hour\":{\"utilization\":\(value)}}".utf8)
+        // 1789400000 guards against the epoch-instead-of-percentage value early in a window.
+        for value in ["true", "-1", "101", "\"42\"", "null", "1789400000"] {
+            let data = Data("{\"five_hour\":{\"used_percentage\":\(value)}}".utf8)
             XCTAssertThrowsError(try QuotaParser.parse(data, provider: .claude, now: fixtureNow))
         }
     }
 
     func testValidZeroAndUnknownReset() throws {
-        let data = Data(#"{"five_hour":{"utilization":100,"resets_at":"bad"},"seven_day":{"utilization":0}}"#.utf8)
+        let data = Data(#"{"five_hour":{"used_percentage":100,"resets_at":"bad"},"seven_day":{"used_percentage":0}}"#.utf8)
         let result = try QuotaParser.parse(data, provider: .claude, now: fixtureNow)
         XCTAssertEqual(result.windows.map(\.remainingPercent), [0, 100])
         XCTAssertNil(result.windows[0].resetsAt)
@@ -123,7 +133,7 @@ final class QuotaClientTests: XCTestCase {
         let transport = TestTransport([])
         for credentials in [TestCredentials(error: .notSignedIn), TestCredentials(expiry: fixtureNow.addingTimeInterval(-1))] {
             let client = QuotaClient(credentials: credentials, transport: transport, clock: { fixtureNow })
-            let result = await client.refresh(.claude)
+            let result = await client.refresh(.codex)
             XCTAssertNotNil(result.failure)
             XCTAssertNil(result.snapshot)
         }
@@ -134,9 +144,9 @@ final class QuotaClientTests: XCTestCase {
     func testRateLimitPreventsEarlyRetry() async {
         let transport = TestTransport([QuotaHTTPResponse(data: Data(), status: 429, retryAfter: "3600")])
         let client = QuotaClient(credentials: TestCredentials(), transport: transport, clock: { fixtureNow })
-        let first = await client.refresh(.claude)
+        let first = await client.refresh(.codex)
         XCTAssertEqual(first.nextAttempt, fixtureNow.addingTimeInterval(3600))
-        _ = await client.refresh(.claude)
+        _ = await client.refresh(.codex)
         let requests = await transport.requests
         XCTAssertEqual(requests.count, 1)
     }
@@ -162,17 +172,97 @@ final class QuotaClientTests: XCTestCase {
     }
 
     func testProvidersHaveIndependentSchedules() async throws {
-        let transport = TestTransport([
-            QuotaHTTPResponse(data: try fixture("claude"), status: 200, retryAfter: nil),
-            QuotaHTTPResponse(data: try fixture("codex"), status: 200, retryAfter: nil)
-        ])
-        let client = QuotaClient(credentials: TestCredentials(), transport: transport, clock: { fixtureNow })
+        let transport = TestTransport([QuotaHTTPResponse(data: try fixture("codex"), status: 200, retryAfter: nil)])
+        let usage = FixtureUsage(.success(try QuotaParser.parse(fixture("claude"), provider: .claude, now: fixtureNow)))
+        let client = QuotaClient(credentials: TestCredentials(), transport: transport, clock: { fixtureNow }, claudeUsage: usage)
         let claude = await client.refresh(.claude)
         let codex = await client.refresh(.codex)
-        XCTAssertEqual(claude.nextAttempt, fixtureNow.addingTimeInterval(900))
+        XCTAssertEqual(claude.nextAttempt, fixtureNow.addingTimeInterval(30))
         XCTAssertEqual(codex.nextAttempt, fixtureNow.addingTimeInterval(300))
         let requests = await transport.requests
-        XCTAssertEqual(requests.count, 2)
-        XCTAssertEqual(requests[0].value(forHTTPHeaderField: "anthropic-beta"), "oauth-2025-04-20")
+        XCTAssertEqual(requests.count, 1, "Claude never makes a network request")
+    }
+
+    func testTransientFailuresBackOffAndSuccessResets() async throws {
+        let clock = TestClock()
+        let transport = TestTransport([
+            QuotaHTTPResponse(data: Data(), status: 503, retryAfter: nil),
+            QuotaHTTPResponse(data: Data(), status: 503, retryAfter: nil),
+            QuotaHTTPResponse(data: Data(), status: 503, retryAfter: nil),
+            QuotaHTTPResponse(data: try fixture("codex"), status: 200, retryAfter: nil),
+            QuotaHTTPResponse(data: Data(), status: 503, retryAfter: nil)
+        ])
+        let client = QuotaClient(credentials: TestCredentials(), transport: transport, clock: { clock.now() })
+        var waits: [TimeInterval] = []
+        for _ in 0..<5 {
+            let result = await client.refresh(.codex)
+            waits.append(result.nextAttempt.timeIntervalSince(clock.now()))
+            clock.advance(result.nextAttempt.timeIntervalSince(clock.now()))
+        }
+        XCTAssertEqual(waits, [60, 120, 240, 300, 60])
+    }
+
+    func testForbiddenIsNotTreatedAsLoggedOut() async throws {
+        let clock = TestClock()
+        let transport = TestTransport([
+            QuotaHTTPResponse(data: try fixture("codex"), status: 200, retryAfter: nil),
+            QuotaHTTPResponse(data: Data(), status: 403, retryAfter: nil)
+        ])
+        let client = QuotaClient(credentials: TestCredentials(), transport: transport, clock: { clock.now() })
+        let good = await client.refresh(.codex)
+        clock.advance(301)
+        let blocked = await client.refresh(.codex)
+        XCTAssertEqual(blocked.failure, .http(403))
+        XCTAssertEqual(blocked.snapshot, good.snapshot)
+    }
+
+    func testClaudeWithoutStatusLineIsNotConnectedAndRetriesLocally() async {
+        let client = QuotaClient(credentials: TestCredentials(), transport: TestTransport([]), clock: { fixtureNow },
+                                 claudeUsage: FixtureUsage(.failure(.notConnected)), claudeFallback: FixtureFallback())
+        let result = await client.refresh(.claude)
+        XCTAssertEqual(result.failure, .notConnected)
+        XCTAssertEqual(result.nextAttempt, fixtureNow.addingTimeInterval(30))
+    }
+
+    func testOnlyManualClaudeRefreshUsesTheCLIFallback() async {
+        let fallback = FixtureFallback()
+        let clock = TestClock()
+        let client = QuotaClient(credentials: TestCredentials(), transport: TestTransport([]), clock: { clock.now() },
+                                 claudeUsage: FixtureUsage(.failure(.notConnected)), claudeFallback: fallback)
+        _ = await client.refresh(.claude)
+        let scheduledCalls = await fallback.calls
+        XCTAssertEqual(scheduledCalls, 0)
+        clock.advance(30)
+        let manual = await client.refresh(.claude, manual: true)
+        XCTAssertNil(manual.failure)
+        XCTAssertEqual(manual.snapshot?.windows.first?.remainingPercent, 75)
+        let manualCalls = await fallback.calls
+        XCTAssertEqual(manualCalls, 1)
+    }
+
+    func testManualRefreshKeepsRecentStatusLineReading() async throws {
+        let fallback = FixtureFallback()
+        let reading = try QuotaParser.parse(fixture("claude"), provider: .claude, now: fixtureNow)
+        let client = QuotaClient(credentials: TestCredentials(), transport: TestTransport([]), clock: { fixtureNow },
+                                 claudeUsage: FixtureUsage(.success(reading)), claudeFallback: fallback)
+        let result = await client.refresh(.claude, manual: true)
+        XCTAssertEqual(result.snapshot, reading)
+        let calls = await fallback.calls
+        XCTAssertEqual(calls, 0)
+    }
+}
+
+private struct FixtureUsage: ClaudeUsageSource {
+    let result: Result<QuotaSnapshot, QuotaFailure>
+    init(_ result: Result<QuotaSnapshot, QuotaFailure>) { self.result = result }
+    func latest(now: Date) async throws -> QuotaSnapshot { try result.get() }
+}
+
+private actor FixtureFallback: ClaudeQuotaFallback {
+    private(set) var calls = 0
+    func fetch(now: Date) async throws -> QuotaSnapshot {
+        calls += 1
+        let window = QuotaWindow(id: "five_hour", title: "5 小时", remainingPercent: 75, resetsAt: nil)
+        return QuotaSnapshot(windows: [window], fetchedAt: now)
     }
 }

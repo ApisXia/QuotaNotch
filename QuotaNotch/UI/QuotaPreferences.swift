@@ -5,6 +5,7 @@ import KeyboardShortcuts
 
 struct QuotaPreferences: View {
     @ObservedObject private var store = QuotaNotchStore.shared
+    @ObservedObject private var claude = ClaudeConnection.shared
     @AppStorage("quotaComfortable") private var comfortable = false
     @AppStorage("quotaNotifications") private var notifications = false
     @AppStorage("quotaAlertThreshold") private var threshold = 20.0
@@ -19,8 +20,9 @@ struct QuotaPreferences: View {
             diagnosticsSection
         }
         .navigationTitle("AI 额度")
-        .task { await store.refreshNotificationStatus() }
+        .task { claude.check(); await store.refreshNotificationStatus() }
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
+            claude.check()
             Task { await store.refreshNotificationStatus() }
         }
     }
@@ -51,7 +53,9 @@ struct QuotaPreferences: View {
                         Text(LocalizedStringKey(store.results[provider]?.failure?.message ??
                              (store.results[provider]?.snapshot == nil ? "等待查询" : "已连接")))
                             .font(.caption).foregroundStyle(.secondary)
-                        if store.results[provider]?.snapshot == nil || store.results[provider]?.failure != nil {
+                        if provider == .claude {
+                            claudeConnection
+                        } else if store.results[provider]?.snapshot == nil || store.results[provider]?.failure != nil {
                             Text(LocalizedStringKey(provider.loginHint)).font(.caption).foregroundStyle(.secondary)
                                 .fixedSize(horizontal: false, vertical: true)
                         }
@@ -61,6 +65,25 @@ struct QuotaPreferences: View {
                 }.padding(.vertical, 3)
             }
 
+        }
+    }
+
+    @ViewBuilder private var claudeConnection: some View {
+        if claude.installed {
+            HStack {
+                Label("已连接 Claude Code 状态栏", systemImage: "link").font(.caption)
+                Spacer()
+                Button("断开") { claude.setConnected(false) }.disabled(claude.busy)
+            }
+            Text("在 Claude Code 中发送消息后，额度会随之更新。原有的状态栏命令会继续显示。")
+                .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+        } else {
+            Button("连接 Claude Code") { claude.setConnected(true) }.disabled(claude.busy)
+            Text("QuotaNotch 通过 Claude Code 的状态栏读取 5 小时和 7 天额度，不读取钥匙串或登录凭据。连接会修改 Claude Code 的 settings.json，原有状态栏命令会被保留并照常显示；没有状态栏时会显示一行额度。启用状态栏后，Claude Code 底部的部分快捷键提示（如 esc to interrupt）将不再显示。需要 Claude Pro 或 Max 订阅。")
+                .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+        }
+        if let message = claude.message {
+            Text(message).font(.caption).foregroundStyle(.orange).fixedSize(horizontal: false, vertical: true)
         }
     }
 

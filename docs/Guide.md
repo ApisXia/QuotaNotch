@@ -8,7 +8,7 @@ AI quota, music and calendar in your MacBook notch. A focused fork of [Boring No
 
 ## Features
 
-- Claude and Codex quota windows using locally signed-in CLI accounts.
+- Claude and Codex quota windows. Claude quota comes from Claude Code's own status line data; Codex uses the local CLI login.
 - Pin one quota window. A compact ring shows remaining usage, with optional numbers. Music and quota share the notch: artwork with audio activity on the left, quota on the right.
 - Fixed provider tabs, paged quota details and a fixed bottom toolbar. Paused providers disappear from the usage interface and pin choices.
 - Music controls, calendar events and reminders. Enable the calendar in Settings → Calendar.
@@ -23,7 +23,7 @@ Requires **macOS 15+**, Apple Silicon or Intel. Download a QuotaNotch DMG from a
 
 The app has a separate identity (`com.apisxia.quotanotch`) and does not replace Boring Notch. Quit the original while using QuotaNotch so both do not occupy the notch. Builds are ad-hoc signed and are not Apple notarized. Upstream automatic updates are disabled.
 
-Sign in to the relevant CLI on this Mac, then enable monitoring in AI quota settings. Credentials remain local. Missing or stale quota is identified; no token totals, costs or unsupported model breakdowns are invented. Only enabled providers are polled.
+Enable monitoring in AI quota settings. For Claude, click **Connect Claude Code**: QuotaNotch adds a small status line command to `~/.claude/settings.json` that records only the 5-hour and 7-day usage Claude Code already shows to Pro and Max subscribers. Your existing status line command is kept and still displayed; Disconnect restores the file exactly. QuotaNotch never reads Claude Code's Keychain item or tokens. Note that with any custom status line, Claude Code hides some footer hints such as "esc to interrupt". For Codex, sign in with `codex login`. Credentials remain local. Missing or stale quota is identified; no token totals, costs or unsupported model breakdowns are invented. Only enabled providers are polled.
 
 ## Task monitoring
 

@@ -4,7 +4,12 @@ import Foundation
 import Darwin
 #endif
 
+protocol ClaudeQuotaFallback: Sendable {
+    func fetch(now: Date) async throws -> QuotaSnapshot
+}
+
 /// Runs only Claude Code's built-in /usage screen, never an inference prompt.
+/// Used only for a manual refresh when the status line has not reported usage yet.
 struct ClaudeCLIQuotaFallback: ClaudeQuotaFallback {
     var environment = ProcessInfo.processInfo.environment
     var home = FileManager.default.homeDirectoryForCurrentUser

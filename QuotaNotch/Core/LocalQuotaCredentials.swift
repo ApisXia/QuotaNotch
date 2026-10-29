@@ -5,34 +5,24 @@ struct QuotaCredential: Sendable, Equatable, CustomStringConvertible, CustomDebu
     let accessToken: String
     let accountID: String?
     let expiresAt: Date?
-    var refreshToken: String? = nil
-    var location: ClaudeCredentialLocation? = nil
     var description: String { "QuotaCredential(<redacted>)" }
     var debugDescription: String { description }
 }
 
 protocol QuotaCredentialSource: Sendable {
     func load(_ provider: QuotaProvider) async throws -> QuotaCredential
-    func saveClaude(_ updated: QuotaCredential, replacing original: QuotaCredential) async throws -> QuotaCredential
 }
 
-extension QuotaCredentialSource {
-    func saveClaude(_ updated: QuotaCredential, replacing original: QuotaCredential) async throws -> QuotaCredential {
-        throw QuotaFailure.credentialsUnavailable
-    }
-}
-
-/// Claude can renew its shared OAuth login. Other providers remain read-only.
+/// Read-only access to the Codex CLI login. Claude quota comes from Claude Code's status line
+/// instead (see `ClaudeStatusLineUsage`), so no Claude credential is ever read or written.
 struct LocalQuotaCredentials: QuotaCredentialSource {
-    var claude = ClaudeCredentialRepository()
-
     func load(_ provider: QuotaProvider) async throws -> QuotaCredential {
-        if provider == .claude { return try claude.load() }
+        guard provider == .codex else { throw QuotaFailure.notSignedIn }
         #if os(macOS)
         let home = FileManager.default.homeDirectoryForCurrentUser
         let env = ProcessInfo.processInfo.environment
         let base: URL
-        if provider == .codex, let configured = env["CODEX_HOME"], configured.hasPrefix("/") {
+        if let configured = env["CODEX_HOME"], configured.hasPrefix("/") {
             base = URL(fileURLWithPath: configured, isDirectory: true)
         } else {
             base = home.appendingPathComponent(".codex", isDirectory: true)
@@ -49,25 +39,16 @@ struct LocalQuotaCredentials: QuotaCredentialSource {
         #endif
     }
 
-    func saveClaude(_ updated: QuotaCredential, replacing original: QuotaCredential) async throws -> QuotaCredential {
-        try claude.save(updated, replacing: original)
-    }
-
     static func decode(_ data: Data, provider: QuotaProvider) throws -> QuotaCredential {
         guard let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-              let tokens = root[provider == .claude ? "claudeAiOauth" : "tokens"] as? [String: Any],
-              let token = tokens[provider == .claude ? "accessToken" : "access_token"] as? String,
+              let tokens = root["tokens"] as? [String: Any],
+              let token = tokens["access_token"] as? String,
               !token.isEmpty, !token.contains("\r"), !token.contains("\n") else {
             throw QuotaFailure.notSignedIn
         }
         let account = tokens["account_id"] as? String
         if let account, account.contains("\r") || account.contains("\n") { throw QuotaFailure.notSignedIn }
         let expiry = QuotaParser.number(tokens["expiresAt"]).map { Date(timeIntervalSince1970: $0 / 1000) }
-        var credential = QuotaCredential(accessToken: token, accountID: account, expiresAt: expiry)
-        if provider == .claude, let refresh = tokens["refreshToken"] as? String,
-           !refresh.isEmpty, !refresh.contains("\r"), !refresh.contains("\n") {
-            credential.refreshToken = refresh
-        }
-        return credential
+        return QuotaCredential(accessToken: token, accountID: account, expiresAt: expiry)
     }
 }
