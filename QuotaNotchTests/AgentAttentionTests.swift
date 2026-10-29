@@ -102,6 +102,36 @@ final class ClaudeActivityTests: XCTestCase {
         row(["type": "user", "timestamp": "2026-09-16T12:00:00Z", "message": ["content": "Old prompt"]], to: &session)
         XCTAssertEqual(session.state, .completed); XCTAssertEqual(session.userPrompt, "Fix layout")
     }
+    func testEscInterruptEndsTheTurn() {
+        var session = AgentSession(id: "one")
+        row(["type": "user", "timestamp": "2026-09-16T12:00:00Z", "uuid": "turn", "message": ["content": "Refactor"]], to: &session)
+        row(["type": "assistant", "timestamp": "2026-09-16T12:00:01Z", "message": ["content": [["type": "tool_use", "id": "t", "name": "Bash", "input": ["command": "npm test"]]]]], to: &session)
+        row(["type": "user", "timestamp": "2026-09-16T12:00:02Z", "message": ["content": [["type": "tool_result", "tool_use_id": "t", "content": "rejected", "is_error": true]]]], to: &session)
+        row(["type": "user", "timestamp": "2026-09-16T12:00:02.500Z", "message": ["content": [["type": "text", "text": "[Request interrupted by user for tool use]"]]]], to: &session)
+        XCTAssertEqual(session.state, .interrupted)
+        XCTAssertFalse(session.toolIsRunning)
+        XCTAssertEqual(session.userPrompt, "Refactor")
+        row(["type": "user", "timestamp": "2026-09-16T12:01:00Z", "uuid": "next", "message": ["content": "Try again"]], to: &session)
+        XCTAssertEqual(session.state, .running)
+    }
+    func testSlashCommandsDoNotStartATurn() {
+        var session = AgentSession(id: "one")
+        row(["type": "user", "timestamp": "2026-09-16T12:00:00Z", "uuid": "turn", "message": ["content": "Hello"]], to: &session)
+        row(["type": "system", "subtype": "turn_duration", "timestamp": "2026-09-16T12:00:05Z"], to: &session)
+        for text in ["<command-name>/model</command-name>\n<command-message>model</command-message>",
+                     "<local-command-stdout>Set model to opus</local-command-stdout>",
+                     "<bash-input>ls</bash-input>"] {
+            row(["type": "user", "timestamp": "2026-09-16T12:01:00Z", "message": ["content": text]], to: &session)
+        }
+        XCTAssertEqual(session.state, .completed)
+        XCTAssertEqual(session.userPrompt, "Hello")
+    }
+    func testStraySidechainRowDoesNotHideMainSession() {
+        var session = AgentSession(id: "one")
+        row(["type": "user", "timestamp": "2026-09-16T12:00:00Z", "uuid": "turn", "message": ["content": "Hello"]], to: &session)
+        row(["type": "user", "isSidechain": true, "timestamp": "2026-09-16T12:00:01Z", "message": ["content": "sub"]], to: &session)
+        XCTAssertFalse(session.excluded)
+    }
     func testMetadataAndSubagentsDoNotStartTask() {
         var session = AgentSession(id: "one")
         row(["type": "user", "isMeta": true, "timestamp": "2026-09-16T12:00:00Z", "message": ["content": "system context"]], to: &session)

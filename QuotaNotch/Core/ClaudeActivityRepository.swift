@@ -83,7 +83,12 @@ enum ClaudeActivityParser {
         guard let row = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any], let type = row["type"] as? String else { return }
         session.provider = .claude
         if let id = row["sessionId"] as? String { session.id = id }
-        if row["isSidechain"] as? Bool == true { session.excluded = true; return }
+        // Subagent transcripts are hidden, but a stray sidechain row must not hide a main session.
+        if row["isSidechain"] as? Bool == true {
+            if session.updatedAt == .distantPast { session.excluded = true }
+            return
+        }
+        session.excluded = false
         if let cwd = row["cwd"] as? String { session.cwd = cwd }
         let entry = (row["entrypoint"] as? String ?? "").lowercased()
         if entry.contains("desktop") || entry.contains("claude-ai") { session.surface = .desktop }
@@ -97,7 +102,14 @@ enum ClaudeActivityParser {
         let blocks = content as? [[String: Any]] ?? []
         if type == "user" && row["isMeta"] as? Bool != true {
             let prompt = content as? String ?? blocks.filter { $0["type"] as? String == "text" }.compactMap { $0["text"] as? String }.joined(separator: "\n")
-            if !prompt.isEmpty && !blocks.contains(where: { $0["type"] as? String == "tool_result" }) {
+            if prompt.hasPrefix("[Request interrupted by user") {
+                // Esc ends the turn without a Stop hook or an end_turn row.
+                if session.state.isActive { session.state = .interrupted; session.finishedAt = at }
+                session.toolIsRunning = false; session.waitingCallID = nil
+            } else if ClaudeActivityParser.isLocalCommand(prompt) {
+                // /clear, /model, !commands and their output are not model turns.
+                return
+            } else if !prompt.isEmpty && !blocks.contains(where: { $0["type"] as? String == "tool_result" }) {
                 session.userPrompt = String(prompt.prefix(4000)); session.turnID = row["uuid"] as? String ?? at.ISO8601Format()
                 session.startedAt = at; session.finishedAt = nil; session.state = .running; session.waitingCallID = nil
                 session.tool = ""; session.activityDetail = ""; session.toolIsRunning = false
@@ -119,6 +131,12 @@ enum ClaudeActivityParser {
         if previous != session.state { session.attentionRevision = AgentEventParser.revision(at) }
         session.updatedAt = at
     }
+    static func isLocalCommand(_ text: String) -> Bool {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        return ["<command-name>", "<command-message>", "<local-command-stdout>", "<local-command-stderr>",
+                "<local-command-caveat>", "<bash-input>", "<bash-stdout>", "<bash-stderr>"].contains { trimmed.hasPrefix($0) }
+    }
+
     static func applyHook(_ event: [String: Any], to session: inout AgentSession) {
         guard event["session_id"] as? String == session.id, let at = AgentEventParser.date(event["timestamp"]), at >= session.updatedAt else { return }
         let previous = session.state
