@@ -131,8 +131,14 @@ jobs:
       - name: Render actual English and Chinese settings pages
         if: ${{ inputs.preview_only != true }}
         run: |
-          build/DerivedData/Build/Products/Release/QuotaNotch.app/Contents/MacOS/QuotaNotch -AppleLanguages '(en)'
-          build/DerivedData/Build/Products/Release/QuotaNotch.app/Contents/MacOS/QuotaNotch -AppleLanguages '(zh-Hans)'
+          set -o pipefail
+          for lang in en zh-Hans; do
+            if ! build/DerivedData/Build/Products/Release/QuotaNotch.app/Contents/MacOS/QuotaNotch -AppleLanguages "($lang)" 2>&1 | tee settings.log; then
+              summary=$(grep -v "^ *$" settings.log | tail -15 | sed 's/%/%25/g' | awk '{printf "%s%%0A", $0}')
+              echo "::error title=settings preview ($lang)::${summary}"
+              exit 1
+            fi
+          done
       - name: Upload settings page screenshots
         if: ${{ always() && inputs.preview_only != true }}
         uses: actions/upload-artifact@v4
