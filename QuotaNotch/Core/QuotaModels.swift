@@ -21,6 +21,12 @@ struct QuotaWindow: Sendable, Equatable, Identifiable {
     let title: String
     let remainingPercent: Double
     let resetsAt: Date?
+    /// Length of the window in seconds, when the source reports it.
+    var duration: TimeInterval? = nil
+    /// The reported length, or the known length of Claude's fixed windows.
+    var period: TimeInterval? {
+        duration ?? ["five_hour": 5 * 3600, "seven_day": 7 * 86400][id]
+    }
     var localizedTitle: String {
         for suffix in [" 小时", " 天"] where title.hasSuffix(suffix) {
             let prefix = String(title.dropLast(suffix.count))
@@ -105,7 +111,8 @@ enum QuotaParser {
                 } else if let delta = number(window["reset_after_seconds"]), delta >= 0 {
                     reset = now.addingTimeInterval(delta)
                 }
-                windows.append(QuotaWindow(id: key, title: title, remainingPercent: 100 - used, resetsAt: reset))
+                windows.append(QuotaWindow(id: key, title: title, remainingPercent: 100 - used, resetsAt: reset,
+                                           duration: seconds.flatMap { $0 > 0 ? $0 : nil }))
             }
         }
         // Missing/unsupported fields are never interpreted as 0% used or unlimited.

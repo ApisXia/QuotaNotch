@@ -47,13 +47,16 @@ struct ContentView: View {
     @StateObject private var cat = NotchCatDirector()
     @AppStorage("notchCatEnabled") private var catEnabled = false
     @AppStorage("notchCatTaskCues") private var catTaskCues = true
+    @AppStorage(QuotaPetKind.defaultsKey) private var quotaPetRaw = QuotaPetKind.defaultKind.rawValue
     // Deterministic poses are injected only by the isolated screenshot runner.
     var catPreviewPose: CatPose? = nil
 
     @State private var catSpaces: [CatSide: CatWingSpace] = [:]
     @ObservedObject private var catRuntime = NotchCatRuntime.shared
     private var catCanAppear: Bool {
-        catEnabled && (!reduceMotion || catPreviewPose != nil) && !catRuntime.suspended && vm.notchState == .closed
+        // Only one pet at a time: the quota pet replaces the walking cat.
+        catEnabled && (catPreviewPose != nil || QuotaPetKind.stored(quotaPetRaw) == .off)
+            && (!reduceMotion || catPreviewPose != nil) && !catRuntime.suspended && vm.notchState == .closed
             && !vm.hideOnClosed && vm.effectiveClosedNotchHeight >= 24
             && !eventPresentation.replacesPrimary && eventPresentation.accessory == nil
             && !coordinator.expandingView.show

@@ -9,6 +9,9 @@ struct QuotaPreferences: View {
     @AppStorage("quotaComfortable") private var comfortable = false
     @AppStorage("quotaNotifications") private var notifications = false
     @AppStorage("quotaAlertThreshold") private var threshold = 20.0
+    @AppStorage(QuotaPetKind.defaultsKey) private var petRaw = QuotaPetKind.defaultKind.rawValue
+    @AppStorage(QuotaPetTint.defaultsKey) private var tintRaw = QuotaPetTint.original.rawValue
+    private var pet: QuotaPetKind { QuotaPetKind.stored(petRaw) }
     var body: some View {
         Form {
             providersSection
@@ -70,10 +73,54 @@ struct QuotaPreferences: View {
                     }
                 }
             }
-            Toggle("圆环中显示剩余百分比", isOn: Binding(get: { store.pins.showsNumbers },
-                set: { value in store.updatePins { $0.showsNumbers = value } }))
+            SettingsField("额度宠物") {
+                Picker("额度宠物", selection: $petRaw) {
+                    Text("不用宠物（圆环）").tag(QuotaPetKind.off.rawValue)
+                    Text("麻薯 · 猫").tag(QuotaPetKind.mochi.rawValue)
+                    Text("比特 · 机器人").tag(QuotaPetKind.bit.rawValue)
+                    Text("果冻 · 史莱姆").tag(QuotaPetKind.jelly.rawValue)
+                }
+            }
+            if pet != .off {
+                SettingsField("宠物配色") {
+                    Picker("宠物配色", selection: $tintRaw) {
+                        Text("原色").tag(QuotaPetTint.original.rawValue)
+                        Text("按服务着色").tag(QuotaPetTint.service.rawValue)
+                    }
+                }
+                petPreview
+            } else {
+                Toggle("圆环中显示剩余百分比", isOn: Binding(get: { store.pins.showsNumbers },
+                    set: { value in store.updatePins { $0.showsNumbers = value } }))
+            }
             Toggle("大字模式", isOn: $comfortable)
         }
+    }
+
+    /// The chosen pet in each quota state, drawn twice the notch size.
+    private var petPreview: some View {
+        let provider = store.activePin?.provider ?? .claude
+        let samples: [(QuotaPetMood, Double, LocalizedStringKey)] = [
+            (.idle, 72, "充足"), (.working, 64, "正在消耗"), (.pacing, 41, "用得偏快"),
+            (.low, 12, "低于 20%"), (.empty, 0, "用完"), (.refilled, 100, "刚重置")
+        ]
+        return VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 6) {
+                ForEach(Array(samples.enumerated()), id: \.offset) { _, sample in
+                    VStack(spacing: 4) {
+                        QuotaPetView(kind: pet, size: .widget, provider: provider,
+                                     window: QuotaWindow(id: "preview", title: "", remainingPercent: sample.1, resetsAt: nil),
+                                     stale: false, scale: 2, fixedMood: sample.0)
+                            .frame(width: 48, height: 40)
+                            .background(.black, in: RoundedRectangle(cornerRadius: 8))
+                        Text(sample.2).font(.caption2).foregroundStyle(.secondary).lineLimit(1)
+                    }
+                }
+            }
+            Text("宠物只反映额度：身上的计量就是剩余额度。用完前会提醒，额度恢复时开心一下。")
+                .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+        }
+        .padding(.vertical, 4)
     }
 
     /// Windows with readings, plus a saved fixed choice even while its data is missing.

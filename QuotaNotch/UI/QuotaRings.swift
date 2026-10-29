@@ -207,13 +207,19 @@ struct QuotaPinnedWings: View {
     let onSelect: (QuotaProvider) -> Void
     let onMusic: () -> Void
     @AppStorage("quotaComfortable") private var comfortable = false
+    @AppStorage(QuotaPetKind.defaultsKey) private var petRaw = QuotaPetKind.defaultKind.rawValue
     private var iconSize: CGFloat { QuotaCompactMetrics.iconSize(height: height, comfortable: comfortable) }
+    private var pet: QuotaPetKind { QuotaPetKind.stored(petRaw) }
+    /// With a pet and nothing else in the notch, the pet takes the left wing and the
+    /// percentage the right one.
+    private var petWithPercent: Bool { pet != .off && !activity.showAccessory && !showsMusic }
+    private var percentWidth: CGFloat { max(iconSize, 28) }
 
     private var tasksExpanded: Bool { showsMusic && activity.compactExpanded && activity.showAccessory }
     private var metrics: NotchModuleMetrics { NotchModuleMetrics(widgetWidth: iconSize) }
     private var leftWidth: CGFloat { iconSize }
     private var rightPrimaryWidth: CGFloat {
-        guard activity.showAccessory else { return iconSize }
+        guard activity.showAccessory else { return petWithPercent ? percentWidth : iconSize }
         return showsMusic ? (tasksExpanded ? metrics.minimalWidth : iconSize) : 0
     }
 
@@ -226,7 +232,7 @@ struct QuotaPinnedWings: View {
                 } label: {
                     Group {
                         if showsMusic { albumWithActivity }
-                        else if activity.showAccessory { quotaIndicator(pin, provider: provider) }
+                        else if activity.showAccessory || pet != .off { quotaIndicator(pin, provider: provider) }
                         else {
                             QuotaBrandMark(brand: provider.brand)
                                 .frame(width: iconSize, height: iconSize)
@@ -254,7 +260,10 @@ struct QuotaPinnedWings: View {
                         } label: {
                             Group {
                                 if tasksExpanded { minimalQuota(pin, provider: provider) }
-                                else { quotaIndicator(pin, provider: provider) }
+                                else if petWithPercent {
+                                    QuotaPetPercent(percent: store.window(for: pin)?.remainingPercent, stale: store.isStale(provider))
+                                        .frame(width: rightPrimaryWidth, height: height)
+                                } else { quotaIndicator(pin, provider: provider) }
                             }
                             .frame(width: rightPrimaryWidth, height: height)
                             .contentShape(Rectangle())
@@ -275,9 +284,14 @@ struct QuotaPinnedWings: View {
 
     private func minimalQuota(_ pin: QuotaPin, provider: QuotaProvider) -> some View {
         NotchMinimalIcon(metrics: metrics) {
-            MinimalQuotaGlyph(brand: provider.brand,
-                              percent: store.window(for: pin)?.remainingPercent,
-                              stale: store.isStale(provider), size: metrics.minimalIconSize)
+            if pet != .off {
+                QuotaPetView(kind: pet, size: .minimal, provider: provider, window: store.window(for: pin),
+                             stale: store.isStale(provider))
+            } else {
+                MinimalQuotaGlyph(brand: provider.brand,
+                                  percent: store.window(for: pin)?.remainingPercent,
+                                  stale: store.isStale(provider), size: metrics.minimalIconSize)
+            }
         }
         .frame(width: metrics.minimalWidth, height: height)
         .auditNotchModule("quota", mode: "minimal")
@@ -315,12 +329,21 @@ struct QuotaPinnedWings: View {
         return QuotaText.localized("剩余") + " " + QuotaText.percent(window.remainingPercent) + "%" + (stale ? " · " + QuotaText.localized("旧数据") : "")
     }
 
-    private func quotaIndicator(_ pin: QuotaPin, provider: QuotaProvider) -> some View {
-        CompactQuotaGauge(brand: provider.brand,
-                          percent: store.window(for: pin)?.remainingPercent,
-                          stale: store.isStale(provider),
-                          showsBrand: showsMusic || activity.showAccessory, showsNumbers: store.pins.showsNumbers, size: iconSize)
-            .auditNotchModule("quota")
+    @ViewBuilder private func quotaIndicator(_ pin: QuotaPin, provider: QuotaProvider) -> some View {
+        if pet != .off {
+            // Drawn at one point per pixel and allowed to overhang the slot slightly; very short
+            // notches use the 16pt head-only sprite.
+            QuotaPetView(kind: pet, size: iconSize >= 18 ? .widget : .minimal, provider: provider, window: store.window(for: pin),
+                         stale: store.isStale(provider))
+                .frame(width: iconSize, height: iconSize)
+                .auditNotchModule("quota")
+        } else {
+            CompactQuotaGauge(brand: provider.brand,
+                              percent: store.window(for: pin)?.remainingPercent,
+                              stale: store.isStale(provider),
+                              showsBrand: showsMusic || activity.showAccessory, showsNumbers: store.pins.showsNumbers, size: iconSize)
+                .auditNotchModule("quota")
+        }
     }
 }
 

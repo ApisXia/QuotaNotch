@@ -157,6 +157,8 @@ final class QuotaNotchStore: ObservableObject {
     }
 
     @Published private(set) var results: [QuotaProvider: QuotaResult] = [:]
+    /// Recent changes per window, so the quota pet can react to them.
+    @Published private(set) var petTracker = QuotaPetTracker()
     @Published private(set) var refreshing = false
     /// Quota is always on; individual services can be turned off. Claude only reads a local
     /// file now, so there is no cost to monitoring by default. (Kept for the preview runner.)
@@ -268,7 +270,10 @@ final class QuotaNotchStore: ObservableObject {
             for await (provider, result) in group {
                 guard enabled, generation == requestGeneration, !Task.isCancelled, providerEnabled(provider) else { continue }
                 notify(result, provider: provider)
-                if results[provider] != result { results[provider] = result }
+                if results[provider] != result {
+                    if let snapshot = result.snapshot { petTracker.observe(snapshot, provider: provider) }
+                    results[provider] = result
+                }
             }
         }
     }
