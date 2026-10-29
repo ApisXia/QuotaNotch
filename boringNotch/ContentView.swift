@@ -280,7 +280,9 @@ struct ContentView: View {
 
     @ViewBuilder
     func NotchLayout() -> some View {
-        VStack(alignment: .leading, spacing: vm.notchState == .open ? 8 : 0) {
+        // Centered, so the closed wings fade out in place over the camera while the shell widens,
+        // instead of being pulled to the left edge. Opened content keeps its leading alignment.
+        VStack(alignment: .center, spacing: vm.notchState == .open ? 8 : 0) {
             Group {
                 if vm.notchState == .closed {
                     PrimaryNotchLayout {
@@ -290,6 +292,7 @@ struct ContentView: View {
                     }
                 } else {
                     BoringHeader()
+                        .frame(maxWidth: .infinity, alignment: .leading)
                 }
             }
             .zIndex(2)
@@ -305,6 +308,7 @@ struct ContentView: View {
                         AgentNotchView()
                     }
                 }
+                .frame(maxWidth: .infinity, alignment: .leading)
                 .transition(
                     reduceMotion ? .identity : .scale(scale: 0.8, anchor: .top)
                     .combined(with: .opacity)

@@ -225,15 +225,17 @@ struct QuotaPinnedWings: View {
     /// With a pet and nothing else in the notch, the pet takes the left wing and the
     /// percentage the right one.
     private var petWithPercent: Bool { pet != .off && !activity.showAccessory && !showsMusic }
+    /// Quota alone in the notch, with or without a pet: both wings take the same width.
+    private var quotaOnly: Bool { !activity.showAccessory && !showsMusic }
     private var percentWidth: CGFloat { max(iconSize, (size.percentFont * 2.4).rounded()) }
     /// Music, quota and tasks share one wing. The task widget then takes a slot as wide as
     /// the pet, so swapping quota and tasks never changes the notch width.
     private var sharedWing: Bool { showsMusic && activity.showAccessory }
     private var petScale: CGFloat {
-        guard pet != .off else { return 1 }
-        return QuotaPetArt.pixelScale(size: size, notchHeight: height, displayScale: displayScale)
+        QuotaPetArt.pixelScale(size: size, notchHeight: height, displayScale: displayScale)
     }
-    /// Width of the quota module: the pet at its scale, or the regular icon slot.
+    /// Width of the quota module. The ring keeps the pet's slot too, so switching pet mode
+    /// on or off never changes the notch width.
     private var quotaWidth: CGFloat { petScale > 1 ? 20 * petScale : iconSize }
     private var pairedWidth: CGFloat { max(quotaWidth, percentWidth) }
 
@@ -243,14 +245,11 @@ struct QuotaPinnedWings: View {
     private var leftWidth: CGFloat {
         // The album keeps its size but takes a slot as wide as the pet on the right.
         if showsMusic { return quotaWidth }
-        if petWithPercent { return pairedWidth }
-        return activity.showAccessory || pet != .off ? quotaWidth : iconSize
+        if quotaOnly { return pairedWidth }
+        return quotaWidth
     }
     private var rightPrimaryWidth: CGFloat {
-        guard activity.showAccessory else {
-            if petWithPercent { return pairedWidth }
-            return showsMusic ? quotaWidth : iconSize
-        }
+        guard activity.showAccessory else { return quotaOnly ? pairedWidth : quotaWidth }
         return showsMusic ? (tasksExpanded ? metrics.minimalWidth : quotaWidth) : 0
     }
 
@@ -267,6 +266,7 @@ struct QuotaPinnedWings: View {
                         else {
                             QuotaBrandMark(brand: provider.brand)
                                 .frame(width: iconSize, height: iconSize)
+                                .frame(width: quotaWidth)
                                 .auditNotchModule("quota")
                         }
                     }
@@ -281,7 +281,7 @@ struct QuotaPinnedWings: View {
                 Color.clear.frame(width: centerWidth, height: height).auditNotchFrame("camera")
 
                 AgentCompactDock(primaryWidth: rightPrimaryWidth, height: height, anchorWidth: leftWidth, widgetWidth: iconSize,
-                                 slotWidth: pet != .off ? quotaWidth : nil, open: {
+                                 slotWidth: quotaWidth, open: {
                     BoringViewCoordinator.shared.currentView = .activity
                     // The hosting notch commits its open state through the action below.
                     NotificationCenter.default.post(name: .agentOpenNotch, object: nil)
@@ -376,6 +376,7 @@ struct QuotaPinnedWings: View {
                               percent: store.window(for: pin)?.remainingPercent,
                               stale: store.isStale(provider),
                               showsBrand: showsMusic || activity.showAccessory, showsNumbers: store.pins.showsNumbers, size: iconSize)
+                .frame(width: quotaWidth)
                 .auditNotchModule("quota")
         }
     }
