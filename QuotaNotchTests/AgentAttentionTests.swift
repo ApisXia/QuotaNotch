@@ -114,10 +114,11 @@ final class ClaudeActivityTests: XCTestCase {
         row(["type": "user", "timestamp": "2026-09-16T12:01:00Z", "uuid": "next", "message": ["content": "Try again"]], to: &session)
         XCTAssertEqual(session.state, .running)
     }
-    func testSlashCommandsDoNotStartATurn() {
+    func testBuiltInCommandsDoNotStartATurn() {
         var session = AgentSession(id: "one")
         row(["type": "user", "timestamp": "2026-09-16T12:00:00Z", "uuid": "turn", "message": ["content": "Hello"]], to: &session)
         row(["type": "system", "subtype": "turn_duration", "timestamp": "2026-09-16T12:00:05Z"], to: &session)
+        let event = session.eventID
         for text in ["<command-name>/model</command-name>\n<command-message>model</command-message>",
                      "<local-command-stdout>Set model to opus</local-command-stdout>",
                      "<bash-input>ls</bash-input>"] {
@@ -125,6 +126,17 @@ final class ClaudeActivityTests: XCTestCase {
         }
         XCTAssertEqual(session.state, .completed)
         XCTAssertEqual(session.userPrompt, "Hello")
+        XCTAssertEqual(session.eventID, event, "no new unread event")
+    }
+    func testPromptSlashCommandStartsATurnWhenTheModelAnswers() {
+        var session = AgentSession(id: "one")
+        row(["type": "user", "timestamp": "2026-09-16T12:00:00Z", "uuid": "c1",
+             "message": ["content": "<command-message>review</command-message>\n<command-name>/review</command-name>\n<command-args>PR 12</command-args>"]], to: &session)
+        XCTAssertEqual(session.state, .unknown)
+        row(["type": "assistant", "timestamp": "2026-09-16T12:00:01Z", "message": ["content": [["type": "text", "text": "Looks good"]], "stop_reason": "end_turn"]], to: &session)
+        XCTAssertEqual(session.state, .completed)
+        XCTAssertEqual(session.userPrompt, "/review PR 12")
+        XCTAssertEqual(session.turnID, "c1")
     }
     func testStraySidechainRowDoesNotHideMainSession() {
         var session = AgentSession(id: "one")

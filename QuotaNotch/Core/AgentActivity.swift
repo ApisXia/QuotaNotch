@@ -37,6 +37,9 @@ struct AgentSession: Identifiable, Equatable, Codable {
     var attentionRevision = ""
     var identity: String { provider.rawValue + ":" + id }
     var waitingCallID: String?
+    /// A slash command becomes a turn only if the model answers it (/review does, /model does not).
+    var pendingPrompt: String?
+    var pendingTurnID: String?
     var excluded = false
     var archived = false
     var rolloutPath = ""

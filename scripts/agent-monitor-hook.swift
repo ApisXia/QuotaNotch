@@ -48,12 +48,13 @@ func runStatusLine(directory: URL, chained: String?) -> Never {
        let limits = root["rate_limits"] as? [String: Any] {
         var windows: [String: Any] = [:]
         for (key, label) in [("five_hour", "5h"), ("seven_day", "7d")] {
+            // Early in a window Claude Code can report a timestamp here instead of a percentage.
             guard let window = limits[key] as? [String: Any],
-                  let used = window["used_percentage"] as? NSNumber else { continue }
+                  let used = window["used_percentage"] as? NSNumber, (0...100).contains(used.doubleValue) else { continue }
             var copy: [String: Any] = ["used_percentage": used]
             if let reset = window["resets_at"] as? NSNumber { copy["resets_at"] = reset }
             windows[key] = copy
-            if (0...100).contains(used.doubleValue) { summary.append("\(label) \(Int(used.doubleValue.rounded()))%") }
+            summary.append("\(label) \(Int(used.doubleValue.rounded()))%")
         }
         if !windows.isEmpty {
             let url = directory.appendingPathComponent(session + ".json")

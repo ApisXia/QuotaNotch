@@ -46,6 +46,8 @@ actor QuotaClient {
     private let claudeFallback: (any ClaudeQuotaFallback)?
     private var results: [QuotaProvider: QuotaResult] = [:]
     private var failures: [QuotaProvider: Int] = [:]
+    /// The last reading from Claude Code's /usage screen, kept until the status line has newer numbers.
+    private var claudeFallbackReading: QuotaSnapshot?
     private var inFlight: [QuotaProvider: Task<QuotaResult, Never>] = [:]
 
     init(credentials: any QuotaCredentialSource = LocalQuotaCredentials(),
@@ -66,20 +68,23 @@ actor QuotaClient {
     func refresh(_ provider: QuotaProvider, manual: Bool = false) async -> QuotaResult {
         if let task = inFlight[provider] { return await task.value }
         let now = clock()
-        if let result = results[provider], result.nextAttempt > now { return result }
+        if let result = results[provider], result.nextAttempt > now,
+           !Self.mayBypassCooldown(provider: provider, manual: manual, result: result, now: now) { return result }
         let old = results[provider]?.snapshot
         let attempt = failures[provider, default: 0] + 1
         let credentials = self.credentials
         let transport = self.transport
         let claudeUsage = self.claudeUsage
         let claudeFallback = manual ? self.claudeFallback : nil
+        let previousFallback = claudeFallbackReading
         let clock = self.clock
         let task = Task<QuotaResult, Never> {
             do {
                 try Task.checkCancellation()
                 let snapshot: QuotaSnapshot
                 if provider == .claude {
-                    snapshot = try await Self.claudeSnapshot(usage: claudeUsage, fallback: claudeFallback, now: now)
+                    snapshot = try await Self.claudeSnapshot(usage: claudeUsage, fallback: claudeFallback,
+                                                             previousFallback: previousFallback, now: now)
                 } else {
                     snapshot = try await Self.codexSnapshot(credentials: credentials, transport: transport, now: now)
                 }
@@ -98,14 +103,31 @@ actor QuotaClient {
         inFlight[provider] = nil
         results[provider] = result
         failures[provider] = result.failure == nil ? 0 : attempt
+        if provider == .claude, let snapshot = result.snapshot,
+           snapshot.fetchedAt > (claudeFallbackReading?.fetchedAt ?? .distantPast), manual {
+            claudeFallbackReading = snapshot
+        }
         return result
     }
 
+    /// A manual Claude refresh may run early when there is nothing recent to show,
+    /// but never against a server cooldown.
+    static func mayBypassCooldown(provider: QuotaProvider, manual: Bool, result: QuotaResult, now: Date) -> Bool {
+        guard manual, provider == .claude else { return false }
+        if case .rateLimited? = result.failure { return false }
+        guard let snapshot = result.snapshot else { return true }
+        return now.timeIntervalSince(snapshot.fetchedAt) > 600
+    }
+
     private static func claudeSnapshot(usage: any ClaudeUsageSource, fallback: (any ClaudeQuotaFallback)?,
-                                       now: Date) async throws -> QuotaSnapshot {
-        let reported: QuotaSnapshot?
+                                       previousFallback: QuotaSnapshot?, now: Date) async throws -> QuotaSnapshot {
+        var reported: QuotaSnapshot?
         do { reported = try await usage.latest(now: now) }
         catch QuotaFailure.notConnected { reported = nil }
+        // An earlier /usage reading stays until the status line reports something newer.
+        if let previousFallback, previousFallback.fetchedAt > (reported?.fetchedAt ?? .distantPast) {
+            reported = previousFallback
+        }
         // A manual refresh may ask Claude Code's /usage screen when the status line is silent or old.
         if let fallback, reported.map({ now.timeIntervalSince($0.fetchedAt) > 600 }) ?? true {
             do { return try await fallback.fetch(now: now) }

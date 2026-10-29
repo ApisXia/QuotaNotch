@@ -202,7 +202,7 @@ struct QuotaNotchView: View {
                 Button { Task { await store.refresh(providerOnly: provider, manual: true) } } label: {
                     Label("刷新", systemImage: "arrow.clockwise")
                 }
-                .disabled(store.refreshing || (store.results[provider]?.nextAttempt ?? .distantPast) > context.date)
+                .disabled(store.refreshing || !store.canRefresh(provider, at: context.date, manual: true))
                 .help("刷新（遵守查询冷却）")
             }
             .fixedSize()

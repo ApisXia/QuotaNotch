@@ -29,7 +29,12 @@ import Foundation
                         : try ClaudeStatusLineConfiguration.removing(previous)
             }
             message = nil
-            if connect { Task { await QuotaNotchStore.shared.refresh(providerOnly: .claude) } }
+            if !connect {
+                // Old readings must not keep showing as current after disconnecting.
+                try? FileManager.default.removeItem(atPath: usage)
+            }
+            // Connecting may fetch a first reading via /usage; disconnecting never starts a process.
+            Task { await QuotaNotchStore.shared.refresh(providerOnly: .claude, manual: connect) }
         } catch ConfigurationFileWriter.Failure.changedDuringEdit {
             message = QuotaText.localized("Claude Code 的设置刚被修改，请再试一次。")
         } catch CocoaError.fileReadCorruptFile {

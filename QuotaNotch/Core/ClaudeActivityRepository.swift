@@ -127,10 +127,16 @@ enum ClaudeActivityParser {
                 // Esc ends the turn without a Stop hook or an end_turn row.
                 if session.state.isActive { session.state = .interrupted; session.finishedAt = at }
                 session.toolIsRunning = false; session.waitingCallID = nil
+            } else if let command = ClaudeActivityParser.slashCommand(prompt) {
+                session.pendingPrompt = command
+                session.pendingTurnID = row["uuid"] as? String ?? at.ISO8601Format()
+                return
             } else if ClaudeActivityParser.isLocalCommand(prompt) {
-                // /clear, /model, !commands and their output are not model turns.
+                // Built-in command output and !commands are not model turns.
+                session.pendingPrompt = nil; session.pendingTurnID = nil
                 return
             } else if !prompt.isEmpty && !blocks.contains(where: { $0["type"] as? String == "tool_result" }) {
+                session.pendingPrompt = nil; session.pendingTurnID = nil
                 session.userPrompt = String(prompt.prefix(4000)); session.turnID = row["uuid"] as? String ?? at.ISO8601Format()
                 session.startedAt = at; session.finishedAt = nil; session.state = .running; session.waitingCallID = nil
                 session.tool = ""; session.activityDetail = ""; session.toolIsRunning = false
@@ -139,6 +145,12 @@ enum ClaudeActivityParser {
                 if session.state == .waiting { session.state = .running; session.waitingCallID = nil }
             }
         } else if type == "assistant" {
+            if let turn = session.pendingTurnID {
+                session.userPrompt = session.pendingPrompt ?? ""; session.turnID = turn
+                session.startedAt = at; session.finishedAt = nil; session.state = .running; session.waitingCallID = nil
+                session.tool = ""; session.activityDetail = ""; session.toolIsRunning = false
+                session.pendingPrompt = nil; session.pendingTurnID = nil
+            }
             for block in blocks where block["type"] as? String == "tool_use" {
                 session.tool = block["name"] as? String ?? ""; session.toolCallID = block["id"] as? String ?? ""
                 session.activityDetail = AgentEventParser.activityInput(block["input"], tool: session.tool)
@@ -154,8 +166,25 @@ enum ClaudeActivityParser {
     }
     static func isLocalCommand(_ text: String) -> Bool {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        return ["<command-name>", "<command-message>", "<local-command-stdout>", "<local-command-stderr>",
-                "<local-command-caveat>", "<bash-input>", "<bash-stdout>", "<bash-stderr>"].contains { trimmed.hasPrefix($0) }
+        return ["<local-command-stdout>", "<local-command-stderr>", "<local-command-caveat>",
+                "<bash-input>", "<bash-stdout>", "<bash-stderr>"].contains { trimmed.hasPrefix($0) }
+    }
+
+    /// "/review" from a "<command-name>/review</command-name>…" row, or nil for anything else.
+    static func slashCommand(_ text: String) -> String? {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard trimmed.hasPrefix("<command-name>") || trimmed.hasPrefix("<command-message>") else { return nil }
+        if let start = trimmed.range(of: "<command-name>"), let end = trimmed.range(of: "</command-name>"),
+           start.upperBound <= end.lowerBound {
+            let name = trimmed[start.upperBound..<end.lowerBound].trimmingCharacters(in: .whitespaces)
+            var command = name.hasPrefix("/") ? name : "/" + name
+            if let a = trimmed.range(of: "<command-args>"), let b = trimmed.range(of: "</command-args>"), a.upperBound <= b.lowerBound {
+                let args = trimmed[a.upperBound..<b.lowerBound].trimmingCharacters(in: .whitespacesAndNewlines)
+                if !args.isEmpty { command += " " + args }
+            }
+            return String(command.prefix(4000))
+        }
+        return "/"
     }
 
     static func applyHook(_ event: [String: Any], to session: inout AgentSession) {

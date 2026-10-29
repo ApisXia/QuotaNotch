@@ -200,7 +200,6 @@ final class QuotaNotchStore: ObservableObject {
         guard enabled, polling == nil else { return }
         polling = Task { [weak self] in
             while !Task.isCancelled {
-                self?.now = Date()
                 await self?.refresh()
                 do { try await Task.sleep(nanoseconds: 15_000_000_000) }
                 catch { break }
@@ -212,16 +211,19 @@ final class QuotaNotchStore: ObservableObject {
         #if SETTINGS_PREVIEW
         return // This executable only renders fixture data, even if an action requests a refresh.
         #endif
-        guard enabled, !refreshing else { return }
+        guard enabled, !inProgress else { return }
         let requestGeneration = generation
-        now = Date()
+        let current = Date()
+        if manual || current.timeIntervalSince(now) >= 30 { now = current }
         let providers = QuotaProvider.allCases.filter {
             providerEnabled($0) && (providerOnly == nil || providerOnly == $0)
-                && (results[$0]?.nextAttempt ?? .distantPast) <= now
+                && canRefresh($0, at: current, manual: manual)
         }
         guard !providers.isEmpty else { return }
-        refreshing = true
-        defer { refreshing = false }
+        // Only a user-initiated refresh shows progress; background polls stay invisible.
+        inProgress = true
+        if manual { refreshing = true }
+        defer { inProgress = false; if refreshing { refreshing = false } }
         await withTaskGroup(of: (QuotaProvider, QuotaResult).self) { group in
             for provider in providers {
                 group.addTask { [client] in (provider, await client.refresh(provider, manual: manual)) }
@@ -229,8 +231,17 @@ final class QuotaNotchStore: ObservableObject {
             for await (provider, result) in group {
                 guard enabled, generation == requestGeneration, !Task.isCancelled, providerEnabled(provider) else { continue }
                 notify(result, provider: provider)
-                results[provider] = result
+                if results[provider] != result { results[provider] = result }
             }
         }
+    }
+
+    private var inProgress = false
+
+    /// Manual Claude refreshes may skip the cooldown when nothing recent is shown (see QuotaClient).
+    func canRefresh(_ provider: QuotaProvider, at date: Date, manual: Bool) -> Bool {
+        guard let result = results[provider] else { return true }
+        return result.nextAttempt <= date
+            || QuotaClient.mayBypassCooldown(provider: provider, manual: manual, result: result, now: date)
     }
 }

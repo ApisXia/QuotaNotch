@@ -24,7 +24,7 @@ struct ClaudeStatusLineUsage: ClaudeUsageSource {
     func latest(now: Date) async throws -> QuotaSnapshot {
         let fm = FileManager.default
         guard let names = try? fm.contentsOfDirectory(atPath: directory.path) else { throw QuotaFailure.notConnected }
-        var best: (Date, Data)?
+        var best: QuotaSnapshot?
         for name in names where name.hasSuffix(".json") {
             let url = directory.appendingPathComponent(name)
             guard let data = try? Data(contentsOf: url), data.count < 64 * 1024,
@@ -34,12 +34,13 @@ struct ClaudeStatusLineUsage: ClaudeUsageSource {
                   let encoded = try? JSONSerialization.data(withJSONObject: limits) else { continue }
             let at = Date(timeIntervalSince1970: observed)
             if now.timeIntervalSince(at) > retention { try? fm.removeItem(at: url); continue }
-            if best == nil || at > best!.0 { best = (at, encoded) }
+            // A record with unusable numbers is skipped; it must not hide an older valid one.
+            guard let parsed = try? QuotaParser.parse(encoded, provider: .claude, now: now) else { continue }
+            let snapshot = QuotaSnapshot(windows: parsed.windows, fetchedAt: min(at, now))
+            if best.map({ snapshot.fetchedAt > $0.fetchedAt }) ?? true { best = snapshot }
         }
         guard let best else { throw QuotaFailure.notConnected }
-        let (observed, limits) = best
-        let snapshot = try QuotaParser.parse(limits, provider: .claude, now: now)
-        return QuotaSnapshot(windows: snapshot.windows, fetchedAt: min(observed, now))
+        return best
     }
 }
 

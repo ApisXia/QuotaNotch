@@ -65,7 +65,7 @@ enum QuotaFailure: Error, Sendable, Equatable {
     }
 }
 
-struct QuotaResult: Sendable {
+struct QuotaResult: Sendable, Equatable {
     var snapshot: QuotaSnapshot?
     var failure: QuotaFailure?
     var nextAttempt: Date

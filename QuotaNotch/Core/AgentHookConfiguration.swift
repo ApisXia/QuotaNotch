@@ -38,8 +38,8 @@ enum AgentHookConfiguration {
             var eventsObject = root["hooks"] ?? .object([])
             for event in provider == .claude ? claudeEvents : events {
                 if let value = eventsObject[event], value.arrayValue == nil { throw CocoaError(.fileReadCorruptFile) }
-                var groups = eventsObject[event]?.arrayValue ?? []
-                groups = groups.compactMap { group in
+                let existing = eventsObject[event]?.arrayValue ?? []
+                var groups = existing.compactMap { group -> OrderedJSON? in
                     guard let handlers = group["hooks"]?.arrayValue else { return group }
                     let remaining = handlers.filter { $0["statusMessage"]?.stringValue != marker }
                     if remaining.count == handlers.count { return group }
@@ -56,6 +56,8 @@ enum AgentHookConfiguration {
                         ("statusMessage", .string(marker)),
                     ])]))]))
                 }
+                // Leave untouched events exactly as they were, including a user's empty list.
+                guard groups != existing else { continue }
                 eventsObject.set(event, groups.isEmpty ? nil : .array(groups))
             }
             if case .object(let members) = eventsObject, members.isEmpty {

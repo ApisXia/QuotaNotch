@@ -59,7 +59,7 @@ import UserNotifications
     private var wakeObserver: NSObjectProtocol?
     let claudeHome: URL
     let home: URL
-    static var support: URL {
+    nonisolated static var support: URL {
         FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Library/Application Support/QuotaNotch/Activity")
     }
 
@@ -151,11 +151,12 @@ import UserNotifications
         if snapshot.issue?.isEmpty == true { snapshot.issue = nil }
         guard enabled, !Task.isCancelled else { return }
         // Every @Published write re-renders the always-visible notch, so only write real changes.
-        // `now` only drives history aging, which needs minute precision at most.
+        // `now` drives running durations (shown to the second) and history aging, so it ticks
+        // every poll only while a task is active.
         let latest = AgentCurrentSessions.latest(snapshot.sessions)
         let changed = latest != sessions
         let current = Date()
-        if changed || current.timeIntervalSince(now) >= 30 { now = current }
+        if changed || latest.contains(where: { $0.state.isActive }) || current.timeIntervalSince(now) >= 30 { now = current }
         let newIssue = snapshot.issue.map { message in
             switch message {
             case "Some task records could not be read. Retrying automatically.": return AgentText.t("部分任务记录暂时无法读取，正在自动重试。", message)
