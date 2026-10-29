@@ -12,7 +12,7 @@ Native UI preview with sample data.
 
 - Optional pixel cat, off by default; enable it in settings and rub a notch edge to invite it out.
 - Unified task status icons and a Read all action; independent wing sizing keeps music anchored.
-- Claude, Codex and optional Gemini CLI / Code Assist quota.
+- Claude and Codex quota.
 - Follow local Codex and Claude Code tasks across projects, with source labels and approval-wait awareness.
 - Pin one quota beside music and task activity. Click widgets to open their panels; swipe across the open header to change pages.
 - Keep read task history for 1 hour, 5 hours (default), or 1 day.

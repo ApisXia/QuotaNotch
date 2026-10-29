@@ -27,7 +27,7 @@ struct SettingsPreviewRunner {
         Defaults[.showCalendar] = true
         Defaults[.useCustomAccentColor] = true
         Defaults[.enableSneakPeek] = true
-        Defaults[.mediaController] = .youtubeMusic
+        Defaults[.mediaController] = .spotify
         QuotaNotchStore.shared.configureSettingsPreview(paused: false)
         let store = QuotaNotchStore.shared
         let manual = store.pins.selected
@@ -177,7 +177,7 @@ struct SettingsPreviewRunner {
                 .background(.black).preferredColorScheme(.dark), width: 280,
                 name: "Minimal-graphics-\(Int(height))", output: output, height: height)
             try capture(HStack(spacing: 24) {
-                ForEach([QuotaProvider.claude, .codex, .gemini], id: \.self) { provider in
+                ForEach([QuotaProvider.claude, .codex], id: \.self) { provider in
                     HStack(spacing: 8) {
                         MinimalQuotaGlyph(brand: provider.brand, percent: 65, size: metrics.minimalIconSize)
                         MinimalQuotaGlyph(brand: provider.brand, percent: 65, stale: true, size: metrics.minimalIconSize)
@@ -205,7 +205,7 @@ struct SettingsPreviewRunner {
         let vm = BoringViewModel()
         vm.hideOnClosed = false
         let coordinator = BoringViewCoordinator.shared
-        coordinator.helloAnimationRunning = false
+
         QuotaNotchStore.shared.configureSettingsPreview(paused: false)
         QuotaNotchStore.shared.menuOpen = true // Keep the fixture open without simulating pointer input.
         defer { QuotaNotchStore.shared.menuOpen = false }
@@ -745,7 +745,7 @@ struct SettingsPreviewRunner {
         let vm = BoringViewModel()
         vm.hideOnClosed = false
         let coordinator = BoringViewCoordinator.shared
-        coordinator.helloAnimationRunning = false
+
         coordinator.musicLiveActivityEnabled = true
         coordinator.expandingView.show = false
         coordinator.sneakPeek.show = false

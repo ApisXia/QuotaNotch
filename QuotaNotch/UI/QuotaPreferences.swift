@@ -60,8 +60,7 @@ struct QuotaPreferences: View {
                     }
                 }.padding(.vertical, 3)
             }
-            Text("Gemini CLI 仅适用于仍有效的 Code Assist 登录，不代表 Gemini 网页版或 AI Studio 的额度。")
-                .font(.caption).foregroundStyle(.secondary)
+
         }
     }
 

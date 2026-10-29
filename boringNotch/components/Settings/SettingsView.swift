@@ -122,15 +122,17 @@ struct GeneralSettings: View {
             Section("Notch behavior") {
                 Defaults.Toggle(key: .openNotchOnHover) { Text("Open notch on hover").fixedSize(horizontal: false, vertical: true) }
                 Defaults.Toggle(key: .enableHaptics) { Text("Enable haptic feedback").fixedSize(horizontal: false, vertical: true) }
+
                 Toggle("Remember last tab", isOn: $coordinator.openLastTabByDefault)
                 Defaults.Toggle(key: .extendHoverArea) { Text("Extend hover area").fixedSize(horizontal: false, vertical: true) }
                 Defaults.Toggle(key: .hideTitleBar) { Text("Cover menu bar behind the notch").fixedSize(horizontal: false, vertical: true) }
-                Defaults.Toggle(key: .showOnLockScreen) { Text("Show notch on lock screen").fixedSize(horizontal: false, vertical: true) }
+
                 Defaults.Toggle(key: .hideFromScreenRecording) { Text("Hide from screen recording").fixedSize(horizontal: false, vertical: true) }
             }
             Section("快捷键") {
                 SettingsField("展开／收起刘海") { KeyboardShortcuts.Recorder(for: .toggleNotchOpen) }
                 SettingsField("显示音乐信息") { KeyboardShortcuts.Recorder(for: .toggleSneakPeek) }
+
             }
         }
         .navigationTitle("General")
@@ -150,8 +152,6 @@ struct GeneralSettings: View {
 struct HUD: View {
     @Default(.optionKeyAction) private var optionKeyAction
     @Default(.hudReplacement) private var hudReplacement
-    @Default(.showBatteryIndicator) private var showBatteryIndicator
-    @Default(.showPowerStatusNotifications) private var showPowerStatusNotifications
     @State private var accessibilityAuthorized = false
 
     var body: some View {
@@ -179,15 +179,6 @@ struct HUD: View {
                 Defaults.Toggle(key: .showClosedNotchHUDPercentage) { Text("Show percentage").fixedSize(horizontal: false, vertical: true) }
             }
             .disabled(!hudReplacement || !accessibilityAuthorized)
-            Section("Battery") {
-                Defaults.Toggle(key: .showBatteryIndicator) { Text("Show battery indicator").fixedSize(horizontal: false, vertical: true) }
-                Defaults.Toggle(key: .showPowerStatusNotifications) { Text("Show power status notifications").fixedSize(horizontal: false, vertical: true) }
-                Defaults.Toggle(key: .showBatteryPercentage) { Text("Show battery percentage").fixedSize(horizontal: false, vertical: true) }
-                    .disabled(!showBatteryIndicator && !showPowerStatusNotifications)
-                Defaults.Toggle(key: .showPowerStatusIcons) { Text("Show power status icons").fixedSize(horizontal: false, vertical: true) }
-                    .disabled(!showBatteryIndicator)
-                SettingsHint("Power status notifications work independently of the battery indicator. Status icons are always shown in notifications.")
-            }
         }
         .navigationTitle("System Indicators")
         #if !SETTINGS_PREVIEW
@@ -207,6 +198,7 @@ struct Media: View {
     @Default(.mediaController) private var mediaController
     @Default(.enableSneakPeek) private var enableSneakPeek
     @Default(.sneakPeekStyles) private var sneakPeekStyles
+
     @ObservedObject private var coordinator = BoringViewCoordinator.shared
 
     var body: some View {
@@ -225,10 +217,6 @@ struct Media: View {
                 }
                 if musicManager.isNowPlayingDeprecated && mediaController == .nowPlaying {
                     SettingsHint("Now Playing is unavailable. Apple Music is used instead.")
-                }
-                if mediaController == .youtubeMusic {
-                    SettingsHint("YouTube Music requires Pear Desktop.")
-                    Link("Get Pear Desktop", destination: URL(string: "https://github.com/pear-devs/pear-desktop")!)
                 }
             }
             Section("Media playback live activity") {
@@ -253,6 +241,7 @@ struct Media: View {
                 .disabled(!enableSneakPeek)
                 if !enableSneakPeek { SettingsHint("Preferences are saved and apply when this feature is enabled.") }
             }
+
             Section("Media controls") {
                 MusicSlotConfigurationView()
             }
@@ -396,7 +385,7 @@ struct Appearance: View {
     @Default(.useCustomAccentColor) var useCustomAccentColor
     @Default(.customAccentColorData) var customAccentColorData
     @Default(.extendHoverArea) var extendHoverArea
-    @Default(.showOnLockScreen) var showOnLockScreen
+
     @Default(.hideFromScreenRecording) var hideFromScreenRecording
     
     @State private var customAccentColor: Color = .accentColor

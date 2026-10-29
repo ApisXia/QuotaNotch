@@ -24,16 +24,11 @@ struct SharedSneakPeek: Codable {
     var icon: String
 }
 
-enum BrowserType {
-    case chromium
-    case safari
-}
-
+/// The inline sneak peek that widens the closed music activity.
 struct ExpandedItem {
     var show: Bool = false
-    var type: SneakContentType = .battery
+    var type: SneakContentType = .music
     var value: CGFloat = 0
-    var browser: BrowserType = .chromium
 }
 
 @MainActor
@@ -41,13 +36,12 @@ class BoringViewCoordinator: ObservableObject {
     static let shared = BoringViewCoordinator()
 
     @Published var currentView: NotchViews = .home
-    @Published var helloAnimationRunning: Bool = false
     private var sneakPeekDispatch: DispatchWorkItem?
     private var expandingViewDispatch: DispatchWorkItem?
     private var hudEnableTask: Task<Void, Never>?
 
     @AppStorage("firstLaunch") var firstLaunch: Bool = true
-    @AppStorage("showWhatsNew") var showWhatsNew: Bool = true
+
     @AppStorage("musicLiveActivityEnabled") var musicLiveActivityEnabled: Bool = true
     @AppStorage("currentMicStatus") var currentMicStatus: Bool = true
 
@@ -153,8 +147,6 @@ class BoringViewCoordinator: ObservableObject {
             }
 
         Task { @MainActor in
-            helloAnimationRunning = firstLaunch
-
             if Defaults[.hudReplacement] {
                 let authorized = await XPCHelperClient.shared.isAccessibilityAuthorized()
                 if !authorized {
@@ -250,15 +242,13 @@ class BoringViewCoordinator: ObservableObject {
     func toggleExpandingView(
         status: Bool,
         type: SneakContentType,
-        value: CGFloat = 0,
-        browser: BrowserType = .chromium
+        value: CGFloat = 0
     ) {
         Task { @MainActor in
             withAnimation(.smooth) {
                 self.expandingView.show = status
                 self.expandingView.type = type
                 self.expandingView.value = value
-                self.expandingView.browser = browser
             }
         }
     }
@@ -269,7 +259,7 @@ class BoringViewCoordinator: ObservableObject {
         didSet {
             if expandingView.show {
                 expandingViewTask?.cancel()
-                let duration: TimeInterval = (expandingView.type == .download ? 2 : 3)
+                let duration: TimeInterval = 3
                 let currentType = expandingView.type
                 expandingViewTask = Task { [weak self] in
                     try? await Task.sleep(for: .seconds(duration))

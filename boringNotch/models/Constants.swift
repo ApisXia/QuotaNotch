@@ -40,8 +40,7 @@ enum MediaControllerType: String, CaseIterable, Identifiable, Defaults.Serializa
     case nowPlaying = "Now Playing"
     case appleMusic = "Apple Music"
     case spotify = "Spotify"
-    case youtubeMusic = "YouTube Music"
-    
+
     var id: String { self.rawValue }
 }
 
@@ -49,7 +48,7 @@ enum MediaControllerType: String, CaseIterable, Identifiable, Defaults.Serializa
 enum SneakPeekStyle: String, CaseIterable, Identifiable, Defaults.Serializable {
     case standard = "Default"
     case inline = "Inline"
-    
+
     var id: String { self.rawValue }
 }
 
@@ -73,7 +72,7 @@ extension Defaults.Keys {
     static let openNotchOnHover = Key<Bool>("openNotchOnHover", default: true)
     static let extendHoverArea = Key<Bool>("extendHoverArea", default: false)
     //static let openLastTabByDefault = Key<Bool>("openLastTabByDefault", default: false)
-    static let showOnLockScreen = Key<Bool>("showOnLockScreen", default: false)
+
     static let hideFromScreenRecording = Key<Bool>("hideFromScreenRecording", default: false)
     
     // MARK: Appearance
@@ -101,14 +100,6 @@ extension Defaults.Keys {
         "musicControlSlotLimit",
         default: MusicControlButton.defaultLayout.count
     )
-    
-    // MARK: Battery
-    static let showPowerStatusNotifications = Key<Bool>("showPowerStatusNotifications", default: true)
-    static let showBatteryIndicator = Key<Bool>("showBatteryIndicator", default: true)
-    static let showBatteryPercentage = Key<Bool>("showBatteryPercentage", default: true)
-    static let showPowerStatusIcons = Key<Bool>("showPowerStatusIcons", default: true)
-    
-    // MARK: Downloads
     
     // MARK: HUD
     static let hudReplacement = Key<Bool>("hudReplacement", default: false)

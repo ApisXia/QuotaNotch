@@ -129,7 +129,7 @@ final class QuotaNotchStore: ObservableObject {
               let value = try? JSONDecoder().decode(QuotaPins.self, from: data) else { return QuotaPins() }
         return value
     }()
-    @Published private var disabledProviders = Set(UserDefaults.standard.stringArray(forKey: "quotaNotchDisabledProviders") ?? ["gemini"])
+    @Published private var disabledProviders = Set(UserDefaults.standard.stringArray(forKey: "quotaNotchDisabledProviders") ?? [])
 
     var visibleProviders: [QuotaProvider] { QuotaProviderVisibility.visible(disabled: disabledProviders) }
 
@@ -153,11 +153,11 @@ final class QuotaNotchStore: ObservableObject {
     #if SETTINGS_PREVIEW
     func configureSettingsPreview(paused: Bool) {
         enabled = !paused
-        disabledProviders = ["gemini"]
+        disabledProviders = []
         let pin = QuotaPin(providerID: "claude", windowID: "five_hour")
         pins = QuotaPins(selected: pin)
         pins.automatic = true
-        pins.candidates = [pin, QuotaPin(providerID: "gemini", windowID: "gemini-2.5-pro")]
+        pins.candidates = [pin, QuotaPin(providerID: "codex", windowID: "primary_window")]
         let window = QuotaWindow(id: "five_hour", title: "5 小时", remainingPercent: 42, resetsAt: nil)
         results = paused ? [:] : [.claude: QuotaResult(snapshot: QuotaSnapshot(windows: [window], fetchedAt: now), failure: nil, nextAttempt: now)]
         notificationStatus = QuotaText.localized("Notifications are off. Your threshold is saved.")

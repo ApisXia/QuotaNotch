@@ -2,7 +2,7 @@
 import SwiftUI
 
 extension QuotaProvider {
-    var brand: QuotaBrand { self == .gemini ? .gemini : (self == .claude ? .claude : .codex) }
+    var brand: QuotaBrand { self == .claude ? .claude : .codex }
     var accent: Color { brand.color }
 }
 
@@ -71,7 +71,7 @@ struct QuotaNotchView: View {
                     }
                 }
                 Text("让额度留在刘海边上").font(.headline)
-                Text("读取这台 Mac 的 Claude / Codex / Gemini CLI 登录状态，查看剩余额度。")
+                Text("读取这台 Mac 的 Claude / Codex 登录状态，查看剩余额度。")
                     .font(.caption).foregroundStyle(.secondary).multilineTextAlignment(.center)
                 Button("启用本机用量监控") { store.setEnabled(true) }
                     .buttonStyle(.bordered)

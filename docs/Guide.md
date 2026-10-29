@@ -8,12 +8,12 @@ AI quota, music and calendar in your MacBook notch. A focused fork of [Boring No
 
 ## Features
 
-- Claude, Codex and Gemini CLI / Code Assist quota windows using locally signed-in CLI accounts. Gemini is optional; this is not monitoring the Gemini consumer web subscription.
+- Claude and Codex quota windows using locally signed-in CLI accounts.
 - Pin one quota window. A compact ring shows remaining usage, with optional numbers. Music and quota share the notch: artwork with audio activity on the left, quota on the right.
 - Fixed provider tabs, paged quota details and a fixed bottom toolbar. Paused providers disappear from the usage interface and pin choices.
 - Music controls, calendar events and reminders. Enable the calendar in Settings → Calendar.
 - English, Simplified Chinese or Follow system in Settings → General → Language. Restart to apply.
-- Optional volume, brightness and battery indicators; hover, click and keyboard shortcut controls.
+- Optional volume and brightness indicators; hover, click and keyboard shortcut controls.
 
 No Shelf, AirDrop, file sharing, camera mirror, lyric fetching, experimental swipe-to-open/close, open-notch HUD or custom Lottie animation editor. Full-screen hiding applies to all applications or can be disabled.
 

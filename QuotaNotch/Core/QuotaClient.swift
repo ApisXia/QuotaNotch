@@ -77,10 +77,6 @@ actor QuotaClient {
                 }
                 let credential = try await credentials.load(provider)
                 if let expiry = credential.expiresAt, expiry <= now { throw QuotaFailure.expired }
-                if provider == .gemini {
-                    let snapshot = try await Self.geminiSnapshot(credential, transport: transport, now: now)
-                    return QuotaResult(snapshot: snapshot, failure: nil, nextAttempt: now.addingTimeInterval(provider.interval))
-                }
                 let endpoint = "https://chatgpt.com/backend-api/wham/usage"
                 var request = URLRequest(url: URL(string: endpoint)!)
                 request.timeoutInterval = 20
@@ -120,32 +116,6 @@ actor QuotaClient {
         inFlight[provider] = nil
         results[provider] = result
         return result
-    }
-
-    private static func geminiSnapshot(_ credential: QuotaCredential, transport: any QuotaTransport, now: Date) async throws -> QuotaSnapshot {
-        func post(_ method: String, body: [String: Any]) async throws -> Data {
-            var request = URLRequest(url: URL(string: "https://cloudcode-pa.googleapis.com/v1internal:" + method)!)
-            request.httpMethod = "POST"
-            request.timeoutInterval = 20
-            request.setValue("Bearer " + credential.accessToken, forHTTPHeaderField: "Authorization")
-            request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-            request.httpBody = try JSONSerialization.data(withJSONObject: body)
-            try Task.checkCancellation()
-            let response = try await transport.send(request)
-            switch response.status {
-            case 200: return response.data
-            case 401, 403: throw QuotaFailure.expired
-            case 429: throw QuotaFailure.rateLimited(retryDate(response.retryAfter, now: now))
-            default: throw QuotaFailure.http(response.status)
-            }
-        }
-        let bootstrap = try await post("loadCodeAssist", body: ["metadata": ["pluginType": "GEMINI"]])
-        guard let root = try? JSONSerialization.jsonObject(with: bootstrap) as? [String: Any],
-              let project = root["cloudaicompanionProject"] as? String, !project.isEmpty else {
-            throw QuotaFailure.invalidResponse
-        }
-        let data = try await post("retrieveUserQuota", body: ["project": project])
-        return try QuotaParser.parse(data, provider: .gemini, now: now)
     }
 
     static func retryDate(_ raw: String?, now: Date) -> Date {

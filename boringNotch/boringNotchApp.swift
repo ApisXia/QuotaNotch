@@ -35,7 +35,7 @@ struct DynamicNotchApp: App {
             }
             .keyboardShortcut(KeyEquivalent(","), modifiers: .command)
             Link("查看更新", destination: URL(string: "https://github.com/ApisXia/QuotaNotch/releases")!)
-            Text("QuotaNotch · Claude / Codex / Gemini")
+            Text("QuotaNotch · Claude / Codex")
             Divider()
             Button("Restart QuotaNotch") {
                 ApplicationRelauncher.restart()
@@ -88,60 +88,16 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     func onScreenLocked(_ notification: Notification) {
         isScreenLocked = true
         NotchCatRuntime.shared.setLocked(true)
-        if !Defaults[.showOnLockScreen] {
-            cleanupWindows()
-        } else {
-            enableSkyLightOnAllWindows()
-        }
+        cleanupWindows()
     }
 
     @MainActor
     func onScreenUnlocked(_ notification: Notification) {
         isScreenLocked = false
         NotchCatRuntime.shared.setLocked(false)
-        if !Defaults[.showOnLockScreen] {
-            adjustWindowPosition(changeAlpha: true)
-        } else {
-            disableSkyLightOnAllWindows()
-        }
+        adjustWindowPosition(changeAlpha: true)
     }
     
-    @MainActor
-    private func enableSkyLightOnAllWindows() {
-        if Defaults[.showOnAllDisplays] {
-            windows.values.forEach { window in
-                if let skyWindow = window as? BoringNotchSkyLightWindow {
-                    skyWindow.enableSkyLight()
-                }
-            }
-        } else {
-            if let skyWindow = window as? BoringNotchSkyLightWindow {
-                skyWindow.enableSkyLight()
-            }
-        }
-    }
-    
-    @MainActor
-    private func disableSkyLightOnAllWindows() {
-        // Delay disabling SkyLight to avoid flicker during unlock transition
-        Task {
-            try? await Task.sleep(for: .milliseconds(150))
-            await MainActor.run {
-                if Defaults[.showOnAllDisplays] {
-                    self.windows.values.forEach { window in
-                        if let skyWindow = window as? BoringNotchSkyLightWindow {
-                            skyWindow.disableSkyLight()
-                        }
-                    }
-                } else {
-                    if let skyWindow = self.window as? BoringNotchSkyLightWindow {
-                        skyWindow.disableSkyLight()
-                    }
-                }
-            }
-        }
-    }
-
     private func cleanupWindows(shouldInvert: Bool = false) {
         let shouldCleanupMulti = shouldInvert ? !Defaults[.showOnAllDisplays] : Defaults[.showOnAllDisplays]
         
@@ -341,7 +297,6 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             DispatchQueue.main.async {
                 self.showOnboardingWindow()
             }
-            playWelcomeSound()
         } else if MusicManager.shared.isNowPlayingDeprecated
             && Defaults[.mediaController] == .nowPlaying
         {
@@ -353,10 +308,6 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         previousScreens = NSScreen.screens
     }
 
-    func playWelcomeSound() {
-        let audioPlayer = AudioPlayer()
-        audioPlayer.play(fileName: "boring", fileExtension: "m4a")
-    }
 
     func deviceHasNotch() -> Bool {
         if #available(macOS 12.0, *) {

@@ -3,6 +3,8 @@ import XCTest
 
 final class PreferencesTests: XCTestCase {
     func testPausedProvidersAreAbsent() {
+        XCTAssertEqual(QuotaProviderVisibility.visible(disabled: ["codex"]), [.claude])
+        // Stored values for removed providers are ignored.
         XCTAssertEqual(QuotaProviderVisibility.visible(disabled: ["gemini"]), [.claude, .codex])
     }
     func testPausingCurrentProviderSelectsNextVisibleProvider() {

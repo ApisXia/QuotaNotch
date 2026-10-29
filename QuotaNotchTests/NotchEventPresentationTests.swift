@@ -46,16 +46,6 @@ final class NotchEventPresentationTests: XCTestCase {
         }
     }
 
-    func testReplacementAndGreetingKeepTheirExplicitPriority() {
-        for event in [SneakContentType.battery, .download] {
-            let state = NotchEventPresentation(expanded: event, notification: .volume)
-            XCTAssertTrue(state.replacesPrimary)
-            XCTAssertEqual(state.accessory, .volume)
-        }
-        let greeting = NotchEventPresentation(expanded: nil, notification: .volume, greeting: true)
-        XCTAssertTrue(greeting.replacesPrimary)
-        XCTAssertNil(greeting.accessory)
-    }
 
     func testHiddenPrimaryStaysHiddenEvenDuringSystemControls() {
         let pins = QuotaPins(selected: pin)

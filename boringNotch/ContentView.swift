@@ -21,7 +21,7 @@ struct ContentView: View {
     @ObservedObject var coordinator = BoringViewCoordinator.shared
     @ObservedObject var musicManager = MusicManager.shared
     @ObservedObject private var quotaStore = QuotaNotchStore.shared
-    @ObservedObject var batteryModel = BatteryStatusViewModel.shared
+
     @ObservedObject var brightnessManager = BrightnessManager.shared
     @ObservedObject var volumeManager = VolumeManager.shared
     @State private var hoverTask: Task<Void, Never>?
@@ -38,8 +38,7 @@ struct ContentView: View {
     // A late child preference can be reset to zero by surrounding layout containers.
     private var taskWingOffset: CGFloat {
         guard vm.notchState == .closed, agentStore.showAccessory,
-              vm.effectiveClosedNotchHeight > 0, !eventPresentation.replacesPrimary,
-              !coordinator.helloAnimationRunning else { return 0 }
+              vm.effectiveClosedNotchHeight > 0, !eventPresentation.replacesPrimary else { return 0 }
         let asymmetric = compactPresentation == .combined || compactPresentation == .none
         guard asymmetric else { return 0 }
         let widget = QuotaCompactMetrics.iconSize(height: vm.effectiveClosedNotchHeight)
@@ -57,7 +56,7 @@ struct ContentView: View {
         catEnabled && (!reduceMotion || catPreviewPose != nil) && !catRuntime.suspended && vm.notchState == .closed
             && !vm.hideOnClosed && vm.effectiveClosedNotchHeight >= 24
             && !eventPresentation.replacesPrimary && eventPresentation.accessory == nil
-            && !coordinator.expandingView.show && !coordinator.helloAnimationRunning
+            && !coordinator.expandingView.show
     }
     private var displayedCatPose: CatPose { catCanAppear ? (catPreviewPose ?? cat.pose) : CatPose() }
     private var catWingOffset: CGFloat {
@@ -100,8 +99,7 @@ struct ContentView: View {
     private var eventPresentation: NotchEventPresentation {
         NotchEventPresentation(
             expanded: coordinator.expandingView.show ? coordinator.expandingView.type : nil,
-            notification: coordinator.sneakPeek.show ? coordinator.sneakPeek.type : nil,
-            greeting: coordinator.helloAnimationRunning
+            notification: coordinator.sneakPeek.show ? coordinator.sneakPeek.type : nil
         )
     }
 
@@ -150,20 +148,7 @@ struct ContentView: View {
                     .onChange(of: quotaStore.menuOpen) { _, open in
                         if !open && !isHovering { handleHover(false) }
                     }
-                    .onChange(of: vm.isBatteryPopoverActive) {
-                        if !vm.isBatteryPopoverActive && !isHovering && vm.notchState == .open {
-                            hoverTask?.cancel()
-                            hoverTask = Task {
-                                try? await Task.sleep(for: .milliseconds(250))
-                                guard !Task.isCancelled else { return }
-                                await MainActor.run {
-                                    if !self.vm.isBatteryPopoverActive && !self.quotaStore.menuOpen && !self.isHovering && self.vm.notchState == .open {
-                                        self.vm.close()
-                                    }
-                                }
-                            }
-                        }
-                    }
+
                     .sensoryFeedback(.alignment, trigger: haptics)
                     .contextMenu {
                         Button("Settings") {
@@ -202,7 +187,7 @@ struct ContentView: View {
         .onAppear {
             #if SETTINGS_PREVIEW
             if let preview = catPreviewPose {
-                print("Cat fixture: active=\(preview.active) eligible=\(catCanAppear) enabled=\(catEnabled) reduced=\(reduceMotion) suspended=\(catRuntime.suspended) closed=\(vm.notchState == .closed) hidden=\(vm.hideOnClosed) height=\(vm.effectiveClosedNotchHeight) replacement=\(eventPresentation.replacesPrimary) accessory=\(String(describing: eventPresentation.accessory)) expanding=\(coordinator.expandingView.show) hello=\(coordinator.helloAnimationRunning)")
+                print("Cat fixture: active=\(preview.active) eligible=\(catCanAppear) enabled=\(catEnabled) reduced=\(reduceMotion) suspended=\(catRuntime.suspended) closed=\(vm.notchState == .closed) hidden=\(vm.hideOnClosed) height=\(vm.effectiveClosedNotchHeight) replacement=\(eventPresentation.replacesPrimary) accessory=\(String(describing: eventPresentation.accessory)) expanding=\(coordinator.expandingView.show)")
             }
             #endif
         }
@@ -283,13 +268,7 @@ struct ContentView: View {
     func NotchLayout() -> some View {
         VStack(alignment: .leading, spacing: vm.notchState == .open ? 8 : 0) {
             Group {
-                if coordinator.helloAnimationRunning {
-                    Spacer()
-                    HelloAnimation(onFinish: { vm.closeHello() })
-                        .frame(width: getClosedNotchSize().width, height: 80)
-                        .padding(.top, 40)
-                    Spacer()
-                } else if vm.notchState == .closed {
+                if vm.notchState == .closed {
                     PrimaryNotchLayout {
                         closedPrimaryContent
                             .environment(\.notchCatPose, displayedCatPose)
@@ -325,33 +304,7 @@ struct ContentView: View {
 
     @ViewBuilder
     private var closedPrimaryContent: some View {
-        if coordinator.expandingView.type == .battery && coordinator.expandingView.show
-            && Defaults[.showPowerStatusNotifications] {
-            HStack(spacing: 0) {
-                HStack {
-                    Text(batteryModel.statusText)
-                        .font(.subheadline)
-                        .foregroundStyle(.white)
-                }
-
-                Rectangle()
-                    .fill(.black)
-                    .frame(width: vm.closedNotchSize.width + 10)
-
-                HStack {
-                    BoringBatteryView(
-                        batteryWidth: 30,
-                        isCharging: batteryModel.isCharging,
-                        isInLowPowerMode: batteryModel.isInLowPowerMode,
-                        isPluggedIn: batteryModel.isPluggedIn,
-                        levelBattery: batteryModel.levelBattery,
-                        isForNotification: true
-                    )
-                }
-                .frame(width: 76, alignment: .trailing)
-            }
-            .frame(height: vm.effectiveClosedNotchHeight, alignment: .center)
-        } else if showQuotaWings {
+        if showQuotaWings {
             QuotaPinnedWings(centerWidth: vm.closedNotchSize.width - cornerRadiusInsets.closed.top,
                              height: vm.effectiveClosedNotchHeight,
                              showsMusic: compactPresentation == .combined,
@@ -617,7 +570,7 @@ struct ContentView: View {
                         self.isHovering = false
                     }
                     
-                    if self.vm.notchState == .open && !self.vm.isBatteryPopoverActive && !self.quotaStore.menuOpen {
+                    if self.vm.notchState == .open && !self.quotaStore.menuOpen {
                         self.vm.close()
                     }
                 }
