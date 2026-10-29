@@ -40,6 +40,7 @@ struct QuotaNotchView: View {
     @ObservedObject private var store = QuotaNotchStore.shared
     @ObservedObject private var claude = ClaudeConnection.shared
     @AppStorage("quotaComfortable") private var comfortable = false
+    private var provider: QuotaProvider { store.selectedProvider }
 
     var body: some View {
         VStack(spacing: 6) {
@@ -50,10 +51,19 @@ struct QuotaNotchView: View {
                     .buttonStyle(.bordered)
                 Spacer(minLength: 0)
             } else {
-                VStack(spacing: 6) {
-                    ForEach(store.visibleProviders) { provider in providerRow(provider) }
+                // One service per tab, as before; the tab row stays the familiar switcher.
+                HStack(spacing: 2) {
+                    ForEach(store.visibleProviders) { item in
+                        QuotaProviderTab(title: item.title, brand: item.brand, selected: provider == item) {
+                            store.selectedProvider = item
+                        }
+                    }
+                    Spacer(minLength: 0)
                 }
-                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
+                .padding(2)
+                .background(.white.opacity(0.035), in: RoundedRectangle(cornerRadius: 9))
+                providerRow(provider)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
                 footer.fixedSize(horizontal: false, vertical: true)
             }
         }
@@ -66,7 +76,13 @@ struct QuotaNotchView: View {
     /// Both windows of one service, or one card that says what is missing and how to fix it.
     @ViewBuilder private func providerRow(_ provider: QuotaProvider) -> some View {
         let windows = Array((store.results[provider]?.snapshot?.windows ?? []).prefix(2))
-        if !windows.isEmpty {
+        if !store.providerEnabled(provider) {
+            VStack(spacing: 6) {
+                Text("此服务已暂停").font(.caption).foregroundStyle(.secondary)
+                Button(QuotaText.format("启用 %@", provider.title)) { store.setProvider(provider, enabled: true) }
+                    .buttonStyle(.bordered).controlSize(.small)
+            }
+        } else if !windows.isEmpty {
             HStack(spacing: 8) {
                 ForEach(windows) { window in windowCard(window, provider: provider).frame(maxWidth: .infinity) }
             }
@@ -107,10 +123,9 @@ struct QuotaNotchView: View {
     private func windowCard(_ window: QuotaWindow, provider: QuotaProvider) -> some View {
         let pin = QuotaPin(providerID: provider.rawValue, windowID: window.id)
         let pinned = store.activePin == pin
-        return QuotaWindowTile(title: provider.title + " · " + window.localizedTitle,
+        return QuotaWindowTile(title: window.localizedTitle,
                                percent: window.remainingPercent, reset: window.resetsAt,
-                               accent: quotaNeutralBar, stale: store.isStale(provider), pinned: pinned,
-                               brand: provider.brand, compact: true) {
+                               accent: provider.accent, stale: store.isStale(provider), pinned: pinned) {
             store.notchChoice = pinned && store.notchChoice != .automatic ? .none : .fixed(pin)
         }
     }

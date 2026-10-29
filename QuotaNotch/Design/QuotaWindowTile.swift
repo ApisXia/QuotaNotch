@@ -70,7 +70,7 @@ struct QuotaWindowTile: View {
         Button(action: onPin) {
             Image(systemName: pinned ? "pin.fill" : "pin")
                 .font(.system(size: 11))
-                .foregroundStyle(pinned ? .white : .gray)
+                .foregroundStyle(pinned ? accent : .gray)
         }
         .buttonStyle(.plain)
         .help(QuotaText.localized(pinned ? "不再在刘海中显示" : "收起时在刘海中显示"))
