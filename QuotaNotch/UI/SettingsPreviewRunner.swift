@@ -240,11 +240,11 @@ struct SettingsPreviewRunner {
             .onPreferenceChange(NotchModuleFrameAuditKey.self) { renderedFrames = $0 }
             .transaction { $0.animation = nil; $0.disablesAnimations = true }
             .background(Color(red: 0.25, green: 0.15, blue: 0.35)))
-        /// The quota module is the pet at its pixel scale, except in the shared music wing.
+        /// The quota module is the pet at its pixel scale, also in the shared music wing.
         func quotaWidth(height: CGFloat, size: NotchUISize, shared: Bool) -> CGFloat {
             let icon = QuotaCompactMetrics.iconSize(height: height, size: size)
-            let scale = shared ? 1 : QuotaPetArt.pixelScale(size: size, notchHeight: height,
-                                                            displayScale: host.window?.backingScaleFactor ?? 1)
+            let scale = QuotaPetArt.pixelScale(size: size, notchHeight: height,
+                                               displayScale: host.window?.backingScaleFactor ?? 1)
             return scale > 1 ? 20 * scale : icon
         }
         func verifyGeometry(_ label: String, widget: CGFloat, quota: CGFloat? = nil) {

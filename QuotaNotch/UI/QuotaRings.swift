@@ -226,11 +226,11 @@ struct QuotaPinnedWings: View {
     /// percentage the right one.
     private var petWithPercent: Bool { pet != .off && !activity.showAccessory && !showsMusic }
     private var percentWidth: CGFloat { max(iconSize, (size.percentFont * 2.4).rounded()) }
-    /// Music, quota and tasks share one wing: the pet stays at its smallest so swapping
-    /// quota and tasks never changes the notch width.
+    /// Music, quota and tasks share one wing. The task widget then takes a slot as wide as
+    /// the pet, so swapping quota and tasks never changes the notch width.
     private var sharedWing: Bool { showsMusic && activity.showAccessory }
     private var petScale: CGFloat {
-        guard pet != .off, !sharedWing else { return 1 }
+        guard pet != .off else { return 1 }
         return QuotaPetArt.pixelScale(size: size, notchHeight: height, displayScale: displayScale)
     }
     /// Width of the quota module: the pet at its scale, or the regular icon slot.
@@ -250,7 +250,7 @@ struct QuotaPinnedWings: View {
             if petWithPercent { return pairedWidth }
             return showsMusic ? quotaWidth : iconSize
         }
-        return showsMusic ? (tasksExpanded ? metrics.minimalWidth : iconSize) : 0
+        return showsMusic ? (tasksExpanded ? metrics.minimalWidth : quotaWidth) : 0
     }
 
     var body: some View {
@@ -279,7 +279,8 @@ struct QuotaPinnedWings: View {
                 .catWing(.left, occupied: leftWidth, height: height, widgetWidth: iconSize)
                 Color.clear.frame(width: centerWidth, height: height).auditNotchFrame("camera")
 
-                AgentCompactDock(primaryWidth: rightPrimaryWidth, height: height, anchorWidth: leftWidth, widgetWidth: iconSize, open: {
+                AgentCompactDock(primaryWidth: rightPrimaryWidth, height: height, anchorWidth: leftWidth, widgetWidth: iconSize,
+                                 slotWidth: sharedWing ? quotaWidth : nil, open: {
                     BoringViewCoordinator.shared.currentView = .activity
                     // The hosting notch commits its open state through the action below.
                     NotificationCenter.default.post(name: .agentOpenNotch, object: nil)
@@ -306,7 +307,7 @@ struct QuotaPinnedWings: View {
                         .accessibilityValue(reading(for: pin))
                     }
                 }
-                .catWing(.right, occupied: showsMusic && activity.showAccessory ? iconSize + metrics.additionalWidth : iconSize, height: height, widgetWidth: iconSize)
+                .catWing(.right, occupied: sharedWing ? quotaWidth + metrics.additionalWidth : iconSize, height: height, widgetWidth: iconSize)
             }
             .frame(height: height)
             .animation(reduceMotion ? nil : .smooth(duration: 0.32), value: showsMusic)
