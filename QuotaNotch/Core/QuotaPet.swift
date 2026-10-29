@@ -3,10 +3,10 @@ import Foundation
 
 /// The small pixel pet that shows quota and tasks in the closed notch.
 enum QuotaPetKind: String, CaseIterable, Sendable {
-    case mochi, bit, jelly
+    case mochi, bit, jelly, ghost, sprout
     static let defaultsKey = "quotaPet"
     static let defaultKind: QuotaPetKind = .bit
-    static let pets: [QuotaPetKind] = [.mochi, .bit, .jelly]
+    static let pets: [QuotaPetKind] = [.mochi, .bit, .jelly, .ghost, .sprout]
     /// The saved pet; older values such as "off" fall back to the default.
     static func choice(_ raw: String?) -> QuotaPetKind {
         raw.flatMap(QuotaPetKind.init(rawValue:)) ?? defaultKind
@@ -176,7 +176,7 @@ struct QuotaPetSprite: Equatable, Sendable {
     }
 }
 
-/// Pixel art for the three pets. One pixel is drawn as one point.
+/// Pixel art for the pets. One pixel is drawn as one point.
 enum QuotaPetArt {
     static let frameInterval: TimeInterval = 0.42
     static let blinkPeriod: TimeInterval = 4
@@ -282,14 +282,25 @@ enum QuotaPetArt {
                        remaining: Double, frame: Int = 0, blink: Bool = false) -> QuotaPetSprite {
         let q = min(100, max(0, remaining.isFinite ? remaining : 0))
         let grid: Grid
-        switch size {
-        case .widget: grid = crop(full(kind, mood: mood, props: true, remaining: q, frame: frame, blink: blink), x: 1, y: 1, width: 20, height: 16)
-        case .minimal: grid = minimal(kind, mood: mood, remaining: q, blink: blink)
+        switch (kind, size) {
+        case (.ghost, .widget): grid = ghost(mood: mood, remaining: q, frame: frame, blink: blink)
+        case (.ghost, .minimal): grid = crop(ghost(mood: mood, remaining: q, frame: 0, blink: blink), x: 2, y: 1, width: 16, height: 12)
+        case (.sprout, .widget): grid = sprout(mood: mood, remaining: q, frame: frame, blink: blink)
+        case (.sprout, .minimal):
+            // The leaves' middle rows over the pot.
+            let whole = sprout(mood: mood, remaining: q, frame: 0, blink: blink)
+            grid = crop(Array(whole[3...6]) + Array(whole[8...15]), x: 2, y: 0, width: 16, height: 12)
+        case (.jelly, .widget):
+            var g = crop(full(kind, mood: mood, props: false, face: false, remaining: q, frame: frame, blink: blink), x: 1, y: 1, width: 20, height: 16)
+            jellyFace(&g, mood: mood, frame: frame, blink: blink)
+            grid = g
+        case (_, .widget): grid = crop(full(kind, mood: mood, props: true, remaining: q, frame: frame, blink: blink), x: 1, y: 1, width: 20, height: 16)
+        case (_, .minimal): grid = minimal(kind, mood: mood, remaining: q, blink: blink)
         }
         return QuotaPetSprite(width: grid.first?.count ?? 0, height: grid.count, codes: grid.flatMap { $0 })
     }
 
-    private static func full(_ kind: QuotaPetKind, mood: QuotaPetMood, props: Bool,
+    private static func full(_ kind: QuotaPetKind, mood: QuotaPetMood, props: Bool, face: Bool = true,
                              remaining q: Double, frame: Int, blink: Bool) -> Grid {
         var grid = Grid(repeating: [UInt8](repeating: dot, count: 22), count: 18)
         guard var rows = base[kind] else { return grid }
@@ -317,11 +328,14 @@ enum QuotaPetArt {
             paint(&grid, [fill >= 4 ? "..fff.." : (fill >= 3 ? "...f..." : ".......")], 14, 11)
             paint(&grid, [".......", fill >= 2 ? "offfffo" : (fill >= 1 ? "o.fff.o" : "o.....o"), "oBBBBBo", ".oBBBo."], 14, 12)
         }
-        let look = Self.pose(kind, mood, blink: blink)
-        let eye = eyes[look.expression] ?? eyes["open"]!
-        let lift = look.expression == "wide" ? -1 : 0
-        for (x, y) in eyePositions[kind] ?? [] { paint(&grid, eye, ox + x, oy + y + lift) }
-        if let mouth = mouthPositions[kind] { paint(&grid, mouths[look.mouth] ?? mouths["cat"]!, ox + mouth.0, oy + mouth.1) }
+        // The jelly's widget face has its own drawing (jellyFace).
+        if face {
+            let look = Self.pose(kind, mood, blink: blink)
+            let eye = eyes[look.expression] ?? eyes["open"]!
+            let lift = look.expression == "wide" ? -1 : 0
+            for (x, y) in eyePositions[kind] ?? [] { paint(&grid, eye, ox + x, oy + y + lift) }
+            if let mouth = mouthPositions[kind] { paint(&grid, mouths[look.mouth] ?? mouths["cat"]!, ox + mouth.0, oy + mouth.1) }
+        }
         if kind == .bit {
             // Features on the screen glow instead of being outlined.
             let o = UInt8(ascii: "o"), e = UInt8(ascii: "e")
@@ -342,6 +356,191 @@ enum QuotaPetArt {
         default: break
         }
         return grid
+    }
+
+    // MARK: Pets with their own faces (from the approved design canvas)
+
+    private static func blank(_ width: Int = 20, _ height: Int = 16) -> Grid {
+        Grid(repeating: [UInt8](repeating: dot, count: width), count: height)
+    }
+
+    /// Paints `rows` at `x` and their mirror image around the center column `center`
+    /// (9.5 for a 20-pixel pet), so faces are exactly symmetric.
+    private static func mirrored(_ grid: inout Grid, _ rows: [String], _ x: Int, _ y: Int, center: Double,
+                                 ink: ((UInt8, UInt8) -> UInt8)? = nil) {
+        let width = rows.first?.utf8.count ?? 0
+        paint(&grid, rows, x, y, ink: ink)
+        paint(&grid, rows.map { String($0.reversed()) }, Int(2 * center + 1) - x - width, y, ink: ink)
+    }
+
+    /// Paints `rows` centered on `center`; their width must match it (even for x.5).
+    private static func centered(_ grid: inout Grid, _ rows: [String], center: Double, _ y: Int) {
+        let width = rows.first?.utf8.count ?? 0
+        paint(&grid, rows, Int(center + 0.5) - width / 2, y)
+    }
+
+    /// Face pixels turn white where they sit on one of `dark`.
+    private static func lightOn(_ dark: String) -> (UInt8, UInt8) -> UInt8 {
+        let darkCodes = Set(dark.utf8), o = UInt8(ascii: "o"), e = UInt8(ascii: "e"), white = UInt8(ascii: "W")
+        return { code, under in (code == o || code == e) && darkCodes.contains(under) ? white : code }
+    }
+
+    private static func shifted(_ grid: Grid, by dy: Int) -> Grid {
+        guard dy != 0 else { return grid }
+        return (0..<grid.count).map { y in
+            let source = y - dy
+            return source >= 0 && source < grid.count ? grid[source] : [UInt8](repeating: dot, count: grid[y].count)
+        }
+    }
+
+    private static func gaugeLevel(_ q: Double, steps: Int) -> Int {
+        q <= 0 ? 0 : max(1, Int((q / 100 * Double(steps)).rounded()))
+    }
+
+    private static func sparkle(_ grid: inout Grid, frame: Int, _ x: Int, _ y: Int) {
+        paint(&grid, frame % 2 == 0 ? [".w.", "www", ".w."] : ["w.w", ".w.", "w.w"], x, y)
+    }
+    private static func sleepZ(_ grid: inout Grid, frame: Int, _ x: Int, _ y: Int) {
+        paint(&grid, frame % 2 == 0 ? ["ZZZ", "..Z", ".Z.", "ZZZ"] : ["...", "ZZZ", ".Z.", "ZZZ"], x, y)
+    }
+    private static func bang(_ grid: inout Grid, frame: Int, _ x: Int, _ y: Int) {
+        paint(&grid, frame % 2 == 0 ? ["X", "X", ".", "X"] : [".", "X", "X", ".", "X"], x, y)
+    }
+    private static func drop(_ grid: inout Grid, frame: Int, _ x: Int, _ y: Int, code: Character = "d") {
+        let c = String(code)
+        paint(&grid, [".\(c).", "\(c)\(c)\(c)", ".\(c)."], x, y + frame % 2)
+    }
+
+    /// 果冻: the existing slime, with big shiny eyes and its own reactions.
+    private static func jellyFace(_ g: inout Grid, mood: QuotaPetMood, frame f: Int, blink: Bool) {
+        let c = 8.5, ink = lightOn("fF")
+        switch mood {
+        case .empty, .stale: mirrored(&g, ["..", "..", "oo"], 5, 6, center: c, ink: ink)
+        case .idle where blink: mirrored(&g, ["..", "..", "oo"], 5, 6, center: c, ink: ink)
+        case .refilled, .celebrate: mirrored(&g, [".oo.", "o..o"], 4, 7, center: c, ink: ink)
+        case .needsYou, .pacing: mirrored(&g, ["we", "ee", "ee", "ee"], 5, 5, center: c)
+        case .low: mirrored(&g, ["..", "oo", "ee"], 5, 6, center: c, ink: ink)
+        case .working: mirrored(&g, ["..", "we", "ee"], 5, 6, center: c)
+        case .idle: mirrored(&g, ["we", "ee", "ee"], 5, 6, center: c)
+        }
+        switch mood {
+        case .needsYou: centered(&g, ["MM", "MM"], center: c, 10)
+        case .refilled, .celebrate: centered(&g, ["MM", "TT"], center: c, 10)
+        default: centered(&g, ["MM"], center: c, 10)
+        }
+        let body = UInt8(ascii: "c"), water = UInt8(ascii: "f"), blush = UInt8(ascii: "p")
+        for x in [3, 14] where g[9][x] == body || g[9][x] == water { g[9][x] = blush }
+        switch mood {
+        case .working:
+            // bubbles rise in the water
+            let y = 12 - (f % 3) * 2, bubble = UInt8(ascii: "w")
+            if g[y][6] == water { g[y][6] = bubble }
+            if y + 1 < g.count, g[y + 1][12] == water { g[y + 1][12] = bubble }
+        case .empty:
+            paint(&g, f % 2 == 0 ? [".bb.", "b..b", "b..b", ".bb."] : ["....", ".bb.", ".bb.", "...."], 11, 8)
+        case .refilled, .celebrate:
+            paint(&g, ["H.H", "HHH", ".H."], 0, 1 + f % 2)
+            paint(&g, ["H.H", "HHH", ".H."], 15, 2 - f % 2)
+        case .low:
+            drop(&g, frame: f, 15, 2, code: "f")
+        case .needsYou where f % 2 == 1:
+            g = shifted(g, by: -1)
+        default: break
+        }
+    }
+
+    /// 飘飘: a little ghost; how solid it looks is the quota (see palette).
+    private static func ghost(mood: QuotaPetMood, remaining q: Double, frame f: Int, blink: Bool) -> Grid {
+        var g = blank()
+        let wave = f % 2 == 1 ? 2 : 0
+        func inside(_ x: Int, _ y: Int) -> Bool {
+            guard x >= 0, y >= 0, x < 20, y < 16, y >= 1, y <= 14 else { return false }
+            if y <= 8 { let dx = Double(x) - 9.5, dy = Double(y) - 8; return dx * dx + dy * dy <= 7.2 * 7.2 }
+            guard x >= 3, x <= 16 else { return false }
+            if y >= 13 { let k = (x - 3 + wave) % 4; return y == 13 ? k != 3 : (k == 1 || k == 2) }
+            return true
+        }
+        for y in 0..<16 { for x in 0..<20 where inside(x, y) {
+            let edge = !inside(x - 1, y) || !inside(x + 1, y) || !inside(x, y - 1) || !inside(x, y + 1)
+            g[y][x] = UInt8(ascii: edge ? "o" : (x >= 14 || y >= 12 ? "s" : "c"))
+        } }
+        paint(&g, ["hh", "h."], 5, 3)
+        paint(&g, ["oo", "oco"], 1, 9); paint(&g, [".oo", "oco"], 16, 9)
+        g[10][2] = UInt8(ascii: "c"); g[10][17] = UInt8(ascii: "s")
+        // tall eyes and a two-pixel mouth, one blank row apart
+        let eyeY = 6, c = 9.5
+        switch mood {
+        case .empty, .stale: mirrored(&g, ["..", "oo"], 6, eyeY, center: c)
+        case .idle where blink: mirrored(&g, ["..", "oo"], 6, eyeY, center: c)
+        case .working: mirrored(&g, [".", "e"], 7, eyeY, center: c)
+        case .needsYou, .pacing: mirrored(&g, ["e", "e", "e"], 7, eyeY - 1, center: c)
+        case .low: mirrored(&g, ["oo", ".e"], 6, eyeY, center: c)
+        case .refilled, .celebrate: mirrored(&g, [".o.", "o.o"], 5, eyeY, center: c)
+        case .idle: mirrored(&g, ["e", "e"], 7, eyeY, center: c)
+        }
+        switch mood {
+        case .needsYou: centered(&g, ["MM", "MM"], center: c, eyeY + 3)
+        case .refilled, .celebrate: centered(&g, ["MM", "TT"], center: c, eyeY + 3)
+        default: centered(&g, ["MM"], center: c, eyeY + 3)
+        }
+        g[8][5] = UInt8(ascii: "p"); g[8][14] = UInt8(ascii: "p")
+        let floats = [.idle, .working, .refilled, .celebrate].contains(mood)
+        g = shifted(g, by: floats && f % 2 == 1 ? -1 : 0)
+        switch mood {
+        case .empty: sleepZ(&g, frame: f, 16, 0)
+        case .low: drop(&g, frame: f, 16, 2)
+        case .needsYou: bang(&g, frame: f, 18, 1)
+        case .refilled, .celebrate:
+            sparkle(&g, frame: f, 0, 0)
+            paint(&g, f % 2 == 0 ? ["w"] : [".w.", "www", ".w."], 17, 4)
+        default: break
+        }
+        return g
+    }
+
+    /// 苗苗: a sprout in a pot; the water band on the pot is the quota, and the leaves droop as it runs out.
+    private static func sprout(mood: QuotaPetMood, remaining q: Double, frame f: Int, blink: Bool) -> Grid {
+        var g = blank()
+        paint(&g, [
+            "...oooooooooooooo...", "...orrrrrrrrrrrro...", "....occcccccccco....", "....occcccccccco....",
+            "....occcccccccco....", "....occcccccccco....", ".....onnnnnnnno.....", ".....oooooooooo....."
+        ], 0, 8)
+        let filled = gaugeLevel(q, steps: 8)
+        for i in 0..<filled { g[14][6 + i] = UInt8(ascii: "m") }
+        let up = [".ooo....ooo.", "olllo..olllo", "oLllLooLllLo", ".oLLLggLLLo.", "..oooggooo..", ".....gg.....", ".....gg....."]
+        let flat = ["............", ".oooo..oooo.", "olllLooLlllo", ".ooooggoooo.", ".....gg.....", ".....gg.....", ".....gg....."]
+        let droop = ["............", "............", "....oooo....", "...oyggyo...", ".oyyoggoyyo.", "oyyo.gg.oyyo", "oo...gg...oo"]
+        let bare = ["............", "............", "............", ".....oo.....", "....oYYo....", ".....YY.....", ".....YY....."]
+        let alert = ["...oo..oo...", "..olo..olo..", "..olo..olo..", "..oLoggoLo..", "...ooggoo...", ".....gg.....", ".....gg....."]
+        var shape: [String]
+        if q <= 0 { shape = bare }
+        else if mood == .needsYou { shape = alert }
+        else if q < 20 { shape = droop }
+        else if q < 35 { shape = flat.map { $0.replacingOccurrences(of: "l", with: "y").replacingOccurrences(of: "L", with: "Y") } }
+        else if q < 50 { shape = flat }
+        else { shape = up }
+        let sway = mood == .working && f % 2 == 1 ? 1 : 0
+        paint(&g, shape, 4 + sway, 1)
+        if mood == .refilled || mood == .celebrate { paint(&g, [".qq.", "qQQq"], 8, 0) }
+        let c = 9.5
+        switch mood {
+        case .empty, .stale: mirrored(&g, ["oo"], 6, 11, center: c)
+        case .idle where blink: mirrored(&g, ["oo"], 6, 11, center: c)
+        case .refilled, .celebrate: mirrored(&g, [".o.", "o.o"], 6, 10, center: c)
+        case .needsYou, .pacing: mirrored(&g, ["e", "e", "e"], 7, 10, center: c)
+        case .low: mirrored(&g, ["o.", ".e"], 6, 10, center: c)
+        case .idle, .working: mirrored(&g, ["e", "e"], 7, 10, center: c)
+        }
+        mirrored(&g, ["p"], 5, 12, center: c)
+        centered(&g, mood == .refilled || mood == .celebrate ? ["TT"] : ["MM"], center: c, 13)
+        switch mood {
+        case .needsYou: bang(&g, frame: f, 17, 3)
+        case .empty: sleepZ(&g, frame: f, 16, 2)
+        case .refilled, .celebrate: sparkle(&g, frame: f, 1, 1)
+        case .low: drop(&g, frame: f, 16, 5)
+        default: break
+        }
+        return g
     }
 
     private static func minimal(_ kind: QuotaPetKind, mood: QuotaPetMood, remaining q: Double, blink: Bool) -> Grid {
@@ -374,6 +573,8 @@ enum QuotaPetArt {
             var grid = crop(full(kind, mood: mood, props: false, remaining: q, frame: 0, blink: blink), x: 1, y: 2, width: 16, height: 11)
             grid.append(meter(width: 16, remaining: q, fill: UInt8(ascii: "m"), empty: UInt8(ascii: "d")))
             return grid
+        case .ghost, .sprout:
+            return sprite(kind, size: .minimal, mood: mood, remaining: q, blink: blink).rows.map { Array($0.utf8) }
         }
     }
 
@@ -394,12 +595,13 @@ enum QuotaPetArt {
         }
     }
 
-    private static func paint(_ grid: inout Grid, _ rows: [String], _ x0: Int, _ y0: Int) {
+    private static func paint(_ grid: inout Grid, _ rows: [String], _ x0: Int, _ y0: Int,
+                              ink: ((UInt8, UInt8) -> UInt8)? = nil) {
         for (dy, row) in rows.enumerated() {
             for (dx, code) in row.utf8.enumerated() where code != dot {
                 let y = y0 + dy, x = x0 + dx
                 guard y >= 0, y < grid.count, x >= 0, x < grid[y].count else { continue }
-                grid[y][x] = code
+                grid[y][x] = ink.map { $0(code, grid[y][x]) } ?? code
             }
         }
     }
@@ -414,6 +616,8 @@ enum QuotaPetArt {
         case .mochi: return 0xF6B56B
         case .bit: return 0x6FF0D8
         case .jelly: return 0x7AA2FF
+        case .ghost: return 0xB9C2FF
+        case .sprout: return 0x8FDC6A
         }
     }
 
@@ -448,6 +652,8 @@ enum QuotaPetArt {
         case .mochi: return warning ?? (tint == .service ? brandColor(provider) : palette[UInt8(ascii: "f")] ?? 0xF0B85A)
         case .bit: return palette[UInt8(ascii: "m")] ?? 0x5AD19A
         case .jelly: return palette[UInt8(ascii: "f")] ?? 0x7AA2FF
+        case .ghost: return warning ?? (tint == .service ? brandColor(provider) : 0xDFE3FB)
+        case .sprout: return palette[UInt8(ascii: "m")] ?? 0x6FC3FF
         }
     }
 
@@ -462,7 +668,15 @@ enum QuotaPetArt {
                       "a": 0x9AA6B8, "m": 0x5AD19A, "d": 0x3A4658, "L": 0x5AD19A]
         case .jelly:
             colors = ["o": 0x2D3A64, "c": 0xDFE8FF, "s": 0xC4D2FB, "e": 0x1D2547, "w": 0xFFFFFF, "p": 0xFFA3B8, "f": 0x7AA2FF,
-                      "F": 0xA9C3FF, "d": 0x5B7FE0, "a": 0x9AA6B8, "k": 0x2E3A52, "m": 0xC96F66]
+                      "F": 0xA9C3FF, "d": 0x5B7FE0, "a": 0x9AA6B8, "k": 0x2E3A52, "m": 0xC96F66,
+                      "W": 0xFFFFFF, "M": 0x5A2E2E, "T": 0xFF7A8A, "H": 0xFF8FB1, "b": 0xBFE2FF]
+        case .ghost:
+            colors = ["o": 0x4B4F7A, "c": 0xF6F7FF, "s": 0xDFE3FB, "h": 0xFFFFFF, "e": 0x2B2F4A, "p": 0xFFB3C8, "w": 0xFFFFFF,
+                      "M": 0x5A2E2E, "T": 0xFF7A8A, "Z": 0xCFD8E0, "X": 0xFFB347, "d": 0x7AA2FF]
+        case .sprout:
+            colors = ["o": 0x3A2A24, "c": 0xE58A5A, "r": 0xD1774A, "n": 0x8A4A32, "m": 0x6FC3FF, "g": 0x5AA14A, "l": 0x8FDC6A,
+                      "L": 0x5AA14A, "y": 0xD9C25A, "Y": 0xB89A45, "q": 0xFF8FB1, "Q": 0xFFE27A, "e": 0x2A1F1C, "p": 0xF7B9A0,
+                      "w": 0xFFFFFF, "M": 0x5A2E2E, "T": 0xFF7A8A, "Z": 0xCFD8E0, "X": 0xFFB347, "d": 0x7AA2FF]
         }
         let brand = brandColor(provider)
         let warning: UInt32? = remaining < 20 ? 0xFF5A4F : (remaining < 35 ? 0xF4D35E : nil)
@@ -471,6 +685,8 @@ enum QuotaPetArt {
             case .bit: colors["e"] = brand
             case .jelly: colors["f"] = brand; colors["F"] = lighten(brand)
             case .mochi: colors["B"] = brand
+            case .ghost: colors["p"] = brand
+            case .sprout: colors["m"] = brand
             }
         }
         if kind == .bit {
@@ -478,9 +694,21 @@ enum QuotaPetArt {
             colors["L"] = light; colors["m"] = light
         }
         if kind == .jelly, let warning { colors["f"] = warning; colors["F"] = lighten(warning) }
+        if kind == .sprout, let warning { colors["m"] = warning }
+        if kind == .ghost {
+            // The ghost fades as quota is used; the notch behind it is black, so fading is
+            // blending toward black. The outline and face stay.
+            let solid = 0.12 + 0.88 * min(100, max(0, remaining)) / 100
+            for key in ["c", "s", "h", "p"] as [Character] { if let color = colors[key] { colors[key] = fade(color, solid) } }
+        }
         var result: [UInt8: UInt32] = [:]
         for (key, value) in colors { result[UInt8(ascii: key.unicodeScalars.first!)] = value }
         return result
+    }
+
+    static func fade(_ color: UInt32, _ amount: Double) -> UInt32 {
+        func channel(_ shift: UInt32) -> UInt32 { UInt32((Double((color >> shift) & 0xFF) * amount).rounded()) << shift }
+        return channel(16) | channel(8) | channel(0)
     }
 
     static func lighten(_ color: UInt32) -> UInt32 {

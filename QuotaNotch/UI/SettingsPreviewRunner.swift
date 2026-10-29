@@ -119,7 +119,7 @@ struct SettingsPreviewRunner {
         try captureNotchSwitching(output: output)
         // Every quota pet in every state, widget and minimal, four times the notch size.
         try capture(VStack(alignment: .leading, spacing: 16) {
-            ForEach([QuotaPetKind.mochi, .bit, .jelly], id: \.self) { kind in
+            ForEach(QuotaPetKind.pets, id: \.self) { kind in
                 HStack(spacing: 12) {
                     ForEach(QuotaPetMood.allCases, id: \.self) { mood in
                         VStack(spacing: 8) {
@@ -132,7 +132,7 @@ struct SettingsPreviewRunner {
                     }
                 }
             }
-        }.padding(16).background(Color(white: 0.16)), width: 1000, name: "Quota-pets", output: output, height: 560)
+        }.padding(16).background(Color(white: 0.16)), width: 1080, name: "Quota-pets", output: output, height: 900)
         try captureTaskPanel(output: output, fixtures: fixtures)
         for dark in [true, false] {
             try capture(VStack(alignment: .leading, spacing: 12) {

@@ -2,7 +2,7 @@ import XCTest
 @testable import QuotaNotchCore
 
 final class QuotaPetTests: XCTestCase {
-    private let pets: [QuotaPetKind] = [.mochi, .bit, .jelly]
+    private let pets = QuotaPetKind.pets
 
     func testWidgetFitsTheQuotaSlotAndMinimalFitsSixteenPoints() {
         for kind in pets {
@@ -35,10 +35,34 @@ final class QuotaPetTests: XCTestCase {
             ".o.osccccccsoofffffo", "oco.scccccccsoBBBBBo", "oco.occocccoccoBBBo.", ".oooooooooooooo....."
         ])
         XCTAssertEqual(QuotaPetArt.sprite(.jelly, size: .widget, mood: .low, remaining: 12).rows, [
-            "....................", "......oooooo........", "....ooccccccoo......", "...occcwwcccccod....",
-            "..occcwcccccccddd...", "..occccccccccccd....", ".occcccccccccccco...", ".occcooccccooccco...",
-            ".occceecccceeccco...", ".occcccccccccccco...", "occcccccooocccccco..", "occcccccccccccccco..",
+            "....................", "......oooooo........", "....ooccccccoo..f...", "...occcwwcccccofff..",
+            "..occcwccccccccof...", "..occcccccccccco....", ".occcccccccccccco...", ".occcooccccooccco...",
+            ".occceecccceeccco...", ".ocpccccccccccpco...", "occcccccMMccccccco..", "occcccccccccccccco..",
             "oFFFFFFFFFFFFFFFFo..", ".offffffffffffffo...", "..oooooooooooooo....", "...................."
+        ])
+        XCTAssertEqual(QuotaPetArt.sprite(.ghost, size: .widget, mood: .idle, remaining: 72).rows, [
+            "....................", "........oooo........", "......ooccccoo......", ".....hhccccccco.....",
+            "....ohccccccccso....", "...occccccccccsso...", "...occceccccecsso...", "...occceccccecsso...",
+            "...ocpccccccccpso...", ".ooocccccMMcccssooo.", ".ococcccccccccssoso.", "...occccccccccsso...",
+            "...ossosssosssoso...", "...oso.oso.oso.oo...", "....oo..oo..oo..o...", "...................."
+        ])
+        XCTAssertEqual(QuotaPetArt.sprite(.ghost, size: .widget, mood: .needsYou, remaining: 41, frame: 1).rows, [
+            "....................", "........oooo........", "......ooccccoo....X.", ".....hhccccccco...X.",
+            "....ohccccccccso....", "...occceccccecsso.X.", "...occceccccecsso...", "...occceccccecsso...",
+            "...ocpccccccccpso...", ".ooocccccMMcccssooo.", ".ococccccMMcccssoso.", "...occccccccccsso...",
+            "...oosssosssossso...", "...o.oso.oso.oso....", "...o..oo..oo..oo....", "...................."
+        ])
+        XCTAssertEqual(QuotaPetArt.sprite(.sprout, size: .widget, mood: .needsYou, remaining: 41).rows, [
+            "....................", ".......oo..oo.......", "......olo..olo......", "......olo..olo...X..",
+            "......oLoggoLo...X..", ".......ooggoo.......", ".........gg......X..", ".........gg.........",
+            "...oooooooooooooo...", "...orrrrrrrrrrrro...", "....occeccccecco....", "....occeccccecco....",
+            "....opceccccecpo....", "....occccMMcccco....", ".....ommmnnnnno.....", ".....oooooooooo....."
+        ])
+        XCTAssertEqual(QuotaPetArt.sprite(.sprout, size: .widget, mood: .low, remaining: 12).rows, [
+            "....................", "....................", "....................", "........oooo........",
+            ".......oyggyo.......", ".....oyyoggoyyo..d..", "....oyyo.gg.oyyoddd.", "....oo...gg...oo.d..",
+            "...oooooooooooooo...", "...orrrrrrrrrrrro...", "....ococcccccoco....", "....occeccccecco....",
+            "....opccccccccpo....", "....occccMMcccco....", ".....omnnnnnnno.....", ".....oooooooooo....."
         ])
         XCTAssertEqual(QuotaPetArt.sprite(.mochi, size: .widget, mood: .needsYou, remaining: 41).rows, [
             "....................", "..oo.......oo...oo..", ".ogo.......opo.occo.", ".oggooooooooppoocco.",
@@ -101,7 +125,7 @@ final class QuotaPetTests: XCTestCase {
         XCTAssertEqual(QuotaPetArt.taskColor(.waiting), 0xFFB347)
         XCTAssertEqual(QuotaPetArt.taskColor(.running), 0x5AD19A)
         XCTAssertEqual(QuotaPetArt.taskColor(.completed), 0x7AA2FF)
-        XCTAssertNotEqual(QuotaPetArt.themeColor(.mochi), QuotaPetArt.themeColor(.jelly))
+        XCTAssertEqual(Set(QuotaPetKind.pets.map(QuotaPetArt.themeColor)).count, QuotaPetKind.pets.count)
     }
 
     func testEveryDrawnPixelHasAColor() {
@@ -137,6 +161,14 @@ final class QuotaPetTests: XCTestCase {
         XCTAssertGreaterThan(count(QuotaPetArt.sprite(.jelly, size: .widget, mood: .idle, remaining: 90), "f"),
                              count(QuotaPetArt.sprite(.jelly, size: .widget, mood: .idle, remaining: 30), "f"))
         XCTAssertEqual(count(QuotaPetArt.sprite(.mochi, size: .widget, mood: .empty, remaining: 0), "f"), 0)
+        XCTAssertEqual(count(QuotaPetArt.sprite(.sprout, size: .widget, mood: .idle, remaining: 100), "m"), 8)
+        XCTAssertEqual(count(QuotaPetArt.sprite(.sprout, size: .widget, mood: .empty, remaining: 0), "m"), 0)
+        // The ghost's body fades toward black as quota is used; its outline stays.
+        let solid = QuotaPetArt.palette(.ghost, provider: .claude, tint: .original, remaining: 100)
+        let faint = QuotaPetArt.palette(.ghost, provider: .claude, tint: .original, remaining: 10)
+        XCTAssertEqual(solid[UInt8(ascii: "c")], 0xF6F7FF)
+        XCTAssertLessThan(faint[UInt8(ascii: "c")]! & 0xFF, solid[UInt8(ascii: "c")]! & 0xFF)
+        XCTAssertEqual(faint[UInt8(ascii: "o")], solid[UInt8(ascii: "o")])
         XCTAssertGreaterThan(count(QuotaPetArt.sprite(.mochi, size: .minimal, mood: .idle, remaining: 80), "f"),
                              count(QuotaPetArt.sprite(.mochi, size: .minimal, mood: .idle, remaining: 20), "f"))
     }
@@ -219,6 +251,8 @@ final class QuotaPetTests: XCTestCase {
     func testSavedPetFallsBackToTheDefault() {
         XCTAssertEqual(QuotaPetKind.choice(nil), .bit)
         XCTAssertEqual(QuotaPetKind.choice("jelly"), .jelly)
+        XCTAssertEqual(QuotaPetKind.choice("ghost"), .ghost)
+        XCTAssertEqual(QuotaPetKind.choice("sprout"), .sprout)
         XCTAssertEqual(QuotaPetKind.choice("unknown"), .bit)
         XCTAssertEqual(QuotaPetKind.choice("off"), .bit)
         XCTAssertEqual(QuotaPetKind.allCases, QuotaPetKind.pets)
@@ -271,5 +305,25 @@ final class QuotaPetTests: XCTestCase {
         XCTAssertEqual(QuotaPeekRule.event(previous: 70, current: 68, wasPacing: false, pacing: true), .pacing)
         XCTAssertNil(QuotaPeekRule.event(previous: 70, current: 68, wasPacing: true, pacing: true))
         XCTAssertNil(QuotaPeekRule.event(previous: 49, current: 51, wasPacing: false, pacing: false))
+    }
+
+    /// Faces sit exactly on the pet's center line.
+    func testNewFacesAreSymmetric() {
+        let face = Set("eoWMT".utf8)
+        for (kind, center, rows) in [(QuotaPetKind.ghost, 9.5, 5...9), (.sprout, 9.5, 10...13), (.jelly, 8.5, 5...10)] {
+            for mood in [QuotaPetMood.idle, .working, .pacing, .stale, .empty, .refilled] {
+                let sprite = QuotaPetArt.sprite(kind, size: .widget, mood: mood, remaining: 72)
+                for y in rows {
+                    for x in 0..<sprite.width {
+                        let mirror = Int(2 * center) - x
+                        guard mirror >= 0, mirror < sprite.width, face.contains(sprite.code(x: x, y: y)),
+                              x > 3, x < sprite.width - 4 else { continue }
+                        if [UInt8(ascii: "M"), UInt8(ascii: "T")].contains(sprite.code(x: x, y: y)) {
+                            XCTAssertEqual(sprite.code(x: mirror, y: y), sprite.code(x: x, y: y), "\(kind) \(mood) \(x),\(y)")
+                        }
+                    }
+                }
+            }
+        }
     }
 }

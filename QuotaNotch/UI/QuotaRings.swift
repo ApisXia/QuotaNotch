@@ -135,6 +135,8 @@ struct QuotaNotchView: View {
                     Text("麻薯 · 猫").tag(QuotaPetKind.mochi.rawValue)
                     Text("比特 · 机器人").tag(QuotaPetKind.bit.rawValue)
                     Text("果冻 · 史莱姆").tag(QuotaPetKind.jelly.rawValue)
+                    Text("飘飘 · 小幽灵").tag(QuotaPetKind.ghost.rawValue)
+                    Text("苗苗 · 豆芽").tag(QuotaPetKind.sprout.rawValue)
                 }
                 Picker("大小", selection: $sizeRaw) {
                     Text("小").tag(NotchUISize.small.rawValue)

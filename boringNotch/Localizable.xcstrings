@@ -24311,6 +24311,40 @@
           }
         }
       }
+    },
+    "飘飘 · 小幽灵" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Wisp · Ghost"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "飘飘 · 小幽灵"
+          }
+        }
+      }
+    },
+    "苗苗 · 豆芽" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sprout · Seedling"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "苗苗 · 豆芽"
+          }
+        }
+      }
     }
   },
   "version" : "1.0"
