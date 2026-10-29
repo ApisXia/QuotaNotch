@@ -30,10 +30,9 @@ body:
   - type: dropdown
     id: version
     attributes:
-      label: Boring Notch Version
+      label: QuotaNotch Version
       description: >-
-        What version of our software are you running? (Go to ✦ in the menu bar >
-        Settings > About)
+        What version are you running? (Menu bar icon > Settings > About)
       options:
         - Select a version
         - v1.0.0
@@ -56,12 +55,11 @@ body:
       label: Music Source? (If relevant)
       description: >-
         If this issue is related to music, what music source did you select in
-        Boring Notch settings?
+        QuotaNotch settings?
       options:
         - Now Playing
         - Apple Music
         - Spotify
-        - YouTube Music
     validations:
       required: false
   - type: input

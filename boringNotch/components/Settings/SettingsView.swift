@@ -3,7 +3,6 @@ import Defaults
 import EventKit
 import KeyboardShortcuts
 import LaunchAtLogin
-import Sparkle
 import SwiftUI
 
 struct SettingsView: View {
@@ -11,11 +10,6 @@ struct SettingsView: View {
     // Observe the actual preferences without destroying page state when a color changes.
     @Default(.useCustomAccentColor) private var useCustomAccentColor
     @Default(.customAccentColorData) private var customAccentColorData
-    let updaterController: SPUStandardUpdaterController?
-
-    init(updaterController: SPUStandardUpdaterController? = nil) {
-        self.updaterController = updaterController
-    }
 
     var body: some View {
         NavigationSplitView {
@@ -40,8 +34,7 @@ struct SettingsView: View {
                 case "Calendar": CalendarSettings()
                 case "Appearance": Appearance()
                 case "System": HUD()
-                case "About": About(updaterController: updaterController ?? SPUStandardUpdaterController(
-                    startingUpdater: false, updaterDelegate: nil, userDriverDelegate: nil))
+                case "About": About()
                 default: GeneralSettings()
                 }
             }
@@ -366,7 +359,6 @@ extension SettingsAccessState {
 }
 
 struct About: View {
-    let updaterController: SPUStandardUpdaterController
     var body: some View {
         Form {
             Section {

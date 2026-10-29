@@ -8,12 +8,10 @@
 import AppKit
 import SwiftUI
 import Defaults
-import Sparkle
 
 class SettingsWindowController: NSWindowController {
     static let shared = SettingsWindowController()
-    private var updaterController: SPUStandardUpdaterController?
-    
+
     private init() {
         let window = NSWindow(
             contentRect: NSRect(x: 0, y: 0, width: 700, height: 600),
@@ -31,12 +29,8 @@ class SettingsWindowController: NSWindowController {
         fatalError("init(coder:) has not been implemented")
     }
     
-    func setUpdaterController(_ controller: SPUStandardUpdaterController) {
-        self.updaterController = controller
-        // Recreate the content view with the proper updater controller
-        setupWindow()
-    }
-    
+>>>>
+
     private func setupWindow() {
         guard let window = window else { return }
         
@@ -60,7 +54,7 @@ class SettingsWindowController: NSWindowController {
         window.identifier = NSUserInterfaceItemIdentifier("BoringNotchSettingsWindow")
         
         // Create the SwiftUI content
-        let settingsView = SettingsView(updaterController: updaterController)
+        let settingsView = SettingsView()
             .environment(\.locale, QuotaLanguage.locale)
         let hostingView = NSHostingView(rootView: settingsView)
         window.contentView = hostingView
