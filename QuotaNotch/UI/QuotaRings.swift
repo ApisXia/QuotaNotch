@@ -295,8 +295,6 @@ struct QuotaPinnedWings: View {
                     .accessibilityHidden(true)
             }
             .clipped()
-            .padding(.top, QuotaPetArt.albumTop)
-            .frame(height: height, alignment: .top)
     }
 
     private func reading(for pin: QuotaPin) -> String {
