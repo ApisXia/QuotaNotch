@@ -6,6 +6,52 @@ extension QuotaProvider {
     var accent: Color { brand.color }
 }
 
+/// Quota windows two to a page; with more than two, the pages scroll sideways (trackpad swipe)
+/// and dots below show where you are and jump between pages.
+struct QuotaWindowPager<Card: View>: View {
+    let windows: [QuotaWindow]
+    @ViewBuilder let card: (QuotaWindow) -> Card
+    @State private var page: Int? = 0
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    var body: some View {
+        let pages = QuotaWindowPages.count(windows: windows.count)
+        if pages <= 1 {
+            row(0, padded: false)
+        } else {
+            VStack(spacing: 5) {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    LazyHStack(spacing: 0) {
+                        ForEach(0..<pages, id: \.self) { index in
+                            row(index, padded: true).containerRelativeFrame(.horizontal).id(index)
+                        }
+                    }
+                    .scrollTargetLayout()
+                }
+                .scrollTargetBehavior(.paging)
+                .scrollPosition(id: $page)
+                HStack(spacing: 5) {
+                    ForEach(0..<pages, id: \.self) { index in
+                        Circle().fill(.white.opacity(index == (page ?? 0) ? 0.85 : 0.25)).frame(width: 5, height: 5)
+                            .contentShape(Rectangle().inset(by: -4))
+                            .onTapGesture { withAnimation(reduceMotion ? nil : .smooth(duration: 0.25)) { page = index } }
+                            .accessibilityLabel(QuotaText.format("第 %@ 页", "\(index + 1)"))
+                    }
+                }
+            }
+        }
+    }
+
+    /// One page; the last page keeps a lone card at half width so cards never change size.
+    private func row(_ index: Int, padded: Bool) -> some View {
+        let range = QuotaWindowPages.range(windows: windows.count, page: index)
+        return HStack(spacing: 8) {
+            ForEach(windows[range]) { window in card(window).frame(maxWidth: .infinity) }
+            if padded && range.count == 1 { Color.clear.frame(maxWidth: .infinity) }
+        }
+    }
+}
+
 @MainActor
 struct QuotaNotchView: View {
     @ObservedObject private var store = QuotaNotchStore.shared
@@ -45,9 +91,10 @@ struct QuotaNotchView: View {
         .task { store.start(); claude.check() }
     }
 
-    /// Both windows of one service, or one card that says what is missing and how to fix it.
+    /// The service's windows, two at a time (swipe sideways for more, such as a model's own
+    /// week), or one card that says what is missing and how to fix it.
     @ViewBuilder private func providerRow(_ provider: QuotaProvider) -> some View {
-        let windows = Array((store.results[provider]?.snapshot?.windows ?? []).prefix(2))
+        let windows = store.results[provider]?.snapshot?.windows ?? []
         if !store.providerEnabled(provider) {
             VStack(spacing: 6) {
                 Text("此服务已暂停").font(.caption).foregroundStyle(.secondary)
@@ -55,9 +102,8 @@ struct QuotaNotchView: View {
                     .buttonStyle(.bordered).controlSize(.small)
             }
         } else if !windows.isEmpty {
-            HStack(spacing: 8) {
-                ForEach(windows) { window in windowCard(window, provider: provider).frame(maxWidth: .infinity) }
-            }
+            QuotaWindowPager(windows: windows) { window in windowCard(window, provider: provider) }
+                .id(provider)
         } else {
             HStack(spacing: 8) {
                 QuotaBrandMark(brand: provider.brand).frame(width: 14, height: 14)

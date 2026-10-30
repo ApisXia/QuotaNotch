@@ -21932,6 +21932,23 @@
         }
       }
     },
+    "第 %@ 页" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Page %@"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "第 %@ 页"
+          }
+        }
+      }
+    },
     "等待额度" : {
       "extractionState" : "manual",
       "localizations" : {

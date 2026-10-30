@@ -28,7 +28,13 @@ struct QuotaWindow: Sendable, Equatable, Identifiable {
         let known: [String: TimeInterval] = ["five_hour": 5 * 3600, "seven_day": 7 * 86400]
         return duration ?? known[id]
     }
-    var localizedTitle: String {
+    var localizedTitle: String { Self.localized(title) }
+
+    /// "7 天" → "7 days"; a model's week ("Fable · 7 天") keeps the model name.
+    private static func localized(_ title: String) -> String {
+        if let dot = title.range(of: " · ") {
+            return String(title[..<dot.lowerBound]) + " · " + localized(String(title[dot.upperBound...]))
+        }
         for suffix in [" 小时", " 天"] where title.hasSuffix(suffix) {
             let prefix = String(title.dropLast(suffix.count))
             if Double(prefix) != nil { return QuotaText.format("%@" + suffix, prefix) }

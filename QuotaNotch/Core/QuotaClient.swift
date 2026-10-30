@@ -181,6 +181,10 @@ actor QuotaClient {
         // An earlier /usage reading stays until the status line reports something newer.
         if let previousFallback, previousFallback.fetchedAt > (reported?.fetchedAt ?? .distantPast) {
             reported = previousFallback
+        } else if let previousFallback, let newer = reported {
+            // The status line has no per-model weeks; keep those /usage reported until it runs again.
+            let extra = previousFallback.windows.filter { window in !newer.windows.contains { $0.id == window.id } }
+            if !extra.isEmpty { reported = QuotaSnapshot(windows: newer.windows + extra, fetchedAt: newer.fetchedAt) }
         }
         // Ask Claude Code's /usage screen when the status line is silent or behind.
         if let probe, probe.needed(reported) {
