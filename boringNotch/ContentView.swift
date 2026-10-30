@@ -17,6 +17,7 @@ import SwiftUIIntrospect
 struct ContentView: View {
     @EnvironmentObject var vm: BoringViewModel
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.displayScale) private var displayScale
 
     @ObservedObject var coordinator = BoringViewCoordinator.shared
     @ObservedObject var musicManager = MusicManager.shared
@@ -364,7 +365,13 @@ struct ContentView: View {
     }
 
     func MusicLiveActivity() -> some View {
-        HStack(spacing: QuotaCompactMetrics.spacing) {
+        // Each side reaches as far as the quota pet's would, so the notch keeps one width
+        // whether music, the pet, or both are showing.
+        let notchSize = NotchUISize.stored(notchSizeRaw, legacyComfortable: false)
+        let wing = QuotaPetArt.wingWidth(size: notchSize, notchHeight: vm.effectiveClosedNotchHeight, displayScale: displayScale)
+        // The same album size as beside the pet.
+        let album = QuotaCompactMetrics.iconSize(height: vm.effectiveClosedNotchHeight, size: notchSize)
+        return HStack(spacing: QuotaCompactMetrics.spacing) {
             Image(nsImage: musicManager.albumArt)
                 .resizable()
                 .clipped()
@@ -373,12 +380,9 @@ struct ContentView: View {
                         cornerRadius: MusicPlayerImageSizes.cornerRadiusInset.closed)
                 )
                 .matchedGeometryEffect(id: "albumArt", in: albumArtNamespace)
-                .frame(
-                    width: max(0, vm.effectiveClosedNotchHeight - 12),
-                    height: max(0, vm.effectiveClosedNotchHeight - 12)
-                )
-
+                .frame(width: album, height: album)
                 .auditNotchFrame("album")
+                .frame(width: wing, alignment: .leading)
             Rectangle()
                 .fill(.black)
                 .overlay(
@@ -451,6 +455,7 @@ struct ContentView: View {
                 ),
                 alignment: .center
             )
+            .frame(width: wing, alignment: .trailing)
         }
         .frame(
             height: vm.effectiveClosedNotchHeight,

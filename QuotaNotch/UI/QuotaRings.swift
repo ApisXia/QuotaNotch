@@ -197,12 +197,10 @@ struct QuotaPinnedWings: View {
         QuotaPetArt.pixelScale(size: size, notchHeight: height, displayScale: displayScale)
     }
     /// Width of the pet at its pixel scale.
-    private var quotaWidth: CGFloat { petScale > 1 ? 20 * petScale : iconSize }
-    /// The percentage cell also carries the quota bar and up to three task dots.
-    private var percentWidth: CGFloat { max(iconSize, (size.percentFont * 3).rounded()) }
-    /// Both wings take the same slot so the camera stays centered, and the slot doesn't
-    /// change when music starts or stops, so the notch keeps its width.
-    private var slot: CGFloat { max(quotaWidth, percentWidth) }
+    private var quotaWidth: CGFloat { QuotaPetArt.wingWidth(size: size, notchHeight: height, displayScale: displayScale) }
+    /// Both wings are as wide as the pet, with or without music (the same as music alone), so
+    /// the notch never changes width and the camera stays centered.
+    private var slot: CGFloat { quotaWidth }
     /// Tasks are shown only while task tracking is on and something is visible.
     private var taskStates: [AgentRunState] { activity.showAccessory ? activity.attention.states : [] }
     private var petTasks: QuotaPetTasks { QuotaPetTasks(activity.attention, enabled: activity.enabled) }
@@ -221,7 +219,7 @@ struct QuotaPinnedWings: View {
                         if showsMusic { album }
                         else { petView(pin, provider: provider) }
                     }
-                    .frame(width: slot, height: height, alignment: showsMusic ? .trailing : .center)
+                    .frame(width: slot, height: height, alignment: showsMusic ? .leading : .center)
                     .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)

@@ -233,8 +233,9 @@ struct SettingsPreviewRunner {
             verifyPresentation(abs(camera.midX - host.bounds.midX) <= 1, "Physical notch shifted in \(label): \(camera)")
             if let album = renderedFrames["album"] {
                 verifyPresentation(abs(album.width - widget) <= 1, "Album stretched in \(label): \(album)")
-                verifyPresentation(abs(album.maxX + QuotaCompactMetrics.spacing - camera.minX) <= 1,
-                    "Album moved away from physical notch in \(label): \(album), camera \(camera)")
+                // The album sits at the outer edge of a wing as wide as the pet.
+                verifyPresentation(abs(album.minX - (camera.minX - QuotaCompactMetrics.spacing - (quota ?? widget))) <= 1,
+                    "Album moved off the wing's outer edge in \(label): \(album), camera \(camera)")
             }
             for name in ["quota", "task"] {
                 if let mode = renderedModules[name], let frame = renderedFrames[name] {
@@ -363,7 +364,7 @@ struct SettingsPreviewRunner {
             return expected
         }
         func verifyPet(_ label: String, height: CGFloat, size: NotchUISize, quota: Bool) {
-            let widget = QuotaCompactMetrics.iconSize(height: height, size: quota ? size : .standard)
+            let widget = QuotaCompactMetrics.iconSize(height: height, size: size)
             verifyGeometry(label, widget: widget, quota: quotaWidth(height: height, size: size, shared: false))
             guard let camera = renderedFrames["camera"] else { return }
             for name in ["summary", "tasks"] {
@@ -415,6 +416,8 @@ struct SettingsPreviewRunner {
                     verifyPresentation(abs(widths[plain]! - widths[busy]!) <= 1,
                         "Tasks changed the notch width: \(plain) vs \(busy) at \(headerHeight), \(size.rawValue)")
                 }
+                verifyPresentation(abs(widths["music"]! - widths["music-only"]!) <= 1,
+                    "Music alone and music with the pet differ in width at \(headerHeight), \(size.rawValue): \(widths["music"]!) vs \(widths["music-only"]!)")
                 verifyPresentation(abs(widths["quota"]! - widths["music"]!) <= 1,
                     "Music changed the notch width at \(headerHeight), \(size.rawValue): \(widths["quota"]!) vs \(widths["music"]!)")
             }
