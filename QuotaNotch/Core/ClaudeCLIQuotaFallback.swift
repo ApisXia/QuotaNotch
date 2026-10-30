@@ -87,6 +87,7 @@ struct ClaudeCLIQuotaFallback: ClaudeQuotaFallback {
         var candidate: QuotaSnapshot?
         var settledAt = ProcessInfo.processInfo.systemUptime
         var trustKeysLeft = 4
+        var lastTrustKey = -Double.infinity
         func send(_ keys: String) { _ = keys.withCString { write(master, $0, strlen($0)) } }
         while ProcessInfo.processInfo.systemUptime < deadline {
             if cancellation.isCancelled { throw CancellationError() }
@@ -103,8 +104,10 @@ struct ClaudeCLIQuotaFallback: ClaudeQuotaFallback {
                 cancellation.screen = screen
                 if let failure = ClaudeUsageScreen.failure(in: screen, now: now) { throw failure }
                 // The trust question for QuotaNotch's own empty probe folder is answered "yes".
-                if trustKeysLeft > 0, let keys = ClaudeUsageScreen.workspaceTrustKeys(onScreen: screen) {
-                    send(keys); trustKeysLeft -= 1
+                // One key at a time, after the dialog has had time to redraw.
+                if trustKeysLeft > 0, ProcessInfo.processInfo.systemUptime - lastTrustKey >= 1.5,
+                   let keys = ClaudeUsageScreen.workspaceTrustKeys(onScreen: screen) {
+                    send(keys); trustKeysLeft -= 1; lastTrustKey = ProcessInfo.processInfo.systemUptime
                 }
                 let parsed = try? ClaudeUsageScreen.parse(screen, now: now)
                 if parsed != candidate { candidate = parsed; settledAt = ProcessInfo.processInfo.systemUptime }
@@ -284,14 +287,27 @@ enum ClaudeUsageScreen {
             var parts = calendar.dateComponents([.month, .day, .hour, .minute], from: date)
             parts.year = today.year
             guard let thisYear = calendar.date(from: parts) else { return nil }
-            return thisYear >= now.addingTimeInterval(-60) ? thisYear : calendar.date(byAdding: .year, value: 1, to: thisYear)
+            if thisYear >= now.addingTimeInterval(-60) { return thisYear }
+            return calendar.date(byAdding: .year, value: 1, to: thisYear)
         }
         if let time = parse(["h:mma", "h:mm a", "HH:mm", "H:mm", "ha", "h a"]) {
             var parts = calendar.dateComponents([.hour, .minute], from: time)
             parts.year = today.year; parts.month = today.month; parts.day = today.day
             guard let sameDay = calendar.date(from: parts) else { return nil }
-            return sameDay >= now.addingTimeInterval(-60) ? sameDay : calendar.date(byAdding: .day, value: 1, to: sameDay)
+            if sameDay >= now.addingTimeInterval(-60) { return sameDay }
+            return calendar.date(byAdding: .day, value: 1, to: sameDay)
         }
+        return nil
+    }
+
+    static func failure(in screen: String, now: Date) -> QuotaFailure? {
+        let lower = screen.lowercased()
+        if lower.contains("rate limited") || lower.contains("rate_limit_error") || lower.contains("rate limit exceeded") ||
+            lower.contains("too many requests") || lower.range(of: #"(?:error|http|status)[^\n]*\b429\b"#, options: .regularExpression) != nil {
+            return .rateLimited(now.addingTimeInterval(900))
+        }
+        if lower.contains("not logged in") || lower.contains("please log in") || lower.contains("token_expired") ||
+            lower.contains("token has expired") || lower.contains("authentication_error") { return .expired }
         return nil
     }
 
