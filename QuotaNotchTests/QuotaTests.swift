@@ -240,6 +240,51 @@ final class QuotaClientTests: XCTestCase {
         XCTAssertEqual(manualCalls, 1)
     }
 
+    /// Claude used outside a terminal leaves the status line silent; /usage then follows the
+    /// activity, at most every three minutes, and never while Claude is not connected.
+    func testScheduledClaudeRefreshAsksUsageAfterNewerActivity() async throws {
+        let fallback = FixtureFallback()
+        let clock = TestClock()
+        let reading = try QuotaParser.parse(fixture("claude"), provider: .claude, now: clock.now())
+        let client = QuotaClient(credentials: TestCredentials(), transport: TestTransport([]), clock: { clock.now() },
+                                 claudeUsage: FixtureUsage(.success(reading)), claudeFallback: fallback,
+                                 claudeConnected: { true })
+        // Nothing newer than the reading: no process.
+        _ = await client.refresh(.claude, claudeActivity: reading.fetchedAt.addingTimeInterval(-60))
+        var calls = await fallback.calls
+        XCTAssertEqual(calls, 0)
+        clock.advance(60)
+        let followed = await client.refresh(.claude, claudeActivity: clock.now())
+        calls = await fallback.calls
+        XCTAssertEqual(calls, 1)
+        XCTAssertEqual(followed.snapshot?.windows.first?.remainingPercent, 75)
+        // More activity soon after: wait for the spacing.
+        clock.advance(60)
+        _ = await client.refresh(.claude, claudeActivity: clock.now())
+        calls = await fallback.calls
+        XCTAssertEqual(calls, 1)
+        clock.advance(QuotaClient.probeSpacing)
+        _ = await client.refresh(.claude, claudeActivity: clock.now())
+        calls = await fallback.calls
+        XCTAssertEqual(calls, 2)
+    }
+
+    func testIdleClaudeRefreshesEveryHalfHourOnlyWhenConnected() async throws {
+        let clock = TestClock()
+        let reading = try QuotaParser.parse(fixture("claude"), provider: .claude, now: clock.now())
+        for connected in [true, false] {
+            let fallback = FixtureFallback()
+            let client = QuotaClient(credentials: TestCredentials(), transport: TestTransport([]), clock: { clock.now() },
+                                     claudeUsage: FixtureUsage(.success(reading)), claudeFallback: fallback,
+                                     claudeConnected: { connected })
+            _ = await client.refresh(.claude)
+            clock.advance(QuotaClient.idleProbeAge + 1)
+            _ = await client.refresh(.claude)
+            let calls = await fallback.calls
+            XCTAssertEqual(calls, connected ? 1 : 0)
+        }
+    }
+
     func testManualRefreshKeepsRecentStatusLineReading() async throws {
         let fallback = FixtureFallback()
         let reading = try QuotaParser.parse(fixture("claude"), provider: .claude, now: fixtureNow)

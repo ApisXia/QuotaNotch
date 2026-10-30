@@ -38,35 +38,63 @@ struct QuotaURLTransport: QuotaTransport {
     }
 }
 
+/// When and how to ask Claude Code's /usage screen for a reading.
+struct ClaudeProbe: Sendable {
+    let fallback: any ClaudeQuotaFallback
+    /// Given the newest reading so far (status line or an earlier /usage), whether to ask.
+    let needed: @Sendable (QuotaSnapshot?) -> Bool
+}
+
+enum ClaudeProbeOutcome: Sendable {
+    case none, failed
+    case read(QuotaSnapshot)
+}
+
 actor QuotaClient {
     private let credentials: any QuotaCredentialSource
     private let transport: any QuotaTransport
     private let clock: @Sendable () -> Date
     private let claudeUsage: any ClaudeUsageSource
     private let claudeFallback: (any ClaudeQuotaFallback)?
+    private let claudeConnected: @Sendable () -> Bool
     private var results: [QuotaProvider: QuotaResult] = [:]
     private var failures: [QuotaProvider: Int] = [:]
     /// The last reading from Claude Code's /usage screen, kept until the status line has newer numbers.
     private var claudeFallbackReading: QuotaSnapshot?
-    private var inFlight: [QuotaProvider: Task<QuotaResult, Never>] = [:]
+    /// When /usage last ran, and whether it failed (then it waits longer before trying again).
+    private var lastProbe = Date.distantPast
+    private var lastProbeFailed = false
+    private var inFlight: [QuotaProvider: Task<(QuotaResult, ClaudeProbeOutcome), Never>] = [:]
+
+    /// The status line only reports while Claude Code runs in a terminal, so Claude used
+    /// elsewhere (the VS Code extension) or not at all leaves it silent. Then QuotaNotch asks
+    /// /usage itself: after Claude activity newer than the last reading, at most every
+    /// `probeSpacing`, and otherwise when the reading is older than `idleProbeAge`.
+    static let probeSpacing: TimeInterval = 180
+    static let idleProbeAge: TimeInterval = 1800
 
     init(credentials: any QuotaCredentialSource = LocalQuotaCredentials(),
          transport: any QuotaTransport = QuotaURLTransport(),
          clock: @escaping @Sendable () -> Date = { Date() },
          claudeUsage: any ClaudeUsageSource = ClaudeStatusLineUsage(directory: ClaudeStatusLineUsage.defaultDirectory),
-         claudeFallback: (any ClaudeQuotaFallback)? = nil) {
+         claudeFallback: (any ClaudeQuotaFallback)? = nil,
+         claudeConnected: @escaping @Sendable () -> Bool = {
+             FileManager.default.fileExists(atPath: ClaudeStatusLineUsage.defaultDirectory.path)
+         }) {
         self.credentials = credentials
         self.transport = transport
         self.clock = clock
         self.claudeUsage = claudeUsage
         self.claudeFallback = claudeFallback
+        self.claudeConnected = claudeConnected
     }
 
     /// All callers, including manual refresh and multiple displays, share the same cooldown.
-    /// `manual` lets a user-initiated Claude refresh run the slow CLI fallback when the status
-    /// line has nothing recent; scheduled refreshes never start a process.
-    func refresh(_ provider: QuotaProvider, manual: Bool = false) async -> QuotaResult {
-        if let task = inFlight[provider] { return await task.value }
+    /// `manual` lets a user-initiated Claude refresh run /usage when the status line has nothing
+    /// in the last 10 minutes. Scheduled refreshes run it only while Claude is connected, as
+    /// described at `probeSpacing`; `claudeActivity` is when a Claude session last changed.
+    func refresh(_ provider: QuotaProvider, manual: Bool = false, claudeActivity: Date? = nil) async -> QuotaResult {
+        if let task = inFlight[provider] { return await task.value.0 }
         let now = clock()
         if let result = results[provider], result.nextAttempt > now,
            !Self.mayBypassCooldown(provider: provider, manual: manual, result: result, now: now) { return result }
@@ -75,37 +103,58 @@ actor QuotaClient {
         let credentials = self.credentials
         let transport = self.transport
         let claudeUsage = self.claudeUsage
-        let claudeFallback = manual ? self.claudeFallback : nil
+        var probe: ClaudeProbe?
+        if provider == .claude, let fallback = claudeFallback {
+            if manual {
+                probe = ClaudeProbe(fallback: fallback) { reading in
+                    reading.map { now.timeIntervalSince($0.fetchedAt) > 600 } ?? true
+                }
+            } else if claudeConnected(),
+                      now.timeIntervalSince(lastProbe) >= (lastProbeFailed ? Self.idleProbeAge : Self.probeSpacing) {
+                let idle = Self.idleProbeAge
+                probe = ClaudeProbe(fallback: fallback) { reading in
+                    guard let reading else { return true }
+                    if let claudeActivity, claudeActivity > reading.fetchedAt { return true }
+                    return now.timeIntervalSince(reading.fetchedAt) > idle
+                }
+            }
+        }
         let previousFallback = claudeFallbackReading
         let clock = self.clock
-        let task = Task<QuotaResult, Never> {
+        let task = Task<(QuotaResult, ClaudeProbeOutcome), Never> {
+            var outcome = ClaudeProbeOutcome.none
             do {
                 try Task.checkCancellation()
                 let snapshot: QuotaSnapshot
                 if provider == .claude {
-                    snapshot = try await Self.claudeSnapshot(usage: claudeUsage, fallback: claudeFallback,
-                                                             previousFallback: previousFallback, now: now)
+                    let reading = await Self.claudeSnapshot(usage: claudeUsage, probe: probe,
+                                                            previousFallback: previousFallback, now: now)
+                    outcome = reading.probe
+                    snapshot = try reading.result.get()
                 } else {
                     snapshot = try await Self.codexSnapshot(credentials: credentials, transport: transport, now: now)
                 }
-                return QuotaResult(snapshot: snapshot, failure: nil,
-                                   nextAttempt: clock().addingTimeInterval(provider.interval))
+                return (QuotaResult(snapshot: snapshot, failure: nil,
+                                    nextAttempt: clock().addingTimeInterval(provider.interval)), outcome)
             } catch {
                 // Never surface server bodies, headers, URLs with credentials, or raw errors.
                 let failure = error as? QuotaFailure ?? .network
-                return QuotaResult(snapshot: failure.clearsSnapshot ? nil : old, failure: failure,
-                                   nextAttempt: Self.nextAttempt(after: failure, provider: provider,
-                                                                 attempt: attempt, now: clock()))
+                return (QuotaResult(snapshot: failure.clearsSnapshot ? nil : old, failure: failure,
+                                    nextAttempt: Self.nextAttempt(after: failure, provider: provider,
+                                                                  attempt: attempt, now: clock())), outcome)
             }
         }
         inFlight[provider] = task
-        let result = await task.value
+        let (result, outcome) = await task.value
         inFlight[provider] = nil
         results[provider] = result
         failures[provider] = result.failure == nil ? 0 : attempt
-        if provider == .claude, let snapshot = result.snapshot,
-           snapshot.fetchedAt > (claudeFallbackReading?.fetchedAt ?? .distantPast), manual {
-            claudeFallbackReading = snapshot
+        switch outcome {
+        case .none: break
+        case .failed: lastProbe = now; lastProbeFailed = true
+        case .read(let snapshot):
+            lastProbe = now; lastProbeFailed = false
+            if snapshot.fetchedAt > (claudeFallbackReading?.fetchedAt ?? .distantPast) { claudeFallbackReading = snapshot }
         }
         return result
     }
@@ -119,23 +168,31 @@ actor QuotaClient {
         return now.timeIntervalSince(snapshot.fetchedAt) > 600
     }
 
-    private static func claudeSnapshot(usage: any ClaudeUsageSource, fallback: (any ClaudeQuotaFallback)?,
-                                       previousFallback: QuotaSnapshot?, now: Date) async throws -> QuotaSnapshot {
+    private static func claudeSnapshot(usage: any ClaudeUsageSource, probe: ClaudeProbe?,
+                                       previousFallback: QuotaSnapshot?, now: Date)
+        async -> (result: Result<QuotaSnapshot, QuotaFailure>, probe: ClaudeProbeOutcome) {
         var reported: QuotaSnapshot?
         do { reported = try await usage.latest(now: now) }
         catch QuotaFailure.notConnected { reported = nil }
+        catch { return (.failure(error as? QuotaFailure ?? .network), .none) }
         // An earlier /usage reading stays until the status line reports something newer.
         if let previousFallback, previousFallback.fetchedAt > (reported?.fetchedAt ?? .distantPast) {
             reported = previousFallback
         }
-        // A manual refresh may ask Claude Code's /usage screen when the status line is silent or old.
-        if let fallback, reported.map({ now.timeIntervalSince($0.fetchedAt) > 600 }) ?? true {
-            do { return try await fallback.fetch(now: now) }
-            catch QuotaFailure.rateLimited(let date) { throw QuotaFailure.rateLimited(date) }
-            catch {}
+        // Ask Claude Code's /usage screen when the status line is silent or behind.
+        if let probe, probe.needed(reported) {
+            do {
+                let reading = try await probe.fallback.fetch(now: now)
+                return (.success(reading), .read(reading))
+            } catch QuotaFailure.rateLimited(let date) {
+                return (.failure(.rateLimited(date)), .failed)
+            } catch {
+                guard let reported else { return (.failure(.notConnected), .failed) }
+                return (.success(reported), .failed)
+            }
         }
-        guard let reported else { throw QuotaFailure.notConnected }
-        return reported
+        guard let reported else { return (.failure(.notConnected), .none) }
+        return (.success(reported), .none)
     }
 
     private static func codexSnapshot(credentials: any QuotaCredentialSource, transport: any QuotaTransport,

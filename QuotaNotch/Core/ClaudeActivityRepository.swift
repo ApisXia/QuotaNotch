@@ -27,6 +27,8 @@ actor ClaudeActivityRepository {
             if let walk = fm.enumerator(at: root, includingPropertiesForKeys: [.contentModificationDateKey], options: [.skipsHiddenFiles]) {
                 for case let url as URL in walk {
                     if url.lastPathComponent == "subagents" { walk.skipDescendants(); continue }
+                    // QuotaNotch's own /usage probe is not a task.
+                    if url.lastPathComponent.hasSuffix("QuotaNotch-ClaudeUsage") { walk.skipDescendants(); continue }
                     guard url.pathExtension == "jsonl", let changed = try? url.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate,
                           now.timeIntervalSince(changed) < 7 * 86400 else { continue }
                     entries.append(url)

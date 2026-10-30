@@ -7,6 +7,7 @@
 - **展开后宠物在左边：** 任务页和额度页左边是一只放大的宠物和一行状态，例如「2 个在等你」「剩 64%」。有任务在等你时，点宠物直接打开那个任务；没有任务时它会时不时打个盹。任务列表每一行前面显示 Claude / Codex 图标，任务圆点的颜色和列表一致。
 - **应用内更新：** 设置的「关于」里可以检查更新，也可以选择自动检查、自动下载并安装。每个更新包都会先校验签名再安装。
 - **更清楚的提示效果：** 任务运行时的光圈和像素波纹更明显，波纹扩散得更远；宠物按 Claude / Codex 着色时，光圈和波纹也换成对应的颜色。
+- **Claude 额度自己跟上：** 以前只有终端里的 Claude Code 在跑时额度才会更新，在 VS Code 里用或者一阵子没用，数字就停住了。现在只要 Claude 有新动静（终端或 VS Code），QuotaNotch 会在后台查一次 Claude Code 的 /usage（不发模型请求、不耗额度，也不碰 Claude 的钥匙串），最多每 3 分钟一次；完全没在用时每 30 分钟查一次。
 - **刘海更稳：** 刘海左右伸出的宽度只跟大小设置有关，开始或停止播放音乐时不再变宽变窄；封面和宠物一样大、在同一条中线上。小尺寸下百分比不再被截断。
 - **展开动画：** 打开时刘海上的内容先向内收起，面板再展开；关闭时反过来。
 
@@ -23,6 +24,7 @@ Two new pets join, and the original three are redrawn. The opened notch now has 
 - **The pet in the opened notch:** Tasks and Quota show a larger pet on the left with one line of status, such as "2 need you" or "64% left". Click the pet to open the task that needs you; with nothing to report it dozes off now and then. Each task row starts with its Claude or Codex icon, and the task dots use the task list's colors.
 - **In-app updates:** Check for updates in Settings › About, or let QuotaNotch check, download and install them automatically. Every update's signature is verified before it is installed.
 - **Clearer effects:** The glow and pixel ripples around running tasks are easier to see, and the ripples travel farther. When pets are tinted by Claude / Codex, the glow and ripples take that color too.
+- **Claude quota keeps up on its own:** Quota used to update only while Claude Code ran in a terminal, so it froze when you used Claude in VS Code or paused for a while. Now, whenever a Claude session changes (terminal or VS Code), QuotaNotch checks Claude Code's /usage in the background, at most every 3 minutes, and every 30 minutes when Claude is idle. This sends no prompt, uses no quota and never touches Claude's Keychain item.
 - **A steadier notch:** How far the notch reaches to each side depends only on the size setting; it no longer widens or narrows when music starts or stops. The album cover is the same size as the pet and lines up with it. The percentage no longer gets cut off at the small size.
 - **Opening and closing:** When the notch opens, its contents fold in toward the camera before the panel appears, and the reverse when it closes.
 

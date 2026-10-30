@@ -269,9 +269,13 @@ final class QuotaNotchStore: ObservableObject {
         inProgress = true
         if manual { refreshing = true }
         defer { inProgress = false; if refreshing { refreshing = false } }
+        // When a Claude session last changed (terminal or VS Code), so the quota follows it.
+        let claudeActivity = AgentActivityStore.shared.sessions.filter { $0.provider == .claude }.map(\.updatedAt).max()
         await withTaskGroup(of: (QuotaProvider, QuotaResult).self) { group in
             for provider in providers {
-                group.addTask { [client] in (provider, await client.refresh(provider, manual: manual)) }
+                group.addTask { [client] in
+                    (provider, await client.refresh(provider, manual: manual, claudeActivity: claudeActivity))
+                }
             }
             for await (provider, result) in group {
                 guard enabled, generation == requestGeneration, !Task.isCancelled, providerEnabled(provider) else { continue }
