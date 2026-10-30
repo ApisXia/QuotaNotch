@@ -22,6 +22,8 @@ struct DynamicNotchApp: App {
 
     init() {
         _ = QuotaLanguage.atLaunch
+        // Starts Sparkle's scheduled checks.
+        _ = QuotaUpdater.shared
     }
 
     var body: some Scene {
@@ -34,7 +36,7 @@ struct DynamicNotchApp: App {
                 }
             }
             .keyboardShortcut(KeyEquivalent(","), modifiers: .command)
-            Link("查看更新", destination: URL(string: "https://github.com/ApisXia/QuotaNotch/releases")!)
+            CheckForUpdatesButton()
             Text("QuotaNotch · Claude / Codex")
             Divider()
             Button("Restart QuotaNotch") {

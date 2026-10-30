@@ -22,7 +22,9 @@ if gh release view v1.07 --json isDraft --jq .isDraft > existing-draft.txt 2>/de
 else
   gh release create v1.07 --target "$GITHUB_SHA" --title 'QuotaNotch 1.07' --notes-file ../docs/Release-1.07.md --draft
 fi
-# Public releases expose exactly three downloads: one DMG plus GitHub's automatic source ZIP and tar.gz.
+# Public releases expose one DMG (plus the appcast for in-app updates) and GitHub's automatic source archives.
 # Keep alternate packages, checksums and build metadata in Actions artifacts only.
 gh release upload v1.07 QuotaNotch-1.07.dmg --clobber
+# Installed copies read appcast.xml from the latest release; it must be there before this one is.
+if [[ -f appcast.xml ]]; then gh release upload v1.07 appcast.xml --clobber; fi
 gh release edit v1.07 --draft=false --latest

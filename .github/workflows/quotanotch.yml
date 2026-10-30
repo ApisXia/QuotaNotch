@@ -110,6 +110,12 @@ jobs:
       - name: Package app and corresponding source
         if: ${{ inputs.preview_only != true }}
         run: bash scripts/package-quotanotch.sh
+      - name: Sign the update and write the Sparkle appcast
+        # Manual branch builds sign too, so a missing or mismatched key shows up before a release.
+        if: ${{ inputs.preview_only != true && github.event_name != 'pull_request' }}
+        env:
+          SPARKLE_PRIVATE_KEY: ${{ secrets.SPARKLE_PRIVATE_KEY }}
+        run: bash scripts/write-appcast.sh
       - name: Upload installable app, source and checksums
         if: ${{ inputs.preview_only != true }}
         uses: actions/upload-artifact@v4
@@ -190,4 +196,4 @@ jobs:
           gh release create "$tag" --draft --target "$GITHUB_SHA" \
             --title "Test build · $GITHUB_REF_NAME · ${GITHUB_SHA::7}" \
             --notes "Draft test build from $GITHUB_REF_NAME ($GITHUB_SHA). Not a release." \
-            release-files/*.dmg
+            release-files/*.dmg release-files/appcast.xml

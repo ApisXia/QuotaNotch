@@ -376,11 +376,9 @@ struct About: View {
                     }
                 }.padding(.vertical, 8)
             }
-            Section("更新与支持") {
-                Link("查看更新", destination: URL(string: "https://github.com/ApisXia/QuotaNotch/releases")!)
+            UpdateSettingsSection()
+            Section("支持") {
                 Link("GitHub", destination: URL(string: "https://github.com/ApisXia/QuotaNotch")!)
-                Text("当前通过 GitHub Releases 手动更新。")
-                    .font(.caption).foregroundStyle(.secondary)
             }
             Section("致谢与许可") {
                 Text("QuotaNotch by ApisXia")

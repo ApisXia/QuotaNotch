@@ -11,10 +11,11 @@ python3 scripts/sign-quotanotch.py "$app"
 codesign --verify --deep --strict --verbose=2 "$app"
 test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$app/Contents/Info.plist")" = 'com.apisxia.quotanotch'
 test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleDisplayName' "$app/Contents/Info.plist")" = 'QuotaNotch'
-if /usr/libexec/PlistBuddy -c 'Print :SUFeedURL' "$app/Contents/Info.plist" 2>/dev/null; then
-  echo 'Unexpected upstream update feed' >&2
-  exit 1
-fi
+# In-app updates come only from this project's releases, verified with its own key.
+test "$(/usr/libexec/PlistBuddy -c 'Print :SUFeedURL' "$app/Contents/Info.plist")" = \
+  'https://github.com/ApisXia/QuotaNotch/releases/latest/download/appcast.xml'
+test -n "$(/usr/libexec/PlistBuddy -c 'Print :SUPublicEDKey' "$app/Contents/Info.plist")"
+test -d "$app/Contents/Frameworks/Sparkle.framework"
 lipo "$app/Contents/MacOS/QuotaNotch" -verify_arch arm64 x86_64
 ditto -c -k --sequesterRsrc --keepParent "$app" "$dist/QuotaNotch.app.zip"
 ditto "$app" "$staging/QuotaNotch.app"
