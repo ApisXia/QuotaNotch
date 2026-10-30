@@ -255,6 +255,8 @@ struct ContentView: View {
                             }
                             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
                         }
+                        // Both pages fill the same height, so the column keeps its size.
+                        .frame(maxHeight: .infinity, alignment: .top)
                     }
                 }
                 .frame(width: openContentWidth, alignment: .leading)

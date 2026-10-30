@@ -43,7 +43,9 @@ struct NotchPetColumn: View {
     var body: some View {
         let lines = self.lines
         Button(action: openWaiting) {
-            VStack(spacing: 5) {
+            // The pet sits at a fixed spot from the top, so it doesn't move when the page or the
+            // text below it changes; two lines are always reserved for the detail.
+            VStack(spacing: 4) {
                 Group {
                     if resting {
                         TimelineView(.periodic(from: .now, by: 1)) { context in
@@ -55,16 +57,20 @@ struct NotchPetColumn: View {
                     }
                 }
                 .frame(width: 80, height: 64)
+                .padding(.top, 8)
                 Text(lines.status)
                     .font(.system(size: 11, weight: .semibold)).foregroundStyle(lines.color)
-                    .lineLimit(1).minimumScaleFactor(0.75)
+                    .lineLimit(1).minimumScaleFactor(0.7)
+                    .frame(maxWidth: .infinity)
                 Text(lines.detail)
                     .font(.system(size: 9)).foregroundStyle(.secondary)
-                    .lineLimit(1).minimumScaleFactor(0.75)
+                    .multilineTextAlignment(.center)
+                    .lineLimit(2).minimumScaleFactor(0.8)
+                    .frame(maxWidth: .infinity, minHeight: 24, maxHeight: 24, alignment: .top)
             }
-            .padding(.horizontal, 4)
+            .padding(.horizontal, 5)
             .frame(width: Self.width)
-            .frame(maxHeight: .infinity)
+            .frame(maxHeight: .infinity, alignment: .top)
             .background(.white.opacity(0.045))
             // The pet's glow and ripples stay inside the column.
             .clipShape(RoundedRectangle(cornerRadius: 10))
@@ -116,22 +122,23 @@ struct NotchPetColumn: View {
     private var lines: (status: String, detail: String, color: Color) {
         let t = AgentText.t
         let percent = window.map { QuotaText.percent($0.remainingPercent) }
-        let left = percent.map { t("剩 \($0)% 额度", "\($0)% quota left") } ?? t("额度未知", "Quota unknown")
+        let left = percent.map { t("额度剩 \($0)%", "\($0)% quota left") } ?? t("额度未知", "Quota unknown")
 
         if page == .aiUsage {
             guard let window, let percent else {
-                return (t("额度未知", "No quota yet"), t("连接后显示", "Connect to see it"), .white)
+                return (t("额度未知", "No quota"), t("连接后显示", "Connect to see"), .white)
             }
+            // Window on the first line, reset time on the second.
             let reset = window.resetsAt.map { t("\(Self.clock($0)) 重置", "resets \(Self.clock($0))") } ?? t("重置时间未知", "reset unknown")
-            return (t("剩 \(percent)%", "\(percent)% left"), window.localizedTitle + " · " + reset, .white)
+            return (t("剩 \(percent)%", "\(percent)% left"), window.localizedTitle + "\n" + reset, .white)
         }
 
         if let task = focused {
             switch task.state {
-            case .waiting: return (t("这个在等你", "Needs you"), t("详情在下面", "Details below"), AgentText.color(.waiting))
+            case .waiting: return (t("这个在等你", "Needs you"), t("详情在右边", "Details at right"), AgentText.color(.waiting))
             case .running: return (t("正在跑", "Working"), left, AgentText.color(.running))
             case .completed: return (t("已经完成", "Finished"), left, AgentText.color(.completed))
-            case .failed: return (t("出错了", "Error"), t("详情在下面", "Details below"), AgentText.color(.failed))
+            case .failed: return (t("出错了", "Error"), t("详情在右边", "Details at right"), AgentText.color(.failed))
             case .interrupted, .unknown: return (AgentText.state(task.state), left, .secondary)
             }
         }
@@ -139,16 +146,16 @@ struct NotchPetColumn: View {
         let sessions = activity.enabled ? activity.visible : []
         let (waiting, running, finished) = counts
         if waiting > 0 {
-            return (t("\(waiting) 个在等你", "\(waiting) needs you"), t("点我看是哪个", "Tap to see it"), AgentText.color(.waiting))
+            return (t("\(waiting) 个在等你", "\(waiting) need you"), t("点我查看", "Tap to open"), AgentText.color(.waiting))
         }
         if running > 0 {
             return (t("\(running) 个正在跑", "\(running) working"), left, AgentText.color(.running))
         }
         if finished > 0 {
-            return (t("全部完成", "All done"), t("刚完成 \(finished) 个", "\(finished) just finished"), AgentText.color(.completed))
+            return (t("全部完成", "All done"), t("刚完成 \(finished) 个", "\(finished) finished"), AgentText.color(.completed))
         }
-        if !activity.enabled { return (t("任务监控已暂停", "Tasks paused"), left, .secondary) }
-        return (sessions.isEmpty ? t("没有任务", "No tasks") : t("都处理完了", "All caught up"), left, .white)
+        if !activity.enabled { return (t("监控已暂停", "Paused"), left, .secondary) }
+        return (sessions.isEmpty ? t("没有任务", "No tasks") : t("都处理完了", "All clear"), left, .white)
     }
 
     /// A short reset time: "14:20" today or tomorrow, "Mon 09:00" further out.
