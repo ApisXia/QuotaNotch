@@ -55,7 +55,8 @@ struct ClaudeCLIQuotaFallback: ClaudeQuotaFallback {
             attributes: [.posixPermissions: 0o700])
         var master: Int32 = -1
         var slave: Int32 = -1
-        var size = winsize(ws_row: 80, ws_col: 180, ws_xpixel: 0, ws_ypixel: 0)
+        // As tall as CodexBar's probe: rows that scroll off the top are lost from the replayed screen.
+        var size = winsize(ws_row: UInt16(ClaudeUsageScreen.rows), ws_col: UInt16(ClaudeUsageScreen.columns), ws_xpixel: 0, ws_ypixel: 0)
         guard openpty(&master, &slave, nil, nil, &size) == 0 else { throw QuotaFailure.network }
         let input = FileHandle(fileDescriptor: slave, closeOnDealloc: false)
         defer { try? input.close(); close(master) }
@@ -85,23 +86,25 @@ struct ClaudeCLIQuotaFallback: ClaudeQuotaFallback {
         var bytes = [UInt8](repeating: 0, count: 8192)
         var candidate: QuotaSnapshot?
         var settledAt = ProcessInfo.processInfo.systemUptime
-        var acceptedTrust = false
+        var trustKeysLeft = 4
+        func send(_ keys: String) { _ = keys.withCString { write(master, $0, strlen($0)) } }
         while ProcessInfo.processInfo.systemUptime < deadline {
             if cancellation.isCancelled { throw CancellationError() }
             var event = pollfd(fd: master, events: Int16(POLLIN), revents: 0)
             _ = poll(&event, 1, 100)
             let count = read(master, &bytes, bytes.count)
             if count > 0 {
-                output.append(contentsOf: bytes.prefix(count))
+                let chunk = Data(bytes.prefix(count))
+                output.append(chunk)
                 guard output.count <= 512 * 1024 else { throw QuotaFailure.invalidResponse }
+                // Claude Code asks where the cursor is and waits for the answer.
+                if chunk.range(of: Data("\u{1b}[6n".utf8)) != nil { send("\u{1b}[1;1R") }
                 let screen = ClaudeUsageScreen.render(String(decoding: output, as: UTF8.self))
                 cancellation.screen = screen
-                let lower = screen.lowercased()
                 if let failure = ClaudeUsageScreen.failure(in: screen, now: now) { throw failure }
-                // Acknowledge only the dedicated empty probe directory's trust prompt, once.
-                if !acceptedTrust && ClaudeUsageScreen.asksForTrust(lower) {
-                    _ = "\r".withCString { write(master, $0, 1) }
-                    acceptedTrust = true
+                // The trust question for QuotaNotch's own empty probe folder is answered "yes".
+                if trustKeysLeft > 0, let keys = ClaudeUsageScreen.workspaceTrustKeys(onScreen: screen) {
+                    send(keys); trustKeysLeft -= 1
                 }
                 let parsed = try? ClaudeUsageScreen.parse(screen, now: now)
                 if parsed != candidate { candidate = parsed; settledAt = ProcessInfo.processInfo.systemUptime }
@@ -210,56 +213,85 @@ enum ClaudeUsageScreen {
         return ("seven_day_" + key, "\(name) · 7 天")
     }
 
-    /// The first-run question about trusting the probe's own empty folder, in its wordings.
-    static func asksForTrust(_ lower: String) -> Bool {
-        ["yes, i trust this folder", "trust this workspace", "do you trust the files", "trust the files in this folder",
-         "yes, proceed"].contains { lower.contains($0) }
+    // Adapted from CodexBar (https://github.com/steipete/CodexBar, MIT License,
+    // Copyright (c) 2026 Peter Steinberger; see THIRD_PARTY_LICENSES): the trust dialog keys,
+    // and below, the screen size and the reading of reset times.
+
+    static let rows = 200
+    static let columns = 160
+
+    /// The keys that answer the workspace trust dialog on screen, or nil when none is shown: an
+    /// arrow moves the `❯` marker to "Yes, I trust this folder" and Enter follows once it is
+    /// there, so Enter never confirms another option.
+    static func workspaceTrustKeys(onScreen screen: String) -> String? {
+        func needle(_ text: String) -> String { String(text.lowercased().filter { !$0.isWhitespace }) }
+        let normalized = needle(screen)
+        let lines = screen.components(separatedBy: "\n")
+        guard let optionRow = lines.firstIndex(where: { needle($0).contains("yes,itrustthisfolder") }) else {
+            if normalized.contains("doyoutrustthefilesinthisfolder?") { return "y\r" }
+            if normalized.contains("readytocodehere?") { return "\r" }
+            return nil
+        }
+        let isBlank = { (row: Int) in lines[row].allSatisfy(\.isWhitespace) }
+        var firstRow = optionRow
+        while firstRow > lines.startIndex, !isBlank(firstRow - 1) { firstRow -= 1 }
+        var lastRow = optionRow
+        while lastRow < lines.endIndex - 1, !isBlank(lastRow + 1) { lastRow += 1 }
+        guard let markerRow = (firstRow...lastRow).first(where: { lines[$0].contains("❯") }) else { return nil }
+        if markerRow == optionRow { return "\r" }
+        return markerRow < optionRow ? "\u{1b}[B" : "\u{1b}[A"
     }
 
-    /// "Resets 2:10am (Asia/Tokyo)" or "Resets Nov 6 at 11pm (Asia/Tokyo)": the next such
-    /// moment in that time zone (or the Mac's own when none is given).
+    /// "Resets 2:10am (Asia/Tokyo)", "Resets Nov 6 at 11pm (Asia/Tokyo)", "Resets Nov 6, 2026, 9am":
+    /// the next such moment in that time zone (or the Mac's own when none is given).
     static func absoluteReset(_ text: String, now: Date) -> Date? {
-        // Only the date and time are taken, so borders or a scroll bar drawn after them don't matter.
-        let moment = #"(?:[a-z]{3}\s+\d{1,2},?\s+(?:at\s+)?\d{1,2}(?::\d{2})?\s*[ap]m|\d{1,2}(?::\d{2})?\s*[ap]m|[a-z]{3}\s+\d{1,2})"#
-        guard let regex = try? NSRegularExpression(pattern: #"resets\s+(?:on\s+)?("# + moment + #")(?:\s*\(([^)\n]+)\))?"#,
-                                                   options: [.caseInsensitive]),
-              let match = regex.firstMatch(in: text, range: NSRange(text.startIndex..., in: text)),
-              let whenRange = Range(match.range(at: 1), in: text) else { return nil }
-        let when = text[whenRange].trimmingCharacters(in: .whitespaces)
-            .replacingOccurrences(of: #"(?<=\d)\s*[aA][mM]\b"#, with: "AM", options: .regularExpression)
-            .replacingOccurrences(of: #"(?<=\d)\s*[pP][mM]\b"#, with: "PM", options: .regularExpression)
-        let zone = Range(match.range(at: 2), in: text).flatMap { TimeZone(identifier: String(text[$0])) } ?? .current
-        var calendar = Calendar(identifier: .gregorian)
-        calendar.timeZone = zone
+        guard let line = text.components(separatedBy: .newlines).first(where: {
+            $0.range(of: #"(?i)\bresets?\b(?!\s+in\b)"#, options: .regularExpression) != nil
+        }), let start = line.range(of: #"(?i)\bresets?\b"#, options: .regularExpression) else { return nil }
+        // The capture sometimes ends with a stray ")" or a border; keep text up to the time zone.
+        var raw = String(line[start.lowerBound...]).trimmingCharacters(in: .whitespaces)
+        raw = raw.replacingOccurrences(of: #"(?i)^resets?:?\s*"#, with: "", options: .regularExpression)
+        var zone: TimeZone?
+        if let tz = raw.range(of: #"\(([^)]+)\)"#, options: .regularExpression) {
+            zone = TimeZone(identifier: String(raw[tz]).trimmingCharacters(in: CharacterSet(charactersIn: "() ")))
+            raw = String(raw[..<tz.lowerBound])
+        }
+        raw = raw.replacingOccurrences(of: " at ", with: " ", options: .caseInsensitive)
+            .replacingOccurrences(of: #"(?i)\b([A-Za-z]{3})(\d)"#, with: "$1 $2", options: .regularExpression)
+            .replacingOccurrences(of: #",(\d)"#, with: ", $1", options: .regularExpression)
+            .replacingOccurrences(of: #"(?<=\d)\.(\d{2})\b"#, with: ":$1", options: .regularExpression)
+            .replacingOccurrences(of: #"[^A-Za-z0-9:, ]"#, with: " ", options: .regularExpression)
+            .replacingOccurrences(of: #"\s+"#, with: " ", options: .regularExpression)
+            .trimmingCharacters(in: .whitespaces)
+        guard !raw.isEmpty else { return nil }
         let formatter = DateFormatter()
         formatter.locale = Locale(identifier: "en_US_POSIX")
-        formatter.timeZone = zone
-        for format in ["h:mma", "ha", "MMM d 'at' h:mma", "MMM d 'at' ha", "MMM d, h:mma", "MMM d, ha", "MMM d"] {
-            formatter.dateFormat = format
-            guard let parsed = formatter.date(from: when) else { continue }
-            let parts = calendar.dateComponents([.month, .day, .hour, .minute], from: parsed)
-            let today = calendar.dateComponents([.year, .month, .day], from: now)
-            var target = DateComponents(year: today.year, month: today.month, day: today.day,
-                                        hour: parts.hour, minute: parts.minute)
-            if format.hasPrefix("MMM") { target.month = parts.month; target.day = parts.day }
-            guard var date = calendar.date(from: target) else { return nil }
-            // A time alone is the next one; a date without a year is this year's, or next year's once past.
-            if date < now.addingTimeInterval(-60) {
-                date = calendar.date(byAdding: format.hasPrefix("MMM") ? .year : .day, value: 1, to: date) ?? date
-            }
-            return date
+        formatter.timeZone = zone ?? .current
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = formatter.timeZone
+        formatter.defaultDate = calendar.date(from: DateComponents(year: 2000, month: 1, day: 1))
+        func parse(_ formats: [String]) -> Date? {
+            for format in formats { formatter.dateFormat = format; if let date = formatter.date(from: raw) { return date } }
+            return nil
         }
-        return nil
-    }
-
-    static func failure(in screen: String, now: Date) -> QuotaFailure? {
-        let lower = screen.lowercased()
-        if lower.contains("rate limited") || lower.contains("rate_limit_error") || lower.contains("rate limit exceeded") ||
-            lower.contains("too many requests") || lower.range(of: #"(?:error|http|status)[^\n]*\b429\b"#, options: .regularExpression) != nil {
-            return .rateLimited(now.addingTimeInterval(900))
+        if let date = parse(["MMM d, yyyy, h:mma", "MMM d, yyyy, h:mm a", "MMM d, yyyy h:mma", "MMM d, yyyy h:mm a",
+                             "MMM d yyyy h:mma", "MMM d, yyyy, ha", "MMM d, yyyy ha", "MMM d, yyyy h a", "MMM d yyyy ha",
+                             "MMM d, yyyy, HH:mm", "MMM d, yyyy HH:mm"]) { return date }
+        let today = calendar.dateComponents([.year, .month, .day], from: now)
+        // A date without a year is the next one; a time alone is the next one too.
+        if let date = parse(["MMM d, h:mma", "MMM d, h:mm a", "MMM d h:mma", "MMM d h:mm a", "MMM d, HH:mm", "MMM d HH:mm",
+                             "MMM d, ha", "MMM d, h a", "MMM d ha", "MMM d h a"]) {
+            var parts = calendar.dateComponents([.month, .day, .hour, .minute], from: date)
+            parts.year = today.year
+            guard let thisYear = calendar.date(from: parts) else { return nil }
+            return thisYear >= now.addingTimeInterval(-60) ? thisYear : calendar.date(byAdding: .year, value: 1, to: thisYear)
         }
-        if lower.contains("not logged in") || lower.contains("please log in") || lower.contains("token_expired") ||
-            lower.contains("token has expired") || lower.contains("authentication_error") { return .expired }
+        if let time = parse(["h:mma", "h:mm a", "HH:mm", "H:mm", "ha", "h a"]) {
+            var parts = calendar.dateComponents([.hour, .minute], from: time)
+            parts.year = today.year; parts.month = today.month; parts.day = today.day
+            guard let sameDay = calendar.date(from: parts) else { return nil }
+            return sameDay >= now.addingTimeInterval(-60) ? sameDay : calendar.date(byAdding: .day, value: 1, to: sameDay)
+        }
         return nil
     }
 
@@ -280,7 +312,7 @@ enum ClaudeUsageScreen {
 
     /// Minimal VT screen: apply cursor moves and erases so old quota values from redraws are not reused.
     static func render(_ raw: String) -> String {
-        let rows = 80, cols = 180
+        let rows = Self.rows, cols = Self.columns
         var cells = Array(repeating: Array(repeating: Character(" "), count: cols), count: rows)
         var row = 0, col = 0, savedRow = 0, savedCol = 0
         let input = Array(raw)

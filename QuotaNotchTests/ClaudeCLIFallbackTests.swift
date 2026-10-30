@@ -35,7 +35,10 @@ final class ClaudeUsageScreenTests: XCTestCase {
         XCTAssertEqual(result.windows[0].resetsAt, instant.addingTimeInterval(5800))
         XCTAssertEqual(result.windows[1].resetsAt, instant.addingTimeInterval(4_573_600))
         XCTAssertEqual(result.windows[2].resetsAt, instant.addingTimeInterval(4_573_540))
-        XCTAssertTrue(ClaudeUsageScreen.asksForTrust("do you trust the files in this folder?"))
+        XCTAssertEqual(ClaudeUsageScreen.workspaceTrustKeys(onScreen: "Do you trust the files in this folder?"), "y\r")
+        XCTAssertEqual(ClaudeUsageScreen.workspaceTrustKeys(onScreen: "Quick safety check\n\n  1. Yes, I trust this folder\n❯ 2. No, exit"), "\u{1b}[A")
+        XCTAssertEqual(ClaudeUsageScreen.workspaceTrustKeys(onScreen: "Quick safety check\n\n❯ 1. Yes, I trust this folder\n  2. No, exit"), "\r")
+        XCTAssertNil(ClaudeUsageScreen.workspaceTrustKeys(onScreen: "Current session\n25% used"))
     }
 
     func testPromotionalRateLimitTextIsNotAnError() throws {
