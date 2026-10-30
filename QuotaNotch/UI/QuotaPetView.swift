@@ -130,7 +130,9 @@ struct QuotaPetEffectLayer: View {
     }
 
     private func canvas(time: TimeInterval?) -> some View {
-        let contours = style == .pixel && signal == .running && !front ? sprite.contours(maxDistance: 4) : []
+        // Every other ring out to the canvas margin, so the ripple travels as far as the soft rings.
+        let contours = style == .pixel && signal == .running && !front
+            ? sprite.contours(maxDistance: 8).enumerated().filter { $0.offset % 2 == 1 }.map(\.element) : []
         let outline = style == .pixel && signal == .waiting && front ? sprite.outlineCells : []
         return Canvas(rendersAsynchronously: false) { context, size in
             let center = CGPoint(x: size.width / 2, y: size.height / 2)
@@ -170,6 +172,8 @@ struct QuotaPetEffectLayer: View {
                 guard let time, !contours.isEmpty else { return }
                 let step = Int(time / 0.6) % contours.count
                 pixels(contours[step], opacity: [0.6, 0.45, 0.3, 0.16][min(step, 3)])
+                // A faint trail one step behind keeps the wave readable at a distance.
+                if step > 0 { pixels(contours[step - 1], opacity: 0.12) }
             case (.pixel, .waiting, true):
                 let lit = time.map { Int($0 / 0.5) % 2 == 0 } ?? true
                 if lit { pixels(outline, opacity: 1) }
