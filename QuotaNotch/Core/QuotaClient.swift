@@ -184,7 +184,19 @@ actor QuotaClient {
         // Ask Claude Code's /usage screen when the status line is silent or behind.
         if let probe, probe.needed(reported) {
             do {
-                let reading = try await probe.fallback.fetch(now: now)
+                var reading = try await probe.fallback.fetch(now: now)
+                // A reset the screen didn't show is taken from the previous reading while it is still ahead.
+                if let reported {
+                    reading = QuotaSnapshot(windows: reading.windows.map { window in
+                        guard window.resetsAt == nil,
+                              let earlier = reported.windows.first(where: { $0.id == window.id })?.resetsAt,
+                              earlier > now else { return window }
+                        var filled = QuotaWindow(id: window.id, title: window.title,
+                                                 remainingPercent: window.remainingPercent, resetsAt: earlier)
+                        filled.duration = window.duration
+                        return filled
+                    }, fetchedAt: reading.fetchedAt)
+                }
                 return (.success(reading), .read(reading))
             } catch QuotaFailure.rateLimited(let date) {
                 return (.failure(.rateLimited(date)), .failed)

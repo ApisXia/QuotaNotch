@@ -41,6 +41,12 @@ final class ClaudeUsageScreenTests: XCTestCase {
         XCTAssertNil(ClaudeUsageScreen.workspaceTrustKeys(onScreen: "Current session\n25% used"))
     }
 
+    func testLastKnownUsageIsDatedBack() throws {
+        let screen = "Showing last-known usage as of 36m ago (couldn't refresh)\nCurrent session\n25% used"
+        XCTAssertEqual(try ClaudeUsageScreen.parse(screen, now: instant).fetchedAt, instant.addingTimeInterval(-2160))
+        XCTAssertEqual(try ClaudeUsageScreen.parse("Current session\n25% used", now: instant).fetchedAt, instant)
+    }
+
     func testPromotionalRateLimitTextIsNotAnError() throws {
         let result = try ClaudeUsageScreen.parse("Rate limits are 2x higher this week\nCurrent session\n25% used", now: instant)
         XCTAssertEqual(result.windows.first?.remainingPercent, 75)

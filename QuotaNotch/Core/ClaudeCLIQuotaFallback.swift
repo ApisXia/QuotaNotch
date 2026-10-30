@@ -35,9 +35,11 @@ struct ClaudeCLIQuotaFallback: ClaudeQuotaFallback {
     #if os(macOS)
     private func run(now: Date, cancellation: ClaudeCLICancellation) throws -> QuotaSnapshot {
         var env = environment
-        for name in ["CLAUDE_CODE_OAUTH_TOKEN", "ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN"] {
+        // Like CodexBar's probe: the Claude.ai login only, no API keys, and no self-update.
+        for name in env.keys where name == "CLAUDE_CODE_OAUTH_TOKEN" || name.hasPrefix("ANTHROPIC_") {
             env.removeValue(forKey: name)
         }
+        env["DISABLE_AUTOUPDATER"] = "1"
         let directories = (env["PATH"] ?? "").split(separator: ":").map(String.init)
             + [home.appendingPathComponent(".local/bin").path, home.appendingPathComponent(".npm-global/bin").path,
                "/opt/homebrew/bin", "/usr/local/bin", "/usr/bin", "/bin"]
@@ -49,7 +51,8 @@ struct ClaudeCLIQuotaFallback: ClaudeQuotaFallback {
         env["PATH"] = directories.joined(separator: ":")
         env["TERM"] = "xterm-256color"
         env["ENABLE_CLAUDEAI_MCP_SERVERS"] = "false"
-        env["CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC"] = "1"
+        // CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC must stay unset: it also stops /usage from
+        // refreshing, which then shows numbers from earlier ("couldn't refresh").
         let directory = home.appendingPathComponent("Library/Application Support/QuotaNotch/ClaudeUsage", isDirectory: true)
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true,
             attributes: [.posixPermissions: 0o700])
@@ -112,7 +115,8 @@ struct ClaudeCLIQuotaFallback: ClaudeQuotaFallback {
                 let parsed = try? ClaudeUsageScreen.parse(screen, now: now)
                 if parsed != candidate { candidate = parsed; settledAt = ProcessInfo.processInfo.systemUptime }
             }
-            if let candidate, ProcessInfo.processInfo.systemUptime - settledAt >= 0.8 { return candidate }
+            // Rows below the session keep drawing for a moment; wait until the reading holds for 2 s.
+            if let candidate, ProcessInfo.processInfo.systemUptime - settledAt >= 2 { return candidate }
             if !process.isRunning && count <= 0 { break }
         }
         if let candidate { return candidate }
@@ -197,7 +201,22 @@ enum ClaudeUsageScreen {
         guard windows["five_hour"] != nil else { throw QuotaFailure.invalidResponse }
         let order = ["five_hour", "seven_day", "seven_day_sonnet", "seven_day_opus"]
         let others = windows.keys.filter { !order.contains($0) }.sorted()
-        return QuotaSnapshot(windows: (order + others).compactMap { windows[$0] }, fetchedAt: now)
+        return QuotaSnapshot(windows: (order + others).compactMap { windows[$0] }, fetchedAt: now - shownAge(screen))
+    }
+
+    /// "Showing last-known usage as of 36m ago (couldn't refresh)": how old the numbers are.
+    static func shownAge(_ screen: String) -> TimeInterval {
+        let compact = screen.lowercased().filter { $0.isLetter || $0.isNumber }
+        guard let start = compact.range(of: "usageasof") else { return 0 }
+        let tail = compact[start.upperBound...]
+        guard let match = tail.range(of: #"^(\d+)([smhd])"#, options: .regularExpression),
+              let number = Double(tail[match].dropLast()) else { return 0 }
+        switch tail[match].last {
+        case "s": return number
+        case "m": return number * 60
+        case "h": return number * 3600
+        default: return number * 86400
+        }
     }
 
     /// The window a section heading names: the session, the whole week, or one model's week
