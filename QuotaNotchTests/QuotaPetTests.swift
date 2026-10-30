@@ -323,4 +323,15 @@ final class QuotaPetTests: XCTestCase {
             }
         }
     }
+
+    func testUpscaledSpriteKeepsItsShape() {
+        let sprite = QuotaPetArt.sprite(.bit, size: .widget, mood: .idle, remaining: 64)
+        let big = sprite.upscaled(2)
+        XCTAssertEqual(big.width, 40)
+        XCTAssertEqual(big.height, 32)
+        for y in 0..<sprite.height { for x in 0..<sprite.width {
+            XCTAssertEqual(big.code(x: 2 * x + 1, y: 2 * y + 1), sprite.code(x: x, y: y))
+        } }
+        XCTAssertEqual(sprite.upscaled(1), sprite)
+    }
 }

@@ -741,6 +741,15 @@ extension QuotaPetSprite {
         x >= 0 && y >= 0 && x < width && y < height && code(x: x, y: y) != UInt8(ascii: ".")
     }
 
+    /// The same art with every pixel drawn as factor × factor pixels.
+    func upscaled(_ factor: Int) -> QuotaPetSprite {
+        guard factor > 1 else { return self }
+        var codes: [UInt8] = []
+        codes.reserveCapacity(width * height * factor * factor)
+        for y in 0..<(height * factor) { for x in 0..<(width * factor) { codes.append(code(x: x / factor, y: y / factor)) } }
+        return QuotaPetSprite(width: width * factor, height: height * factor, codes: codes)
+    }
+
     /// Empty cells at each step (1...maxDistance) away from the art, following its outline.
     /// Coordinates are relative to the sprite and may be negative.
     func contours(maxDistance: Int) -> [[QuotaPetCell]] {

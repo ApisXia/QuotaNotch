@@ -7,7 +7,7 @@ import SwiftUI
 /// becomes the pet's focus.
 @MainActor
 struct NotchPetColumn: View {
-    static let width: CGFloat = 90
+    static let width: CGFloat = 104
 
     let page: NotchViews
     @ObservedObject private var store = QuotaNotchStore.shared
@@ -86,7 +86,9 @@ struct NotchPetColumn: View {
         QuotaPetView(kind: QuotaPetKind.choice(petRaw), size: .widget, provider: provider, window: window,
                      stale: pin == nil || store.isStale(provider), scale: 4,
                      tasks: QuotaPetTasks(activity.attention, enabled: activity.enabled),
-                     fixedMood: fixed, fixedSignal: signal)
+                     fixedMood: fixed, fixedSignal: signal,
+                     // 12pt of room on each side: half-size ripple pixels, six rings out.
+                     rippleCell: 2, rippleReach: 12)
     }
 
     private func openWaiting() {

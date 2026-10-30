@@ -39,6 +39,11 @@ struct QuotaPetView: View {
     /// Overrides the tracked mood (settings previews).
     var fixedMood: QuotaPetMood? = nil
     var fixedSignal: QuotaPetSignal = .none
+    /// Pixel ripples: the size of one ripple pixel and how far out they reach, in points.
+    /// Defaults to the pet's own pixels and the full effect margin; a tight space (the opened
+    /// panel's column) uses finer, closer ripples so every ring fits.
+    var rippleCell: CGFloat? = nil
+    var rippleReach: CGFloat? = nil
     @ObservedObject private var store = QuotaNotchStore.shared
     @AppStorage(QuotaPetTint.defaultsKey) private var tintRaw = QuotaPetTint.original.rawValue
     @AppStorage(QuotaPetEffect.defaultsKey) private var effectRaw = QuotaPetEffect.soft.rawValue
@@ -87,7 +92,8 @@ struct QuotaPetView: View {
             .opacity(mood == .stale ? 0.55 : 1)
             .background {
                 if signal != .none {
-                    QuotaPetEffectLayer(style: effect, signal: signal, sprite: sprite, scale: scale, color: theme, front: false)
+                    QuotaPetEffectLayer(style: effect, signal: signal, sprite: sprite, scale: scale, color: theme, front: false,
+                                        rippleCell: rippleCell, rippleReach: rippleReach)
                 }
             }
             .overlay {
@@ -108,9 +114,15 @@ struct QuotaPetEffectLayer: View {
     let color: Color
     /// Drawn above the pixels (the pixel outline) or behind them (everything else).
     let front: Bool
+    var rippleCell: CGFloat? = nil
+    var rippleReach: CGFloat? = nil
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private var margin: CGFloat { 8 * scale }
+    /// Ripple pixels per sprite pixel (a whole number), and ripple pixels per point.
+    private var rippleFactor: Int { max(1, Int((scale / (rippleCell ?? scale)).rounded())) }
+    private var cell: CGFloat { scale / CGFloat(rippleFactor) }
+    private var rippleRings: Int { max(2, min(Int((rippleReach ?? margin) / cell), Int(margin / cell))) }
     private var width: CGFloat { CGFloat(sprite.width) * scale + 2 * margin }
     private var height: CGFloat { CGFloat(sprite.height) * scale + 2 * margin }
     private var interval: TimeInterval { style == .soft ? 1.0 / 15 : 0.1 }
@@ -130,17 +142,19 @@ struct QuotaPetEffectLayer: View {
     }
 
     private func canvas(time: TimeInterval?) -> some View {
-        // Every other ring out to the canvas margin, so the ripple travels as far as the soft rings.
+        // Every other ring out to the reach, so the ripple travels as far as the soft rings.
         let contours = style == .pixel && signal == .running && !front
-            ? sprite.contours(maxDistance: 8).enumerated().filter { $0.offset % 2 == 1 }.map(\.element) : []
+            ? sprite.upscaled(rippleFactor).contours(maxDistance: rippleRings)
+                .enumerated().filter { $0.offset % 2 == 1 }.map(\.element) : []
         let outline = style == .pixel && signal == .waiting && front ? sprite.outlineCells : []
         return Canvas(rendersAsynchronously: false) { context, size in
             let center = CGPoint(x: size.width / 2, y: size.height / 2)
             let reach = max(CGFloat(sprite.width), CGFloat(sprite.height)) * scale * 0.62
-            func pixels(_ cells: [QuotaPetCell], opacity: Double) {
+            func pixels(_ cells: [QuotaPetCell], opacity: Double, size: CGFloat? = nil) {
+                let side = size ?? scale
                 var path = Path()
                 for cell in cells {
-                    path.addRect(CGRect(x: margin + CGFloat(cell.x) * scale, y: margin + CGFloat(cell.y) * scale, width: scale, height: scale))
+                    path.addRect(CGRect(x: margin + CGFloat(cell.x) * side, y: margin + CGFloat(cell.y) * side, width: side, height: side))
                 }
                 context.fill(path, with: .color(color.opacity(opacity)))
             }
@@ -171,9 +185,9 @@ struct QuotaPetEffectLayer: View {
             case (.pixel, .running, false):
                 guard let time, !contours.isEmpty else { return }
                 let step = Int(time / 0.6) % contours.count
-                pixels(contours[step], opacity: [0.6, 0.45, 0.3, 0.16][min(step, 3)])
+                pixels(contours[step], opacity: [0.6, 0.45, 0.3, 0.16][min(step, 3)], size: cell)
                 // A faint trail one step behind keeps the wave readable at a distance.
-                if step > 0 { pixels(contours[step - 1], opacity: 0.12) }
+                if step > 0 { pixels(contours[step - 1], opacity: 0.12, size: cell) }
             case (.pixel, .waiting, true):
                 let lit = time.map { Int($0 / 0.5) % 2 == 0 } ?? true
                 if lit { pixels(outline, opacity: 1) }
