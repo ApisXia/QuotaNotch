@@ -128,7 +128,10 @@ final class QuotaPetTests: XCTestCase {
     }
 
     func testEachPetHasItsOwnThemeColor() {
-        XCTAssertEqual(Set(QuotaPetKind.pets.map(QuotaPetArt.themeColor)).count, QuotaPetKind.pets.count)
+        XCTAssertEqual(Set(QuotaPetKind.pets.map { QuotaPetArt.themeColor($0) }).count, QuotaPetKind.pets.count)
+        // Tinted by service, the effects take the service's color.
+        XCTAssertEqual(QuotaPetArt.themeColor(.bit, provider: .claude, tint: .service), QuotaPetArt.brandColor(.claude))
+        XCTAssertEqual(QuotaPetArt.themeColor(.bit, provider: .codex, tint: .original), QuotaPetArt.themeColor(.bit))
     }
 
     func testEveryDrawnPixelHasAColor() {

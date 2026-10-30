@@ -639,6 +639,12 @@ enum QuotaPetArt {
         }
     }
 
+    /// The color of the task effects (glow, rings, ripples): the pet's own, or the service's
+    /// when the pet is tinted by service.
+    static func themeColor(_ kind: QuotaPetKind, provider: QuotaProvider, tint: QuotaPetTint) -> UInt32 {
+        tint == .service ? brandColor(provider) : themeColor(kind)
+    }
+
     /// Points per sprite pixel. Only whole device pixels keep the art crisp: 1.5 needs a
     /// Retina display, 2 needs a tall notch.
     static func pixelScale(size: NotchUISize, notchHeight: CGFloat, displayScale: CGFloat) -> CGFloat {

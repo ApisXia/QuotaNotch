@@ -89,7 +89,7 @@ struct QuotaPetView: View {
         let remaining = window?.remainingPercent ?? 0
         let sprite = QuotaPetArt.sprite(kind, size: size, mood: mood, remaining: remaining, frame: frame, blink: blink)
         let palette = QuotaPetArt.palette(kind, provider: provider, tint: tint, remaining: remaining)
-        let theme = Color(quotaPetRGB: QuotaPetArt.themeColor(kind))
+        let theme = Color(quotaPetRGB: QuotaPetArt.themeColor(kind, provider: provider, tint: tint))
         let pixels = QuotaPetPixels(sprite: sprite, palette: palette, scale: scale)
             .saturation(mood == .stale ? 0 : 1)
             .opacity(mood == .stale ? 0.55 : 1)
