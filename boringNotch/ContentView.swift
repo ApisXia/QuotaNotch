@@ -382,7 +382,8 @@ struct ContentView: View {
                 .matchedGeometryEffect(id: "albumArt", in: albumArtNamespace)
                 .frame(width: album, height: album)
                 .auditNotchFrame("album")
-                .frame(width: wing, alignment: .leading)
+                .padding(.top, QuotaPetArt.albumTop)
+                .frame(width: wing, height: vm.effectiveClosedNotchHeight, alignment: .top)
             Rectangle()
                 .fill(.black)
                 .overlay(

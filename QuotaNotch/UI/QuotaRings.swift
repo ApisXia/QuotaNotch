@@ -220,7 +220,7 @@ struct QuotaPinnedWings: View {
                         if showsMusic { album }
                         else { petView(pin, provider: provider) }
                     }
-                    .frame(width: slot, height: height, alignment: showsMusic ? .leading : .center)
+                    .frame(width: slot, height: height, alignment: .center)
                     .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
@@ -295,6 +295,8 @@ struct QuotaPinnedWings: View {
                     .accessibilityHidden(true)
             }
             .clipped()
+            .padding(.top, QuotaPetArt.albumTop)
+            .frame(height: height, alignment: .top)
     }
 
     private func reading(for pin: QuotaPin) -> String {

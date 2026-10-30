@@ -230,9 +230,9 @@ struct SettingsPreviewRunner {
             verifyPresentation(abs(camera.midX - host.bounds.midX) <= 1, "Physical notch shifted in \(label): \(camera)")
             if let album = renderedFrames["album"] {
                 verifyPresentation(abs(album.width - widget) <= 1, "Album stretched in \(label): \(album)")
-                // The album sits at the outer edge of a wing as wide as the pet.
-                verifyPresentation(abs(album.minX - (camera.minX - QuotaCompactMetrics.spacing - (wing ?? quota ?? widget))) <= 1,
-                    "Album moved off the wing's outer edge in \(label): \(album), camera \(camera)")
+                // The album is centered in its side.
+                verifyPresentation(abs(album.midX - (camera.minX - QuotaCompactMetrics.spacing - (wing ?? quota ?? widget) / 2)) <= 1,
+                    "Album moved off the middle of its side in \(label): \(album), camera \(camera)")
             }
             for name in ["quota", "task"] {
                 if let mode = renderedModules[name], let frame = renderedFrames[name] {
