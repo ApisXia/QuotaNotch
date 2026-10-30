@@ -87,7 +87,9 @@ private struct AgentNotchTaskRow: View {
     var body: some View {
         Button(action: open) {
             HStack(spacing: AgentNotchRowMetrics.gap) {
-                AgentPaperGlyph(state: session.state)
+                // Where the task runs; its state is spelled out on the right and shown by the pet.
+                QuotaBrandMark(brand: session.provider == .claude ? .claude : .codex)
+                    .frame(width: 14, height: 14)
                     .frame(width: AgentNotchRowMetrics.iconWidth)
                 identity
                 status

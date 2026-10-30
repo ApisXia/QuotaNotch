@@ -244,13 +244,17 @@ struct ContentView: View {
 
             if vm.notchState == .open {
                 VStack {
-                    switch coordinator.currentView {
-                    case .home:
+                    if coordinator.currentView == .home {
                         NotchHomeView(albumArtNamespace: albumArtNamespace)
-                    case .aiUsage:
-                        QuotaNotchView()
-                    case .activity:
-                        AgentNotchView()
+                    } else {
+                        // The pet keeps its column while Quota and Tasks swap beside it.
+                        HStack(alignment: .top, spacing: 10) {
+                            NotchPetColumn(page: coordinator.currentView)
+                            Group {
+                                if coordinator.currentView == .aiUsage { QuotaNotchView() } else { AgentNotchView() }
+                            }
+                            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                        }
                     }
                 }
                 .frame(width: openContentWidth, alignment: .leading)
