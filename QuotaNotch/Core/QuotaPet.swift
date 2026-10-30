@@ -651,11 +651,20 @@ enum QuotaPetArt {
         }
     }
 
-    /// How far each side of the closed notch reaches: the pet's width. It is the same with or
-    /// without music, so the notch never changes width when playback starts or stops.
-    static func wingWidth(size: NotchUISize, notchHeight: CGFloat, displayScale: CGFloat) -> CGFloat {
+    /// The pet's width in the closed notch: the 20-pixel sprite at its scale, or the 16-point
+    /// head on very short notches.
+    static func petWidth(size: NotchUISize, notchHeight: CGFloat, displayScale: CGFloat) -> CGFloat {
         let scale = pixelScale(size: size, notchHeight: notchHeight, displayScale: displayScale)
-        return scale > 1 ? 20 * scale : QuotaCompactMetrics.iconSize(height: notchHeight, size: size)
+        if scale > 1 { return 20 * scale }
+        return QuotaCompactMetrics.iconSize(height: notchHeight, size: size) >= 18 ? 20 : 16
+    }
+
+    /// How far each side of the closed notch reaches. It depends only on the notch and the size
+    /// setting, never on what is showing, so the notch keeps one width with or without music.
+    /// Usually the pet's width; never narrower than the album or the shortest percentage.
+    static func wingWidth(size: NotchUISize, notchHeight: CGFloat, displayScale: CGFloat) -> CGFloat {
+        max(petWidth(size: size, notchHeight: notchHeight, displayScale: displayScale),
+            QuotaCompactMetrics.iconSize(height: notchHeight, size: size), 24)
     }
 
     /// The color of the pet's own gauge (tea, chest meter, water), for the bar beside it.

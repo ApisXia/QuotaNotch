@@ -197,10 +197,10 @@ struct QuotaPinnedWings: View {
         QuotaPetArt.pixelScale(size: size, notchHeight: height, displayScale: displayScale)
     }
     /// Width of the pet at its pixel scale.
-    private var quotaWidth: CGFloat { QuotaPetArt.wingWidth(size: size, notchHeight: height, displayScale: displayScale) }
-    /// Both wings are as wide as the pet, with or without music (the same as music alone), so
-    /// the notch never changes width and the camera stays centered.
-    private var slot: CGFloat { quotaWidth }
+    private var quotaWidth: CGFloat { QuotaPetArt.petWidth(size: size, notchHeight: height, displayScale: displayScale) }
+    /// Both wings take the same fixed width, with or without music (the same as music alone),
+    /// so the notch never changes width and the camera stays centered.
+    private var slot: CGFloat { QuotaPetArt.wingWidth(size: size, notchHeight: height, displayScale: displayScale) }
     /// Tasks are shown only while task tracking is on and something is visible.
     private var taskStates: [AgentRunState] { activity.showAccessory ? activity.attention.states : [] }
     private var petTasks: QuotaPetTasks { QuotaPetTasks(activity.attention, enabled: activity.enabled) }

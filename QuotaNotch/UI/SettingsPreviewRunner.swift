@@ -223,18 +223,15 @@ struct SettingsPreviewRunner {
             .background(Color(red: 0.25, green: 0.15, blue: 0.35)))
         /// The quota module is the pet at its pixel scale, also in the shared music wing.
         func quotaWidth(height: CGFloat, size: NotchUISize, shared: Bool) -> CGFloat {
-            let icon = QuotaCompactMetrics.iconSize(height: height, size: size)
-            let scale = QuotaPetArt.pixelScale(size: size, notchHeight: height,
-                                               displayScale: host.window?.backingScaleFactor ?? 1)
-            return scale > 1 ? 20 * scale : icon
+            QuotaPetArt.petWidth(size: size, notchHeight: height, displayScale: host.window?.backingScaleFactor ?? 1)
         }
-        func verifyGeometry(_ label: String, widget: CGFloat, quota: CGFloat? = nil) {
+        func verifyGeometry(_ label: String, widget: CGFloat, quota: CGFloat? = nil, wing: CGFloat? = nil) {
             guard let camera = renderedFrames["camera"] else { fatalError("Missing camera geometry in \(label)") }
             verifyPresentation(abs(camera.midX - host.bounds.midX) <= 1, "Physical notch shifted in \(label): \(camera)")
             if let album = renderedFrames["album"] {
                 verifyPresentation(abs(album.width - widget) <= 1, "Album stretched in \(label): \(album)")
                 // The album sits at the outer edge of a wing as wide as the pet.
-                verifyPresentation(abs(album.minX - (camera.minX - QuotaCompactMetrics.spacing - (quota ?? widget))) <= 1,
+                verifyPresentation(abs(album.minX - (camera.minX - QuotaCompactMetrics.spacing - (wing ?? quota ?? widget))) <= 1,
                     "Album moved off the wing's outer edge in \(label): \(album), camera \(camera)")
             }
             for name in ["quota", "task"] {
@@ -365,7 +362,8 @@ struct SettingsPreviewRunner {
         }
         func verifyPet(_ label: String, height: CGFloat, size: NotchUISize, quota: Bool) {
             let widget = QuotaCompactMetrics.iconSize(height: height, size: size)
-            verifyGeometry(label, widget: widget, quota: quotaWidth(height: height, size: size, shared: false))
+            verifyGeometry(label, widget: widget, quota: quotaWidth(height: height, size: size, shared: false),
+                           wing: QuotaPetArt.wingWidth(size: size, notchHeight: height, displayScale: host.window?.backingScaleFactor ?? 1))
             guard let camera = renderedFrames["camera"] else { return }
             for name in ["summary", "tasks"] {
                 if let frame = renderedFrames[name] {
