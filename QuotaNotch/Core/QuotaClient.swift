@@ -177,6 +177,7 @@ actor QuotaClient {
         do { reported = try await usage.latest(now: now) }
         catch QuotaFailure.notConnected { reported = nil }
         catch { return (.failure(error as? QuotaFailure ?? .network), .none) }
+        let statusLine = reported
         // An earlier /usage reading stays until the status line reports something newer.
         if let previousFallback, previousFallback.fetchedAt > (reported?.fetchedAt ?? .distantPast) {
             reported = previousFallback
@@ -186,11 +187,13 @@ actor QuotaClient {
             do {
                 var reading = try await probe.fallback.fetch(now: now)
                 // A reset the screen didn't show is taken from the previous reading while it is still ahead.
-                if let reported {
+                let earlierReadings = [reported, statusLine].compactMap { $0 }
+                if !earlierReadings.isEmpty {
                     reading = QuotaSnapshot(windows: reading.windows.map { window in
                         guard window.resetsAt == nil,
-                              let earlier = reported.windows.first(where: { $0.id == window.id })?.resetsAt,
-                              earlier > now else { return window }
+                              let earlier = earlierReadings.lazy.compactMap({ snapshot in
+                                  snapshot.windows.first(where: { $0.id == window.id })?.resetsAt
+                              }).first(where: { $0 > now }) else { return window }
                         var filled = QuotaWindow(id: window.id, title: window.title,
                                                  remainingPercent: window.remainingPercent, resetsAt: earlier)
                         filled.duration = window.duration
