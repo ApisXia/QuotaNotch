@@ -151,8 +151,9 @@ struct QuotaPetEffectLayer: View {
             case (.soft, .running, false):
                 guard let time else { return }
                 let p = (time / 2.8).truncatingRemainder(dividingBy: 1)
-                ring(progress: p, peak: 0.3)
-                ring(progress: (p + 0.5).truncatingRemainder(dividingBy: 1), peak: 0.3)
+                // Clearly visible, still calmer than waiting (faster rings and a glow).
+                ring(progress: p, peak: 0.55)
+                ring(progress: (p + 0.5).truncatingRemainder(dividingBy: 1), peak: 0.55)
             case (.soft, .waiting, false):
                 let wave = time.map { 0.5 + 0.5 * cos($0 / 1.2 * 2 * .pi) } ?? 0.6
                 var glow = context
@@ -168,7 +169,7 @@ struct QuotaPetEffectLayer: View {
             case (.pixel, .running, false):
                 guard let time, !contours.isEmpty else { return }
                 let step = Int(time / 0.6) % contours.count
-                pixels(contours[step], opacity: [0.30, 0.22, 0.14, 0.08][min(step, 3)])
+                pixels(contours[step], opacity: [0.6, 0.45, 0.3, 0.16][min(step, 3)])
             case (.pixel, .waiting, true):
                 let lit = time.map { Int($0 / 0.5) % 2 == 0 } ?? true
                 if lit { pixels(outline, opacity: 1) }
