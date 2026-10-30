@@ -666,11 +666,12 @@ enum QuotaPetArt {
         max(petWidth(size: size, notchHeight: notchHeight, displayScale: displayScale), (size.percentFont * 2.4).rounded(.up))
     }
 
-    /// The album cover sits centered in its side, 2 points below the notch's top and at least
-    /// 5 points above its bottom, where the rounded corners are.
+    /// The album cover is a rectangle as wide as its side, 2 points below the notch's top and
+    /// 10 points above its bottom, clear of the rounded corners; never taller than wide.
     static let albumTop: CGFloat = 2
-    static func albumSize(size: NotchUISize, notchHeight: CGFloat, displayScale: CGFloat) -> CGFloat {
-        max(0, min(wingWidth(size: size, notchHeight: notchHeight, displayScale: displayScale), notchHeight - albumTop - 5))
+    static func albumSize(size: NotchUISize, notchHeight: CGFloat, displayScale: CGFloat) -> CGSize {
+        let width = wingWidth(size: size, notchHeight: notchHeight, displayScale: displayScale)
+        return CGSize(width: width, height: max(0, min(width, notchHeight - albumTop - 10)))
     }
 
     /// The color of the pet's own gauge (tea, chest meter, water), for the bar beside it.

@@ -362,7 +362,7 @@ struct SettingsPreviewRunner {
         }
         func verifyPet(_ label: String, height: CGFloat, size: NotchUISize, quota: Bool) {
             // The album's expected size; the other modules use the pet's width.
-            let widget = QuotaPetArt.albumSize(size: size, notchHeight: height, displayScale: host.window?.backingScaleFactor ?? 1)
+            let widget = QuotaPetArt.albumSize(size: size, notchHeight: height, displayScale: host.window?.backingScaleFactor ?? 1).width
             verifyGeometry(label, widget: widget, quota: quotaWidth(height: height, size: size, shared: false),
                            wing: QuotaPetArt.wingWidth(size: size, notchHeight: height, displayScale: host.window?.backingScaleFactor ?? 1))
             guard let camera = renderedFrames["camera"] else { return }

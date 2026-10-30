@@ -380,7 +380,7 @@ struct ContentView: View {
                         cornerRadius: MusicPlayerImageSizes.cornerRadiusInset.closed)
                 )
                 .matchedGeometryEffect(id: "albumArt", in: albumArtNamespace)
-                .frame(width: album, height: album)
+                .frame(width: album.width, height: album.height)
                 .auditNotchFrame("album")
                 .padding(.top, QuotaPetArt.albumTop)
                 .frame(width: wing, height: vm.effectiveClosedNotchHeight, alignment: .top)
