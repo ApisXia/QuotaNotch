@@ -72,19 +72,19 @@ final class QuotaPetTests: XCTestCase {
         ])
         XCTAssertEqual(QuotaPetArt.sprite(.mochi, size: .widget, mood: .needsYou, remaining: 41).rows, [
             "....................", "..oo.......oo...oo..", ".ogo.......opo.occo.", ".oggooooooooppoocco.",
-            ".oggcccccccccpo.oco.", "oggceecccceecco..o..", "occceecccceeccco....", "occceecccceeccco....",
-            "ocpcccccccccpcco....", "occcccccocccccco....", ".osccccomocccso.....", "..ooscccoccsoo......",
-            ".o.osccccccsoofffffo", "oco.scccccccsoBBBBBo", "oco.occocccoccoBBBo.", ".oooooooooooooo....."
+            ".oggweccccewcpo.oco.", "oggceecccceecco..o..", "occceecccceeccco....", "occccccppcccccco....",
+            "ocpccccooccccpco....", "occcccoMMocccGGGGGG.", ".osccccooccccGvvvvG.", "..oosccccccsoGvvvvGG",
+            ".o.osccccccsoGvvvvGG", "oco.scccccccsGFFFFGG", "oco.occocccocGffffG.", ".oooooooooooooGGGG.."
         ])
         XCTAssertEqual(QuotaPetArt.sprite(.mochi, size: .minimal, mood: .idle, remaining: 72).rows, [
             "..oo.......oo...", ".ogo.......opo..", ".oggooooooooppo.", ".oggcccccccccpo.",
-            "oggccccccccccco.", "occceecccceeccco", "occceecccceeccco", "ocpcccccccccpcco",
-            "occccccococcccco", ".oscccccoccccso.", "................", ".ffffffffffxxxx."
+            "oggcweccccewcco.", "occceecccceeccco", "occccccppcccccco", "ocpccocoococcpco",
+            "occcccoccoccccco", ".osccccccwcccso.", "................", ".ffffffffffxxxx."
         ])
         XCTAssertEqual(QuotaPetArt.sprite(.bit, size: .minimal, mood: .needsYou, remaining: 41).rows, [
             "......oLo.......", ".......o........", "..oooooooooooo..", ".occcccccccccco.",
-            "occkeekkkkeekcco", "ockkeekkkkeekkco", "ockkeekkkkeekkco", "ockkkkkkekkkkkco",
-            "occkkkkemekkkcco", ".occccccoccccco.", "..oooooooooooo..", ".mmmmmmdddddddd."
+            "occkeekkkkeekcco", "ockkeekkkkeekkco", "ockkkkkkkkkkkkco", "ockkeekkkkeekkco",
+            "occkkkkkkkkkkcco", ".occcccccccccco.", "..oooooooooooo..", ".mmmmmmdddddddd."
         ])
         XCTAssertEqual(QuotaPetArt.sprite(.jelly, size: .minimal, mood: .refilled, remaining: 100).rows, [
             "....oooooo....", "..ooFFFFFFoo..", ".offffffffffo.", ".offffffffffo.", "offfoffffofffo",
