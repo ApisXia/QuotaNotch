@@ -121,10 +121,7 @@ final class QuotaPetTests: XCTestCase {
         XCTAssertTrue(sprite.outlineCells.allSatisfy { sprite.code(x: $0.x, y: $0.y) == UInt8(ascii: "o") })
     }
 
-    func testTaskColors() {
-        XCTAssertEqual(QuotaPetArt.taskColor(.waiting), 0xFFB347)
-        XCTAssertEqual(QuotaPetArt.taskColor(.running), 0x5AD19A)
-        XCTAssertEqual(QuotaPetArt.taskColor(.completed), 0x7AA2FF)
+    func testEachPetHasItsOwnThemeColor() {
         XCTAssertEqual(Set(QuotaPetKind.pets.map(QuotaPetArt.themeColor)).count, QuotaPetKind.pets.count)
     }
 

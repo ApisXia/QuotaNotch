@@ -226,7 +226,7 @@ struct QuotaPetPulse<Content: View>: View {
 }
 
 /// The cell beside the pet: remaining quota on top; below it the quota bar in the pet's gauge
-/// color, followed by one dot per task (waiting amber, running green, finished blue).
+/// color, followed by one dot per task, in the same colors as the task list.
 struct QuotaPetSummary: View {
     let percent: Double?
     let stale: Bool
@@ -263,7 +263,7 @@ struct QuotaPetSummary: View {
                 .frame(height: fontSize >= 13 ? 3 : 2)
                 ForEach(Array(shown.enumerated()), id: \.offset) { _, state in
                     QuotaPetPulse(active: state == .waiting) {
-                        Circle().fill(Color(quotaPetRGB: QuotaPetArt.taskColor(state))).frame(width: dot, height: dot)
+                        Circle().fill(AgentText.color(state)).frame(width: dot, height: dot)
                     }
                 }
                 if tasks.count > 3 {
@@ -317,7 +317,7 @@ struct QuotaPetTaskBadge: View {
             ForEach(0..<3, id: \.self) { index in
                 let t = (phase - Double(index) * 0.15).truncatingRemainder(dividingBy: 1)
                 let lift = t >= 0 && t < 0.3 ? sin(t / 0.3 * .pi) * 1.5 : 0
-                Circle().fill(Color(quotaPetRGB: QuotaPetArt.taskColor(.running))).frame(width: 2, height: 2)
+                Circle().fill(AgentText.color(.running)).frame(width: 2, height: 2)
                     .offset(y: -lift)
             }
         }
@@ -326,6 +326,6 @@ struct QuotaPetTaskBadge: View {
     private func mark(_ text: String, state: AgentRunState) -> some View {
         Text(verbatim: text)
             .font(.system(size: 7, weight: .heavy, design: .rounded))
-            .foregroundStyle(Color(quotaPetRGB: QuotaPetArt.taskColor(state)))
+            .foregroundStyle(AgentText.color(state))
     }
 }

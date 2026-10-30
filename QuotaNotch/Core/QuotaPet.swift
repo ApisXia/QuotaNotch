@@ -621,17 +621,6 @@ enum QuotaPetArt {
         }
     }
 
-    /// Dot colors for task states: waiting amber, failed red, running green, finished blue.
-    static func taskColor(_ state: AgentRunState) -> UInt32 {
-        switch state {
-        case .waiting: return 0xFFB347
-        case .failed: return 0xFF6B5E
-        case .running: return 0x5AD19A
-        case .completed: return 0x7AA2FF
-        case .interrupted, .unknown: return 0x8B95A7
-        }
-    }
-
     /// Points per sprite pixel. Only whole device pixels keep the art crisp: 1.5 needs a
     /// Retina display, 2 needs a tall notch.
     static func pixelScale(size: NotchUISize, notchHeight: CGFloat, displayScale: CGFloat) -> CGFloat {
@@ -672,11 +661,11 @@ enum QuotaPetArt {
                       "W": 0xFFFFFF, "M": 0x5A2E2E, "T": 0xFF7A8A, "H": 0xFF8FB1, "b": 0xBFE2FF]
         case .ghost:
             colors = ["o": 0x4B4F7A, "c": 0xF6F7FF, "s": 0xDFE3FB, "h": 0xFFFFFF, "e": 0x2B2F4A, "p": 0xFFB3C8, "w": 0xFFFFFF,
-                      "M": 0x5A2E2E, "T": 0xFF7A8A, "Z": 0xCFD8E0, "X": 0xFFB347, "d": 0x7AA2FF]
+                      "M": 0x5A2E2E, "T": 0xFF7A8A, "Z": 0xCFD8E0, "X": 0xFF9F0A, "d": 0x7AA2FF]
         case .sprout:
             colors = ["o": 0x3A2A24, "c": 0xE58A5A, "r": 0xD1774A, "n": 0x8A4A32, "m": 0x6FC3FF, "g": 0x5AA14A, "l": 0x8FDC6A,
                       "L": 0x5AA14A, "y": 0xD9C25A, "Y": 0xB89A45, "q": 0xFF8FB1, "Q": 0xFFE27A, "e": 0x2A1F1C, "p": 0xF7B9A0,
-                      "w": 0xFFFFFF, "M": 0x5A2E2E, "T": 0xFF7A8A, "Z": 0xCFD8E0, "X": 0xFFB347, "d": 0x7AA2FF]
+                      "w": 0xFFFFFF, "M": 0x5A2E2E, "T": 0xFF7A8A, "Z": 0xCFD8E0, "X": 0xFF9F0A, "d": 0x7AA2FF]
         }
         let brand = brandColor(provider)
         let warning: UInt32? = remaining < 20 ? 0xFF5A4F : (remaining < 35 ? 0xF4D35E : nil)
