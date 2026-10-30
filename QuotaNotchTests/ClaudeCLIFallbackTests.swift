@@ -67,6 +67,15 @@ final class ClaudeUsageScreenTests: XCTestCase {
         XCTAssertEqual(result.windows.first?.remainingPercent, 75)
     }
 
+    /// A line exactly as wide as the screen wraps only when more text follows, so the rows
+    /// below it stay where Claude Code's relative cursor moves expect them.
+    func testFullWidthLineDoesNotAddARow() {
+        let rule = String(repeating: "─", count: ClaudeUsageScreen.columns)
+        let raw = rule + "\r\nCurrent session\r\n25% used\u{1b}[1A\u{1b}[2K\r40% used"
+        let rendered = ClaudeUsageScreen.render(raw)
+        XCTAssertEqual(Array(rendered.components(separatedBy: "\n").prefix(3)), [rule, "40% used", "25% used"])
+    }
+
     func testErasedScreenDoesNotRetainOldQuota() {
         let raw = "Current session\n25% used\u{1b}[2J\u{1b}[HLoading usage data"
         XCTAssertThrowsError(try ClaudeUsageScreen.parse(ClaudeUsageScreen.render(raw), now: instant))

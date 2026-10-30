@@ -371,6 +371,7 @@ enum ClaudeUsageScreen {
                     let command = input[index]; index += 1
                     let values = params.split(separator: ";", omittingEmptySubsequences: false).map { Int($0) ?? 0 }
                     let first = values.first ?? 0, amount = max(1, first)
+                    col = min(col, cols - 1)
                     switch command {
                     case "A": row = max(0, row - amount)
                     case "B": row = min(rows - 1, row + amount)
@@ -389,20 +390,44 @@ enum ClaudeUsageScreen {
                     case "u": row = savedRow; col = savedCol
                     default: break
                     }
+                } else if type == "7" {
+                    savedRow = row; savedCol = col
+                } else if type == "8" {
+                    row = savedRow; col = savedCol
                 }
                 continue
             }
             if ch == "\r" { col = 0; continue }
             if ch == "\n" || ch == "\r\n" {
                 row += 1; col = 0
-            } else if ch == "\u{08}" { col = max(0, col - 1) }
+            } else if ch == "\u{08}" { col = max(0, min(col, cols - 1) - 1) }
             else if ch == "\t" { col = min(cols - 1, (col / 8 + 1) * 8) }
-            else if !ch.unicodeScalars.contains(where: { $0.value < 32 }) {
-                cells[row][col] = ch; col += 1
-                if col >= cols { col = 0; row += 1 }
+            else if !ch.unicodeScalars.contains(where: { $0.value < 32 || $0.value == 0x7F }) {
+                // Like a real terminal (and CodexBar's screen), a full line wraps only when the
+                // next character arrives, so a line exactly as wide as the screen is not doubled.
+                let width = cellWidth(ch)
+                if col + width > cols {
+                    col = 0; row += 1
+                    if row >= rows { cells.removeFirst(); cells.append(Array(repeating: " ", count: cols)); row = rows - 1 }
+                }
+                cells[row][col] = ch
+                if width == 2 { cells[row][col + 1] = "\u{0}" }
+                col += width
             }
             if row >= rows { cells.removeFirst(); cells.append(Array(repeating: " ", count: cols)); row = rows - 1 }
         }
-        return cells.map { String($0).trimmingCharacters(in: .whitespaces) }.joined(separator: "\n")
+        return cells.map { String($0.filter { $0 != "\u{0}" }).trimmingCharacters(in: .whitespaces) }.joined(separator: "\n")
+    }
+
+    /// Columns a character takes: two for CJK and emoji, one otherwise (block and box glyphs too).
+    private static func cellWidth(_ character: Character) -> Int {
+        if character.isASCII { return 1 }
+        let scalars = character.unicodeScalars
+        guard let base = scalars.first else { return 1 }
+        if scalars.contains(where: \.properties.isEmojiPresentation) { return 2 }
+        let wide: [ClosedRange<UInt32>] = [0x1100...0x115F, 0x2E80...0x303E, 0x3041...0x33FF, 0x3400...0x4DBF,
+            0x4E00...0x9FFF, 0xA000...0xA4CF, 0xAC00...0xD7A3, 0xF900...0xFAFF, 0xFE30...0xFE6F,
+            0xFF00...0xFF60, 0xFFE0...0xFFE6, 0x20000...0x3FFFD]
+        return wide.contains { $0.contains(base.value) } ? 2 : 1
     }
 }
