@@ -370,7 +370,7 @@ struct ContentView: View {
         let notchSize = NotchUISize.stored(notchSizeRaw, legacyComfortable: false)
         let wing = QuotaPetArt.wingWidth(size: notchSize, notchHeight: vm.effectiveClosedNotchHeight, displayScale: displayScale)
         // The same album size as beside the pet.
-        let album = QuotaCompactMetrics.iconSize(height: vm.effectiveClosedNotchHeight, size: notchSize)
+        let album = QuotaPetArt.albumSize(size: notchSize, notchHeight: vm.effectiveClosedNotchHeight, displayScale: displayScale)
         return HStack(spacing: QuotaCompactMetrics.spacing) {
             Image(nsImage: musicManager.albumArt)
                 .resizable()

@@ -201,6 +201,7 @@ struct QuotaPinnedWings: View {
     /// Both wings take the same fixed width, with or without music (the same as music alone),
     /// so the notch never changes width and the camera stays centered.
     private var slot: CGFloat { QuotaPetArt.wingWidth(size: size, notchHeight: height, displayScale: displayScale) }
+    private var albumSide: CGFloat { QuotaPetArt.albumSize(size: size, notchHeight: height, displayScale: displayScale) }
     /// Tasks are shown only while task tracking is on and something is visible.
     private var taskStates: [AgentRunState] { activity.showAccessory ? activity.attention.states : [] }
     private var petTasks: QuotaPetTasks { QuotaPetTasks(activity.attention, enabled: activity.enabled) }
@@ -278,7 +279,7 @@ struct QuotaPinnedWings: View {
     private var album: some View {
         Image(nsImage: music.albumArt)
             .resizable().scaledToFill()
-            .frame(width: iconSize, height: iconSize)
+            .frame(width: albumSide, height: albumSide)
             .clipShape(RoundedRectangle(cornerRadius: MusicPlayerImageSizes.cornerRadiusInset.closed))
             .matchedGeometryEffect(id: "albumArt", in: albumArtNamespace)
             .auditNotchModule("music").auditNotchFrame("album")

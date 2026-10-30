@@ -302,7 +302,7 @@ struct QuotaPetSummary: View {
             Text(value.map { QuotaText.percent($0) + "%" } ?? "—")
                 .font(.system(size: fontSize, weight: .semibold, design: .rounded))
                 .monospacedDigit()
-                .lineLimit(1).minimumScaleFactor(0.7)
+                .lineLimit(1).minimumScaleFactor(0.6)
                 .foregroundStyle(ink)
             HStack(spacing: max(1.5, dot * 0.5)) {
                 GeometryReader { proxy in

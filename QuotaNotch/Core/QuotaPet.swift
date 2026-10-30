@@ -661,10 +661,15 @@ enum QuotaPetArt {
 
     /// How far each side of the closed notch reaches. It depends only on the notch and the size
     /// setting, never on what is showing, so the notch keeps one width with or without music.
-    /// Usually the pet's width; never narrower than the album or the shortest percentage.
+    /// The pet's width, or wider where the percentage ("100%") needs more room.
     static func wingWidth(size: NotchUISize, notchHeight: CGFloat, displayScale: CGFloat) -> CGFloat {
-        max(petWidth(size: size, notchHeight: notchHeight, displayScale: displayScale),
-            QuotaCompactMetrics.iconSize(height: notchHeight, size: size), 24)
+        max(petWidth(size: size, notchHeight: notchHeight, displayScale: displayScale), (size.percentFont * 2.4).rounded(.up))
+    }
+
+    /// The album cover beside the camera fills its side, up to 3 points short of the notch's
+    /// top and bottom.
+    static func albumSize(size: NotchUISize, notchHeight: CGFloat, displayScale: CGFloat) -> CGFloat {
+        max(0, min(wingWidth(size: size, notchHeight: notchHeight, displayScale: displayScale), notchHeight - 6))
     }
 
     /// The color of the pet's own gauge (tea, chest meter, water), for the bar beside it.
