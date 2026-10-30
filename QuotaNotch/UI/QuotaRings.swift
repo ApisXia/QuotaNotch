@@ -6,49 +6,62 @@ extension QuotaProvider {
     var accent: Color { brand.color }
 }
 
-/// Quota windows two to a page; with more than two, the pages scroll sideways (trackpad swipe)
-/// and dots below show where you are and jump between pages.
+/// Quota windows two to a page; with more than two, the pages scroll sideways (trackpad
+/// swipe). The page dots live in the tab row (`QuotaPageDots`), so every service's cards keep
+/// the same height whether it has one page or more.
 struct QuotaWindowPager<Card: View>: View {
     let windows: [QuotaWindow]
+    @Binding var page: Int?
     @ViewBuilder let card: (QuotaWindow) -> Card
-    @State private var page: Int? = 0
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         let pages = QuotaWindowPages.count(windows: windows.count)
         if pages <= 1 {
             row(0, padded: false)
         } else {
-            VStack(spacing: 5) {
-                ScrollView(.horizontal, showsIndicators: false) {
-                    LazyHStack(spacing: 0) {
-                        ForEach(0..<pages, id: \.self) { index in
-                            row(index, padded: true).containerRelativeFrame(.horizontal).id(index)
-                        }
-                    }
-                    .scrollTargetLayout()
-                }
-                .scrollTargetBehavior(.paging)
-                .scrollPosition(id: $page)
-                HStack(spacing: 5) {
+            ScrollView(.horizontal, showsIndicators: false) {
+                LazyHStack(spacing: 0) {
                     ForEach(0..<pages, id: \.self) { index in
-                        Circle().fill(.white.opacity(index == (page ?? 0) ? 0.85 : 0.25)).frame(width: 5, height: 5)
-                            .contentShape(Rectangle().inset(by: -4))
-                            .onTapGesture { withAnimation(reduceMotion ? nil : .smooth(duration: 0.25)) { page = index } }
-                            .accessibilityLabel(QuotaText.format("第 %@ 页", "\(index + 1)"))
+                        row(index, padded: true).containerRelativeFrame(.horizontal).id(index)
                     }
                 }
+                .scrollTargetLayout()
             }
+            .scrollTargetBehavior(.paging)
+            .scrollPosition(id: $page)
+            // Only as tall as the cards, like a single page; never stretched by the panel.
+            .fixedSize(horizontal: false, vertical: true)
         }
     }
 
-    /// One page; the last page keeps a lone card at half width so cards never change size.
+    /// One page, with room for the cards' outlines inside the scroll view's clip. The last page
+    /// keeps a lone card at half width so cards never change size.
     private func row(_ index: Int, padded: Bool) -> some View {
         let range = QuotaWindowPages.range(windows: windows.count, page: index)
         return HStack(spacing: 8) {
             ForEach(windows[range]) { window in card(window).frame(maxWidth: .infinity) }
             if padded && range.count == 1 { Color.clear.frame(maxWidth: .infinity) }
         }
+        .padding(.vertical, 2)
+    }
+}
+
+/// Small dots for the quota pages; click one to go there.
+struct QuotaPageDots: View {
+    let count: Int
+    @Binding var page: Int?
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    var body: some View {
+        HStack(spacing: 5) {
+            ForEach(0..<count, id: \.self) { index in
+                Circle().fill(.white.opacity(index == (page ?? 0) ? 0.85 : 0.25)).frame(width: 5, height: 5)
+                    .contentShape(Rectangle().inset(by: -4))
+                    .onTapGesture { withAnimation(reduceMotion ? nil : .smooth(duration: 0.25)) { page = index } }
+                    .accessibilityLabel(QuotaText.format("第 %@ 页", "\(index + 1)"))
+            }
+        }
+        .padding(.trailing, 6)
     }
 }
 
@@ -58,7 +71,11 @@ struct QuotaNotchView: View {
     @ObservedObject private var claude = ClaudeConnection.shared
     @AppStorage(NotchUISize.defaultsKey) private var sizeRaw = NotchUISize.current.rawValue
     @AppStorage(QuotaPetKind.defaultsKey) private var petRaw = QuotaPetKind.defaultKind.rawValue
+    @State private var windowPage: Int? = 0
     private var provider: QuotaProvider { store.selectedProvider }
+    private var windowPages: Int {
+        QuotaWindowPages.count(windows: store.results[provider]?.snapshot?.windows.count ?? 0)
+    }
 
     var body: some View {
         VStack(spacing: 6) {
@@ -74,9 +91,11 @@ struct QuotaNotchView: View {
                     ForEach(store.visibleProviders) { item in
                         QuotaProviderTab(title: item.title, brand: item.brand, selected: provider == item) {
                             store.selectedProvider = item
+                            windowPage = 0
                         }
                     }
                     Spacer(minLength: 0)
+                    if windowPages > 1 { QuotaPageDots(count: windowPages, page: $windowPage) }
                 }
                 .padding(2)
                 .background(.white.opacity(0.035), in: RoundedRectangle(cornerRadius: 9))
@@ -102,7 +121,7 @@ struct QuotaNotchView: View {
                     .buttonStyle(.bordered).controlSize(.small)
             }
         } else if !windows.isEmpty {
-            QuotaWindowPager(windows: windows) { window in windowCard(window, provider: provider) }
+            QuotaWindowPager(windows: windows, page: $windowPage) { window in windowCard(window, provider: provider) }
                 .id(provider)
         } else {
             HStack(spacing: 8) {
