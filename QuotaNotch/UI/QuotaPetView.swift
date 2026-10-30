@@ -93,10 +93,6 @@ struct QuotaPetView: View {
         let pixels = QuotaPetPixels(sprite: sprite, palette: palette, scale: scale)
             .saturation(mood == .stale ? 0 : 1)
             .opacity(mood == .stale ? 0.55 : 1)
-        // Some pets' bodies sit left of the 20-pixel grid's middle; shift them (and their effects)
-        // so the body, not the grid, is centered, and center soft rings on the body.
-        let visual = size == .widget ? QuotaPetArt.visualCenterX(kind) : nil
-        let shift = CGFloat((Double(sprite.width) - 1) / 2 - (visual ?? (Double(sprite.width) - 1) / 2)) * scale
         return Group {
             if contained {
                 // One fixed frame holds the effects and the pet; nothing draws outside it.
@@ -104,7 +100,7 @@ struct QuotaPetView: View {
                 ZStack {
                     if signal != .none {
                         QuotaPetEffectLayer(style: effect, signal: signal, sprite: sprite, scale: scale, color: theme, front: false,
-                                            rippleCell: rippleCell, rippleReach: rippleReach, marginOverride: margin, centerX: visual)
+                                            rippleCell: rippleCell, rippleReach: rippleReach, marginOverride: margin)
                     }
                     pixels
                     if signal != .none {
@@ -112,23 +108,20 @@ struct QuotaPetView: View {
                                             marginOverride: margin)
                     }
                 }
-                .offset(x: shift)
                 .frame(width: CGFloat(sprite.width) * scale + 2 * margin, height: CGFloat(sprite.height) * scale + 2 * margin)
                 .clipped()
             } else {
-                overflowing(pixels, sprite: sprite, signal: signal, theme: theme, centerX: visual)
-                    .offset(x: shift)
+                overflowing(pixels, sprite: sprite, signal: signal, theme: theme)
             }
         }
     }
 
-    private func overflowing(_ pixels: some View, sprite: QuotaPetSprite, signal: QuotaPetSignal, theme: Color,
-                             centerX: Double?) -> some View {
+    private func overflowing(_ pixels: some View, sprite: QuotaPetSprite, signal: QuotaPetSignal, theme: Color) -> some View {
         pixels
             .background {
                 if signal != .none {
                     QuotaPetEffectLayer(style: effect, signal: signal, sprite: sprite, scale: scale, color: theme, front: false,
-                                        rippleCell: rippleCell, rippleReach: rippleReach, centerX: centerX)
+                                        rippleCell: rippleCell, rippleReach: rippleReach)
                 }
             }
             .overlay {
@@ -153,8 +146,6 @@ struct QuotaPetEffectLayer: View {
     var rippleReach: CGFloat? = nil
     /// The space around the pet that the canvas covers; 8 sprite pixels unless contained.
     var marginOverride: CGFloat? = nil
-    /// The art's visual center column (pixel index, e.g. 7.5); soft rings center on it.
-    var centerX: Double? = nil
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private var margin: CGFloat { marginOverride ?? 8 * scale }
@@ -187,7 +178,7 @@ struct QuotaPetEffectLayer: View {
                 .enumerated().filter { $0.offset % 2 == 1 }.map(\.element) : []
         let outline = style == .pixel && signal == .waiting && front ? sprite.outlineCells : []
         return Canvas(rendersAsynchronously: false) { context, size in
-            let center = CGPoint(x: centerX.map { margin + CGFloat($0 + 0.5) * scale } ?? size.width / 2, y: size.height / 2)
+            let center = CGPoint(x: size.width / 2, y: size.height / 2)
             // Soft rings grow to 1.15 × reach; a contained canvas keeps them inside its frame.
             let natural = max(CGFloat(sprite.width), CGFloat(sprite.height)) * scale * 0.62
             let reach = marginOverride == nil ? natural : min(natural, min(size.width, size.height) / 2 / 1.15)

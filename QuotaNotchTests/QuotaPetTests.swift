@@ -22,23 +22,29 @@ final class QuotaPetTests: XCTestCase {
 
     /// Expected rows come from the approved design canvas.
     func testSpritesMatchTheApprovedDesign() {
-        XCTAssertEqual(QuotaPetArt.sprite(.bit, size: .widget, mood: .working, remaining: 64, frame: 1).rows, [
-            ".......o............", "......oLo...........", ".......o............", "..oooooooooooo......",
-            ".occcccccccccco.....", "occkkkkkkkkkkcco....", "ockkkkkkkkkkkkco....", "ockkeekkkkeekkco....",
-            "ockkkkkkekkkkkco....", "occkkkkkkkkkkcco....", ".occcccccccccco.....", "..oaaaaaaaaooo......",
-            "...akkkkkkaso.......", "..oakeekkacoao......", "..sssssssssso.......", "....oo....oo........"
+        XCTAssertEqual(QuotaPetArt.sprite(.bit, size: .widget, mood: .idle, remaining: 72).rows, [
+            ".........o..........", "........oLo.........", ".........o..........", "....oooooooooooo....",
+            "...occcccccccccco...", "..occkeekkkkeekcco..", "..ockkeekkkkeekkco..", "..ockkeekkkkeekkco..",
+            "..ockkkkkkkkkkkkco..", "..occkkkkeekkkkcco..", "...occcccccccccco...", "....oooooooooooo....",
+            "....osmmmmmmddso....", "...oasmmmmmmddsao...", "....osssssssssso....", "......oo....oo......"
+        ])
+        XCTAssertEqual(QuotaPetArt.sprite(.mochi, size: .widget, mood: .idle, remaining: 72, frame: 0).rows, [
+            "....................", "..oo.......oo.......", ".ogo.......opo......", ".oggooooooooppo.....",
+            ".oggcccccccccpo.....", "oggcweccccewcco.....", "occceecccceeccco....", "occccccppccccccS.S..",
+            "ocpccocoococcpSoS...", "occcccoccocccGGGGGG.", ".osccccccwcccGvvvvG.", "..oosccccccsoGFFFFGG",
+            ".o.osccccccsoGffffGG", "oco.scccccccsGffffGG", "oco.occocccocGffffG.", ".oooooooooooooGGGG.."
         ])
         XCTAssertEqual(QuotaPetArt.sprite(.mochi, size: .widget, mood: .refilled, remaining: 100, frame: 0).rows, [
-            "..................w.", "..oo.......oo....www", ".ogo.......opo....w.", ".oggooooooooppo.....",
-            ".oggcccccccccpo.....", "oggccccccccccco.w...", "occccocccccoccco....", "occcococccococco....",
-            "ocpcccccccccpcco....", "occccccococcccco....", ".oscccccoccccsofff..", "..oosccccccsoo......",
-            ".o.osccccccsoofffffo", "oco.scccccccsoBBBBBo", "oco.occocccoccoBBBo.", ".oooooooooooooo....."
+            ".................w..", "..oo.......oo...www.", ".ogo.......opo...w..", ".oggooooooooppo.....",
+            ".oggeccccccecpo.....", "oggccecccceccco.....", "occcecccccceccco.w..", "occccccppccccccS.S..",
+            "ocpccocoococcpSoS...", "occcccoTTocccGGGGGG.", ".osccccccwcccGFFFFG.", "..oosccccccsoGffffGG",
+            ".o.osccccccsoGffffGG", "oco.scccccccsGffffGG", "oco.occocccocGffffG.", ".oooooooooooooGGGG.."
         ])
         XCTAssertEqual(QuotaPetArt.sprite(.jelly, size: .widget, mood: .low, remaining: 12).rows, [
-            "....................", "......oooooo........", "....ooccccccoo..f...", "...occcwwcccccofff..",
-            "..occcwccccccccof...", "..occcccccccccco....", ".occcccccccccccco...", ".occcooccccooccco...",
-            ".occceecccceeccco...", ".ocpccccccccccpco...", "occcccccMMccccccco..", "occcccccccccccccco..",
-            "oFFFFFFFFFFFFFFFFo..", ".offffffffffffffo...", "..oooooooooooooo....", "...................."
+            "....................", ".......oooooo.......", ".....ooccccccoo..f..", "....occcwwcccccofff.",
+            "...occcwccccccccof..", "...occcccccccccco...", "..occcccccccccccco..", "..occcooccccooccco..",
+            "..occceecccceeccco..", "..ocpccccccccccpco..", ".occcccccMMccccccco.", ".occcccccccccccccco.",
+            ".oFFFFFFFFFFFFFFFFo.", "..offffffffffffffo..", "...oooooooooooooo...", "...................."
         ])
         XCTAssertEqual(QuotaPetArt.sprite(.ghost, size: .widget, mood: .idle, remaining: 72).rows, [
             "....................", "........oooo........", "......ooccccoo......", ".....hhccccccco.....",
@@ -151,7 +157,7 @@ final class QuotaPetTests: XCTestCase {
         func count(_ sprite: QuotaPetSprite, _ code: Character) -> Int {
             sprite.codes.filter { $0 == UInt8(ascii: code.unicodeScalars.first!) }.count
         }
-        XCTAssertEqual(count(QuotaPetArt.sprite(.bit, size: .widget, mood: .idle, remaining: 100), "m"), 12)
+        XCTAssertEqual(count(QuotaPetArt.sprite(.bit, size: .widget, mood: .idle, remaining: 100), "m"), 16)
         XCTAssertEqual(count(QuotaPetArt.sprite(.bit, size: .widget, mood: .idle, remaining: 1), "m"), 2)
         XCTAssertEqual(count(QuotaPetArt.sprite(.bit, size: .widget, mood: .empty, remaining: 0), "m"), 0)
         XCTAssertEqual(count(QuotaPetArt.sprite(.bit, size: .minimal, mood: .idle, remaining: 50), "m"), 7)
@@ -307,7 +313,7 @@ final class QuotaPetTests: XCTestCase {
     /// Faces sit exactly on the pet's center line.
     func testNewFacesAreSymmetric() {
         let face = Set("eoWMT".utf8)
-        for (kind, center, rows) in [(QuotaPetKind.ghost, 9.5, 5...9), (.sprout, 9.5, 10...13), (.jelly, 8.5, 5...10)] {
+        for (kind, center, rows) in [(QuotaPetKind.ghost, 9.5, 5...9), (.sprout, 9.5, 10...13), (.jelly, 9.5, 5...10), (.bit, 9.5, 5...9)] {
             for mood in [QuotaPetMood.idle, .working, .pacing, .stale, .empty, .refilled] {
                 let sprite = QuotaPetArt.sprite(kind, size: .widget, mood: mood, remaining: 72)
                 for y in rows {
@@ -335,13 +341,13 @@ final class QuotaPetTests: XCTestCase {
         XCTAssertEqual(sprite.upscaled(1), sprite)
     }
 
-    /// The visual center is where the body's outline is symmetric.
-    func testVisualCentersMatchTheArt() {
-        for kind in [QuotaPetKind.bit, .jelly, .ghost, .sprout] {
+    /// Every pet fills the grid around its middle, so effects center on the body.
+    func testPetsAreCenteredInTheGrid() {
+        for kind in pets {
             let sprite = QuotaPetArt.sprite(kind, size: .widget, mood: .stale, remaining: 64)
             let filled = (0..<sprite.width).filter { x in (0..<sprite.height).contains { sprite.isFilled(x, $0) } }
             let middle = Double(filled.first! + filled.last!) / 2
-            XCTAssertEqual(middle, QuotaPetArt.visualCenterX(kind), accuracy: 0.6, "\(kind)")
+            XCTAssertEqual(middle, 9.5, accuracy: 0.6, "\(kind)")
         }
     }
 }

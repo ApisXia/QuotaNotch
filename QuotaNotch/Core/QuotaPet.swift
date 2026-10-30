@@ -184,61 +184,23 @@ enum QuotaPetArt {
     private typealias Grid = [[UInt8]]
     private static let dot = UInt8(ascii: ".")
 
-    private static let base: [QuotaPetKind: [String]] = [
-        .mochi: [
-            "...................",
-            "..oo.......oo......",
-            ".ogo.......opo.....",
-            ".oggooooooooppo....",
-            ".oggcccccccccpo....",
-            "oggccccccccccco....",
-            "occcccccccccccco...",
-            "occcccccccccccco...",
-            "ocpcccccccccpcco...",
-            "occcccccccccccco...",
-            ".osccccccccccso....",
-            "..oosccccccsoo.....",
-            ".o.osccccccso......",
-            "oco.scccccccso.....",
-            "oco.occocccocco....",
-            ".oooooooooooooo...."
-        ],
-        .bit: [
-            ".......o..........",
-            "......oLo.........",
-            ".......o..........",
-            "..oooooooooooo....",
-            ".occcccccccccco...",
-            "occkkkkkkkkkkcco..",
-            "ockkkkkkkkkkkkco..",
-            "ockkkkkkkkkkkkco..",
-            "ockkkkkkkkkkkkco..",
-            "occkkkkkkkkkkcco..",
-            ".occcccccccccco...",
-            "..oooooooooooo....",
-            "...osddddddso.....",
-            "..oasddddddsao....",
-            "...osssssssso.....",
-            "....oo....oo......"
-        ],
-        .jelly: [
-            "..................",
-            "......oooooo......",
-            "....ooccccccoo....",
-            "...occcwwccccco...",
-            "..occcwcccccccco..",
-            "..occcccccccccco..",
-            ".occcccccccccccco.",
-            ".occcccccccccccco.",
-            ".occcccccccccccco.",
-            ".occcccccccccccco.",
-            "occcccccccccccccco",
-            "occcccccccccccccco",
-            "occcccccccccccccco",
-            ".occcccccccccccco.",
-            "..oooooooooooooo..",
-            ".................."
-        ]
+    private static let jellyBase: [String] = [
+        "..................",
+        "......oooooo......",
+        "....ooccccccoo....",
+        "...occcwwccccco...",
+        "..occcwcccccccco..",
+        "..occcccccccccco..",
+        ".occcccccccccccco.",
+        ".occcccccccccccco.",
+        ".occcccccccccccco.",
+        ".occcccccccccccco.",
+        "occcccccccccccccco",
+        "occcccccccccccccco",
+        "occcccccccccccccco",
+        ".occcccccccccccco.",
+        "..oooooooooooooo..",
+        ".................."
     ]
     private static let smallJelly = [
         "....oooooo....",
@@ -252,18 +214,10 @@ enum QuotaPetArt {
         ".occcccccccco.",
         "..oooooooooo.."
     ]
-    private static let eyePositions: [QuotaPetKind: [(Int, Int)]] = [
-        .mochi: [(4, 6), (10, 6)], .bit: [(4, 6), (10, 6)], .jelly: [(5, 7), (11, 7)]
-    ]
-    private static let mouthPositions: [QuotaPetKind: (Int, Int)] = [.mochi: (7, 9), .bit: (7, 8), .jelly: (8, 10)]
     private static let eyes: [String: [String]] = [
         "open": ["ee", "ee"], "closed": ["..", "oo"], "happy": [".o.", "o.o"],
         "wide": ["ee", "ee", "ee"], "tired": ["oo", "ee"], "down": ["..", "ee"]
     ]
-    private static let mouths: [String: [String]] = [
-        "smile": ["o.o", ".o."], "flat": ["ooo"], "open": [".o.", "omo", ".o."], "small": [".o."], "cat": ["o.o", ".o."]
-    ]
-
     private struct Pose { var expression: String; var mouth: String }
 
     private static func pose(_ kind: QuotaPetKind, _ mood: QuotaPetMood, blink: Bool) -> Pose {
@@ -283,6 +237,13 @@ enum QuotaPetArt {
         let q = min(100, max(0, remaining.isFinite ? remaining : 0))
         let grid: Grid
         switch (kind, size) {
+        case (.mochi, .widget): grid = mochi(mood: mood, remaining: q, frame: frame, blink: blink, props: true)
+        case (.bit, .widget): grid = bit(mood: mood, remaining: q, frame: frame, blink: blink, props: true)
+        case (.jelly, .widget):
+            var g = jellyBody(remaining: q)
+            jellyFace(&g, mood: mood, frame: frame, blink: blink)
+            // The slime is 18 pixels wide; one column in, it sits on the grid's middle.
+            grid = shiftedRight(g, by: 1)
         case (.ghost, .widget): grid = ghost(mood: mood, remaining: q, frame: frame, blink: blink)
         case (.ghost, .minimal): grid = crop(ghost(mood: mood, remaining: q, frame: 0, blink: blink), x: 2, y: 1, width: 16, height: 12)
         case (.sprout, .widget): grid = sprout(mood: mood, remaining: q, frame: frame, blink: blink)
@@ -290,72 +251,129 @@ enum QuotaPetArt {
             // The leaves' middle rows over the pot.
             let whole = sprout(mood: mood, remaining: q, frame: 0, blink: blink)
             grid = crop(Array(whole[3...6]) + Array(whole[8...15]), x: 2, y: 0, width: 16, height: 12)
-        case (.jelly, .widget):
-            var g = crop(full(kind, mood: mood, props: false, face: false, remaining: q, frame: frame, blink: blink), x: 1, y: 1, width: 20, height: 16)
-            jellyFace(&g, mood: mood, frame: frame, blink: blink)
-            grid = g
-        case (_, .widget): grid = crop(full(kind, mood: mood, props: true, remaining: q, frame: frame, blink: blink), x: 1, y: 1, width: 20, height: 16)
         case (_, .minimal): grid = minimal(kind, mood: mood, remaining: q, blink: blink)
         }
         return QuotaPetSprite(width: grid.first?.count ?? 0, height: grid.count, codes: grid.flatMap { $0 })
     }
 
-    private static func full(_ kind: QuotaPetKind, mood: QuotaPetMood, props: Bool, face: Bool = true,
-                             remaining q: Double, frame: Int, blink: Bool) -> Grid {
-        var grid = Grid(repeating: [UInt8](repeating: dot, count: 22), count: 18)
-        guard var rows = base[kind] else { return grid }
-        let ox = 1, oy = 1, even = frame % 2 == 0
-        switch kind {
-        case .jelly:
-            let level = 13 - Int((11 * q / 100).rounded())
-            rows = rows.enumerated().map { (y: Int, row: String) -> String in
-                guard y >= level else { return row }
-                let fill: Character = y == level ? "F" : "f"
-                return String(row.map { $0 == "c" || $0 == "w" ? fill : $0 })
+    /// The jelly's body, filled with water up to the quota, before its face.
+    private static func jellyBody(remaining q: Double) -> Grid {
+        let level = 13 - Int((11 * q / 100).rounded())
+        let rows = jellyBase.enumerated().map { (y: Int, row: String) -> String in
+            guard y >= level else { return row }
+            let fill: Character = y == level ? "F" : "f"
+            return String(row.map { $0 == "c" || $0 == "w" ? fill : $0 })
+        }
+        var g = blank()
+        paint(&g, rows, 0, 0)
+        return g
+    }
+
+    private static func shiftedRight(_ grid: Grid, by dx: Int) -> Grid {
+        grid.map { row in [UInt8](repeating: dot, count: dx) + row.prefix(row.count - dx) }
+    }
+
+    /// 麻薯: the cat with a big cup of tea beside her; the tea is the quota. Her face is
+    /// centered on column 7.5; with the cup the whole pet fills the grid.
+    private static func mochi(mood: QuotaPetMood, remaining q: Double, frame f: Int, blink: Bool, props: Bool) -> Grid {
+        var g = blank()
+        paint(&g, [
+            "...................", "..oo.......oo......", ".ogo.......opo.....", ".oggooooooooppo....",
+            ".oggcccccccccpo....", "oggccccccccccco....", "occcccccccccccco...", "occcccccccccccco...",
+            "occcccccccccccco...", "occcccccccccccco...", ".osccccccccccso....", "..oosccccccsoo.....",
+            ".o.osccccccso......", "oco.scccccccso.....", "oco.occocccocco....", ".oooooooooooooo...."
+        ], 0, 0)
+        let c = 7.5, closed = (mood == .idle && blink) || mood == .empty || mood == .stale
+        if closed { mirrored(&g, ["..", "oo"], 4, 5, center: c) } else {
+            switch mood {
+            case .refilled, .celebrate: mirrored(&g, ["e.", ".e", "e."], 4, 4, center: c)
+            case .working: mirrored(&g, ["..", "ee"], 4, 5, center: c)
+            case .needsYou, .pacing: mirrored(&g, ["we", "ee", "ee"], 4, 4, center: c)
+            case .low: mirrored(&g, ["oo", "ee"], 4, 5, center: c)
+            default: mirrored(&g, ["we", "ee"], 4, 5, center: c)
             }
-        case .bit:
-            var cells = Int((q / 100 * 6).rounded())
-            if q > 0 && cells == 0 { cells = 1 }
-            let meter = String(repeating: "m", count: cells) + String(repeating: "d", count: 6 - cells)
-            rows[12] = "...os" + meter + "so....."
-            rows[13] = "..oas" + meter + "sao...."
-        default: break
         }
-        paint(&grid, rows, ox, oy)
-        if kind == .mochi {
-            var fill = Int((q / 100 * 4).rounded())
-            if q > 0 && fill == 0 { fill = 1 }
-            paint(&grid, [fill >= 4 ? "..fff.." : (fill >= 3 ? "...f..." : ".......")], 14, 11)
-            paint(&grid, [".......", fill >= 2 ? "offfffo" : (fill >= 1 ? "o.fff.o" : "o.....o"), "oBBBBBo", ".oBBBo."], 14, 12)
-        }
-        // The jelly's widget face has its own drawing (jellyFace).
-        if face {
-            let look = Self.pose(kind, mood, blink: blink)
-            let eye = eyes[look.expression] ?? eyes["open"]!
-            let lift = look.expression == "wide" ? -1 : 0
-            for (x, y) in eyePositions[kind] ?? [] { paint(&grid, eye, ox + x, oy + y + lift) }
-            if let mouth = mouthPositions[kind] { paint(&grid, mouths[look.mouth] ?? mouths["cat"]!, ox + mouth.0, oy + mouth.1) }
-        }
-        if kind == .bit {
-            // Features on the screen glow instead of being outlined.
-            let o = UInt8(ascii: "o"), e = UInt8(ascii: "e")
-            for y in (oy + 5)...(oy + 9) { for x in (ox + 2)...(ox + 13) where grid[y][x] == o { grid[y][x] = e } }
-        }
-        guard props else { return grid }
+        centered(&g, ["pp"], center: c, 7)
+        g[8][2] = UInt8(ascii: "p"); g[8][13] = UInt8(ascii: "p")
+        // a ω mouth with one little fang
+        let mouth: [String]
         switch mood {
-        case .working:
-            paint(&grid, [".aaaaaaaa.", ".akkkkkka.", ".akeekka..", "ssssssssss"], ox + 2, oy + 11)
-            if even { paint(&grid, ["oc"], ox + 2, oy + 13) } else { paint(&grid, ["co"], ox + 10, oy + 13) }
-        case .low:
-            paint(&grid, [".d.", "ddd", ".d."], ox + 14, oy + 3)
-        case .refilled, .celebrate:
-            paint(&grid, even ? [".w.", "www", ".w."] : ["w.w", ".w.", "w.w"], 18, 1)
-            paint(&grid, even ? ["w"] : [".w.", "www", ".w."], 17, 6)
-        case .needsYou where kind != .jelly:
-            paint(&grid, [".oo.", "occo", "occo", ".oco", "..o."], ox + 15, oy + (even ? 1 : 0))
+        case .needsYou: mouth = ["..oo..", ".oMMo.", "..oo.."]
+        case .refilled, .celebrate: mouth = ["o.oo.o", ".oTTo.", "....w."]
+        case .low: mouth = [".oooo."]
+        case .working: mouth = ["o.oo.o", ".o..o."]
+        default: mouth = ["o.oo.o", ".o..o.", "....w."]
+        }
+        paint(&g, mouth, 5, 8)
+        if props {
+            switch mood {
+            case .working:
+                paint(&g, [".aaaaaaaa.", ".akkkkkka.", ".akeekka..", "ssssssssss"], 2, 10)
+                paint(&g, [f % 2 == 0 ? "oc" : "co"], f % 2 == 0 ? 2 : 10, 12)
+            case .needsYou: paint(&g, [".oo.", "occo", "occo", ".oco", "..o."], 15, f % 2 == 0 ? 1 : 0)
+            case .empty: sleepZ(&g, frame: f, 16, 0)
+            case .low: drop(&g, frame: f, 14, 2)
+            case .refilled, .celebrate: sparkle(&g, frame: f, 16, 0); paint(&g, ["w"], 17, 6)
+            default: break
+            }
+        }
+        // the cup: glass, with a handle on the right (the 16-point sprite shows her head only)
+        guard props else { return g }
+        for y in 9..<16 { for x in 14..<20 { g[y][x] = dot } }
+        paint(&g, ["GGGGGG.", "GvvvvG.", "GvvvvGG", "GvvvvGG", "GvvvvGG", "GvvvvG.", ".GGGG.."], 13, 9)
+        let tea = gaugeLevel(q, steps: 5)
+        for i in 0..<tea { for x in 14...17 { g[14 - i][x] = UInt8(ascii: i == tea - 1 ? "F" : "f") } }
+        if q > 0, mood != .needsYou, mood != .low {
+            paint(&g, f % 2 == 0 ? [".S.S", "S.S."] : ["S.S.", ".S.S"], 14, 7)
+        }
+        return g
+    }
+
+    /// 比特: a little robot with a big head; LED eyes on its screen and an 8-cell charge meter
+    /// on its belly. Drawn on 16 columns, then moved onto the grid's middle.
+    private static func bit(mood: QuotaPetMood, remaining q: Double, frame f: Int, blink: Bool, props: Bool) -> Grid {
+        var g = blank()
+        paint(&g, [
+            ".......o........", "......oLo.......", ".......o........", "..oooooooooooo..",
+            ".occcccccccccco.", "occkkkkkkkkkkcco", "ockkkkkkkkkkkkco", "ockkkkkkkkkkkkco",
+            "ockkkkkkkkkkkkco", "occkkkkkkkkkkcco", ".occcccccccccco.", "..oooooooooooo..",
+            "..os########so..", ".oas########sao.", "..osssssssssso..", "....oo....oo...."
+        ].map { $0.replacingOccurrences(of: "#", with: "d") }, 0, 0)
+        let cells = gaugeLevel(q, steps: 8)
+        for y in 12...13 { for i in 0..<8 { g[y][4 + i] = UInt8(ascii: i < cells ? "m" : "d") } }
+        let c = 7.5
+        switch mood {
+        case .idle where blink: mirrored(&g, ["ee"], 4, 7, center: c)
+        case .empty:
+            mirrored(&g, ["ee"], 4, 7, center: c)
+            paint(&g, ["DDD", ".D.", "DDD"], 10, 5)
+        case .stale, .low: mirrored(&g, ["ee"], 4, 7, center: c)
+        case .refilled, .celebrate: mirrored(&g, [".e.", "e.e"], 3, 5, center: c)
+        case .needsYou, .pacing: mirrored(&g, ["ee", "ee", "..", "ee"], 4, 5, center: c)
+        case .working: mirrored(&g, ["ee", "ee"], 4, 6, center: c)
+        case .idle: mirrored(&g, ["ee", "ee", "ee"], 4, 5, center: c)
+        }
+        switch mood {
+        case .refilled, .celebrate: centered(&g, ["e..e", ".ee."], center: c, 8)
+        case .low: centered(&g, ["eeee"], center: c, 9)
+        case .needsYou, .pacing, .empty, .stale: break
+        default: centered(&g, ["ee"], center: c, 9)
+        }
+        if props && mood == .working {
+            paint(&g, [".aaaaaaaa.", ".akkkkkka.", ".akeekka..", "ssssssssss"], 2, 10)
+            paint(&g, [f % 2 == 0 ? "oc" : "co"], f % 2 == 0 ? 2 : 10, 12)
+        }
+        g = shiftedRight(g, by: 2)
+        guard props else { return g }
+        // Marks beside the head, drawn after centering so they stay inside the grid.
+        switch mood {
+        case .needsYou:
+            paint(&g, [".oo.", "occo", "occo", ".oco", "..o."], 16, f % 2 == 0 ? 1 : 0)
+            if f % 2 == 0 { g[1][9] = UInt8(ascii: "X") }
+        case .refilled, .celebrate: sparkle(&g, frame: f, 17, 0)
         default: break
         }
-        return grid
+        return g
     }
 
     // MARK: Pets with their own faces (from the approved design canvas)
@@ -563,14 +581,14 @@ enum QuotaPetArt {
             paint(&grid, look.mouth == "open" ? ["oo", "oo"] : ["oo"], 6, 6)
             return grid
         case .mochi:
-            let head = full(kind, mood: mood, props: false, remaining: q, frame: 0, blink: blink)
-            let food = UInt8(ascii: "f"), bowl = UInt8(ascii: "B")
-            var grid = crop(head, x: 1, y: 2, width: 16, height: 10).map { $0.map { $0 == food || $0 == bowl ? dot : $0 } }
+            // her head, without the cup, over a tea meter
+            let head = mochi(mood: mood, remaining: q, frame: 0, blink: blink, props: false)
+            var grid = crop(head, x: 0, y: 1, width: 16, height: 10)
             grid.append([UInt8](repeating: dot, count: 16))
             grid.append(meter(width: 16, remaining: q, fill: UInt8(ascii: "f"), empty: UInt8(ascii: "x")))
             return grid
         case .bit:
-            var grid = crop(full(kind, mood: mood, props: false, remaining: q, frame: 0, blink: blink), x: 1, y: 2, width: 16, height: 11)
+            var grid = crop(bit(mood: mood, remaining: q, frame: 0, blink: blink, props: false), x: 2, y: 1, width: 16, height: 11)
             grid.append(meter(width: 16, remaining: q, fill: UInt8(ascii: "m"), empty: UInt8(ascii: "d")))
             return grid
         case .ghost, .sprout:
@@ -610,17 +628,6 @@ enum QuotaPetArt {
 
     static func brandColor(_ provider: QuotaProvider) -> UInt32 { provider == .claude ? 0xE39B7A : 0x9ED4BF }
 
-    /// The column the pet's body is centered on in its 20-pixel widget sprite. Mochi and Bit
-    /// are 16 pixels wide (Mochi's bowl sits beside her), Jelly 18; the newer pets use the
-    /// grid's middle.
-    static func visualCenterX(_ kind: QuotaPetKind) -> Double {
-        switch kind {
-        case .mochi, .bit: return 7.5
-        case .jelly: return 8.5
-        case .ghost, .sprout: return 9.5
-        }
-    }
-
     /// Each pet's own color for task effects.
     static func themeColor(_ kind: QuotaPetKind) -> UInt32 {
         switch kind {
@@ -644,7 +651,7 @@ enum QuotaPetArt {
         }
     }
 
-    /// The color of the pet's own gauge (food, chest meter, water), for the bar beside it.
+    /// The color of the pet's own gauge (tea, chest meter, water), for the bar beside it.
     static func gaugeColor(_ kind: QuotaPetKind, provider: QuotaProvider, tint: QuotaPetTint, remaining: Double) -> UInt32 {
         let palette = palette(kind, provider: provider, tint: tint, remaining: remaining)
         let warning: UInt32? = remaining < 20 ? 0xFF5A4F : (remaining < 35 ? 0xF4D35E : nil)
@@ -662,10 +669,11 @@ enum QuotaPetArt {
         switch kind {
         case .mochi:
             colors = ["o": 0x3B2C27, "c": 0xFFF4E4, "s": 0xEFD6B4, "g": 0x8F8782, "p": 0xF4A49B, "e": 0x2A1F1C, "w": 0xFFFFFF,
-                      "m": 0xC96F66, "B": 0x4A6DBB, "f": 0xF0B85A, "k": 0x2E3A52, "x": 0x3A3226, "a": 0x9AA6B8, "d": 0x5B7FE0]
+                      "f": 0xF0B85A, "F": 0xF7D08A, "G": 0xC9D3E2, "v": 0x262C3A, "S": 0x9AA3B2, "k": 0x2E3A52, "x": 0x3A3226,
+                      "a": 0x9AA6B8, "d": 0x7AA2FF, "M": 0x5A2E2E, "T": 0xFF7A8A, "Z": 0xCFD8E0]
         case .bit:
-            colors = ["o": 0x232A36, "c": 0xE9EEF5, "s": 0xC3CCD9, "k": 0x14202E, "e": 0x7FF0E0, "w": 0xFFFFFF, "p": 0xFF9F8F,
-                      "a": 0x9AA6B8, "m": 0x5AD19A, "d": 0x3A4658, "L": 0x5AD19A]
+            colors = ["o": 0x232A36, "c": 0xE9EEF5, "s": 0xC3CCD9, "k": 0x14202E, "e": 0x7FF0E0, "w": 0xFFFFFF,
+                      "a": 0x9AA6B8, "m": 0x5AD19A, "d": 0x3A4658, "L": 0x5AD19A, "D": 0x3F8A86, "X": 0xFF9F0A]
         case .jelly:
             colors = ["o": 0x2D3A64, "c": 0xDFE8FF, "s": 0xC4D2FB, "e": 0x1D2547, "w": 0xFFFFFF, "p": 0xFFA3B8, "f": 0x7AA2FF,
                       "F": 0xA9C3FF, "d": 0x5B7FE0, "a": 0x9AA6B8, "k": 0x2E3A52, "m": 0xC96F66,
@@ -684,7 +692,7 @@ enum QuotaPetArt {
             switch kind {
             case .bit: colors["e"] = brand
             case .jelly: colors["f"] = brand; colors["F"] = lighten(brand)
-            case .mochi: colors["B"] = brand
+            case .mochi: colors["f"] = brand; colors["F"] = lighten(brand)
             case .ghost: colors["p"] = brand
             case .sprout: colors["m"] = brand
             }
@@ -693,7 +701,7 @@ enum QuotaPetArt {
             let light = warning ?? (tint == .service ? brand : 0x5AD19A)
             colors["L"] = light; colors["m"] = light
         }
-        if kind == .jelly, let warning { colors["f"] = warning; colors["F"] = lighten(warning) }
+        if kind == .jelly || kind == .mochi, let warning { colors["f"] = warning; colors["F"] = lighten(warning) }
         if kind == .sprout, let warning { colors["m"] = warning }
         if kind == .ghost {
             // The ghost fades as quota is used; the notch behind it is black, so fading is
