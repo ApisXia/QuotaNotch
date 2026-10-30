@@ -200,8 +200,9 @@ struct QuotaPinnedWings: View {
     private var quotaWidth: CGFloat { petScale > 1 ? 20 * petScale : iconSize }
     /// The percentage cell also carries the quota bar and up to three task dots.
     private var percentWidth: CGFloat { max(iconSize, (size.percentFont * 3).rounded()) }
-    /// Both wings take the same slot so the camera stays centered.
-    private var slot: CGFloat { showsMusic ? quotaWidth : max(quotaWidth, percentWidth) }
+    /// Both wings take the same slot so the camera stays centered, and the slot doesn't
+    /// change when music starts or stops, so the notch keeps its width.
+    private var slot: CGFloat { max(quotaWidth, percentWidth) }
     /// Tasks are shown only while task tracking is on and something is visible.
     private var taskStates: [AgentRunState] { activity.showAccessory ? activity.attention.states : [] }
     private var petTasks: QuotaPetTasks { QuotaPetTasks(activity.attention, enabled: activity.enabled) }
