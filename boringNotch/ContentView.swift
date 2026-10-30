@@ -224,6 +224,21 @@ struct ContentView: View {
         return inner / max(0.5, panelScale)
     }
 
+    // Opening: the closed wings fold in toward the camera, then the panel's content appears.
+    // Closing: the panel's content goes first, then the wings unfold from the camera.
+    private var closedTransition: AnyTransition {
+        guard !reduceMotion else { return .opacity }
+        return .asymmetric(insertion: .notchFold.animation(.smooth(duration: 0.26).delay(0.16)),
+                           removal: .notchFold.animation(.easeIn(duration: 0.14)))
+    }
+    private var openTransition: AnyTransition {
+        guard !reduceMotion else { return .opacity }
+        return .asymmetric(insertion: AnyTransition.scale(scale: 0.92, anchor: .top).combined(with: .opacity)
+                            .animation(.smooth(duration: 0.3).delay(0.12)),
+                           removal: AnyTransition.scale(scale: 0.96, anchor: .top).combined(with: .opacity)
+                            .animation(.easeIn(duration: 0.12)))
+    }
+
     @ViewBuilder
     func NotchLayout() -> some View {
         // Centered, so the closed wings fade out in place over the camera while the shell widens.
@@ -235,9 +250,11 @@ struct ContentView: View {
                         closedAccessoryContent
                     }
                     .animation(reduceMotion ? nil : .smooth(duration: 0.3), value: quotaStore.peek)
+                    .transition(closedTransition)
                 } else {
                     BoringHeader()
                         .frame(width: openContentWidth, alignment: .leading)
+                        .transition(openTransition)
                 }
             }
             .zIndex(2)
@@ -260,11 +277,7 @@ struct ContentView: View {
                     }
                 }
                 .frame(width: openContentWidth, alignment: .leading)
-                .transition(
-                    reduceMotion ? .identity : .scale(scale: 0.8, anchor: .top)
-                    .combined(with: .opacity)
-                    .animation(.smooth(duration: 0.35))
-                )
+                .transition(openTransition)
                 .zIndex(1)
                 .allowsHitTesting(vm.notchState == .open)
             }
@@ -547,5 +560,23 @@ struct NotchPanelScale: ViewModifier {
             .frame(width: active ? inner.width / scale : nil, height: active ? inner.height / scale : nil, alignment: .top)
             .scaleEffect(active ? scale : 1, anchor: .top)
             .frame(width: active ? inner.width : nil, height: active ? inner.height : nil, alignment: .top)
+    }
+}
+
+/// The closed wings folding toward the camera: squeezed horizontally around the center,
+/// a little flatter, and faded.
+private struct NotchFold: ViewModifier {
+    let folded: Bool
+    func body(content: Content) -> some View {
+        content
+            .scaleEffect(x: folded ? 0.25 : 1, y: folded ? 0.7 : 1, anchor: .center)
+            .opacity(folded ? 0 : 1)
+            .blur(radius: folded ? 1.5 : 0)
+    }
+}
+
+extension AnyTransition {
+    static var notchFold: AnyTransition {
+        .modifier(active: NotchFold(folded: true), identity: NotchFold(folded: false))
     }
 }
