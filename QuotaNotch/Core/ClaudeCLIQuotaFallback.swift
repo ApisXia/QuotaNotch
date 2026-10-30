@@ -18,13 +18,15 @@ struct ClaudeCLIQuotaFallback: ClaudeQuotaFallback {
     func fetch(now: Date) async throws -> QuotaSnapshot {
         #if os(macOS)
         let cancellation = ClaudeCLICancellation()
-        return try await withTaskCancellationHandler {
-            try await withCheckedThrowingContinuation { continuation in
+        let result: Result<QuotaSnapshot, Error> = await withTaskCancellationHandler {
+            await withCheckedContinuation { continuation in
                 DispatchQueue.global(qos: .utility).async {
-                    continuation.resume(with: Result { try run(now: now, cancellation: cancellation) })
+                    continuation.resume(returning: Result { try run(now: now, cancellation: cancellation) })
                 }
             }
         } onCancel: { cancellation.cancel() }
+        ClaudeUsageLog.record(result, screen: cancellation.screen, home: home)
+        return try result.get()
         #else
         throw QuotaFailure.notSignedIn
         #endif
@@ -93,10 +95,11 @@ struct ClaudeCLIQuotaFallback: ClaudeQuotaFallback {
                 output.append(contentsOf: bytes.prefix(count))
                 guard output.count <= 512 * 1024 else { throw QuotaFailure.invalidResponse }
                 let screen = ClaudeUsageScreen.render(String(decoding: output, as: UTF8.self))
+                cancellation.screen = screen
                 let lower = screen.lowercased()
                 if let failure = ClaudeUsageScreen.failure(in: screen, now: now) { throw failure }
                 // Acknowledge only the dedicated empty probe directory's trust prompt, once.
-                if !acceptedTrust && (lower.contains("yes, i trust this folder") || lower.contains("trust this workspace")) {
+                if !acceptedTrust && ClaudeUsageScreen.asksForTrust(lower) {
                     _ = "\r".withCString { write(master, $0, 1) }
                     acceptedTrust = true
                 }
@@ -115,8 +118,44 @@ struct ClaudeCLIQuotaFallback: ClaudeQuotaFallback {
 private final class ClaudeCLICancellation: @unchecked Sendable {
     private let lock = NSLock()
     private var cancelled = false
+    private var lastScreen = ""
     var isCancelled: Bool { lock.lock(); defer { lock.unlock() }; return cancelled }
     func cancel() { lock.lock(); defer { lock.unlock() }; cancelled = true }
+    /// The last rendered screen, for the log when a run fails.
+    var screen: String {
+        get { lock.lock(); defer { lock.unlock() }; return lastScreen }
+        set { lock.lock(); defer { lock.unlock() }; lastScreen = newValue }
+    }
+}
+
+/// One line per /usage run in ~/Library/Logs/QuotaNotch/claude-usage.log, with the screen
+/// when it failed, so a silent background failure can be diagnosed. The screen shows only
+/// usage numbers; nothing secret is written. The file is cut back when it grows past 256 KB.
+enum ClaudeUsageLog {
+    static func record(_ result: Result<QuotaSnapshot, Error>, screen: String, home: URL) {
+        #if os(macOS) && !SETTINGS_PREVIEW
+        let directory = home.appendingPathComponent("Library/Logs/QuotaNotch", isDirectory: true)
+        let url = directory.appendingPathComponent("claude-usage.log")
+        let stamp = ISO8601DateFormatter().string(from: Date())
+        var entry: String
+        switch result {
+        case .success(let snapshot):
+            entry = "\(stamp) ok " + snapshot.windows.map { "\($0.id)=\(Int($0.remainingPercent.rounded()))% left" }
+                .joined(separator: " ") + "\n"
+        case .failure(let error):
+            entry = "\(stamp) failed \(error)\n--- screen ---\n\(String(screen.suffix(4000)))\n--- end ---\n"
+        }
+        try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        if let size = (try? FileManager.default.attributesOfItem(atPath: url.path))?[.size] as? Int, size > 256 * 1024 {
+            try? FileManager.default.removeItem(at: url)
+        }
+        if let handle = try? FileHandle(forWritingTo: url) {
+            handle.seekToEndOfFile(); handle.write(Data(entry.utf8)); try? handle.close()
+        } else {
+            try? Data(entry.utf8).write(to: url)
+        }
+        #endif
+    }
 }
 
 enum ClaudeUsageScreen {
@@ -126,13 +165,12 @@ enum ClaudeUsageScreen {
         guard !lower.contains("loading usage"), !lower.contains("failed to load usage") else {
             throw QuotaFailure.invalidResponse
         }
-        let labels = ["current session", "current week (all models)", "current week (sonnet only)",
-                      "current week (sonnet)", "current week (opus)"]
         let lines = screen.components(separatedBy: .newlines)
         let regex = try NSRegularExpression(pattern: #"(?<![\d.\-])(\d{1,3}(?:\.\d+)?)\s*%\s*(used|left|remaining)\b"#, options: .caseInsensitive)
         var windows: [String: QuotaWindow] = [:]
         for (index, line) in lines.enumerated() {
-            guard let label = labels.first(where: { line.lowercased().contains($0) }) else { continue }
+            guard let named = window(for: line) else { continue }
+            let (id, title) = named
             var section = [line]
             for next in lines.dropFirst(index + 1).prefix(10) {
                 if next.lowercased().contains("current ") || next.lowercased().contains("extra usage") { break }
@@ -143,16 +181,69 @@ enum ClaudeUsageScreen {
                   let range = Range(match.range(at: 1), in: text), let percentage = Double(text[range]),
                   (0...100).contains(percentage), let kind = Range(match.range(at: 2), in: text) else { continue }
             let used = text[kind].lowercased() == "used"
-            let id = label == labels[0] ? "five_hour" : (label == labels[1] ? "seven_day" :
-                (label.contains("sonnet") ? "seven_day_sonnet" : "seven_day_opus"))
-            let title = id == "five_hour" ? "5 小时" : (id == "seven_day" ? "7 天" :
-                (id == "seven_day_sonnet" ? "Sonnet · 7 天" : "Opus · 7 天"))
             windows[id] = QuotaWindow(id: id, title: title, remainingPercent: used ? 100 - percentage : percentage,
-                resetsAt: relativeReset(text, now: now))
+                resetsAt: relativeReset(text, now: now) ?? absoluteReset(text, now: now))
         }
         guard windows["five_hour"] != nil else { throw QuotaFailure.invalidResponse }
         let order = ["five_hour", "seven_day", "seven_day_sonnet", "seven_day_opus"]
-        return QuotaSnapshot(windows: order.compactMap { windows[$0] }, fetchedAt: now)
+        let others = windows.keys.filter { !order.contains($0) }.sorted()
+        return QuotaSnapshot(windows: (order + others).compactMap { windows[$0] }, fetchedAt: now)
+    }
+
+    /// The window a section heading names: the session, the whole week, or one model's week
+    /// ("Current week (Sonnet only)", "Current week (Fable)").
+    private static func window(for line: String) -> (id: String, title: String)? {
+        let lower = line.lowercased()
+        if lower.contains("current session") { return ("five_hour", "5 小时") }
+        if lower.contains("current week (all models)") { return ("seven_day", "7 天") }
+        guard let open = lower.range(of: "current week ("), let close = lower[open.upperBound...].firstIndex(of: ")") else { return nil }
+        let name = line[open.upperBound..<close].replacingOccurrences(of: " only", with: "", options: .caseInsensitive)
+            .trimmingCharacters(in: .whitespaces)
+        if name.lowercased().contains("sonnet") { return ("seven_day_sonnet", "Sonnet · 7 天") }
+        if name.lowercased().contains("opus") { return ("seven_day_opus", "Opus · 7 天") }
+        let key = name.lowercased().filter { $0.isLetter || $0.isNumber }
+        guard !key.isEmpty else { return nil }
+        return ("seven_day_" + key, "\(name) · 7 天")
+    }
+
+    /// The first-run question about trusting the probe's own empty folder, in its wordings.
+    static func asksForTrust(_ lower: String) -> Bool {
+        ["yes, i trust this folder", "trust this workspace", "do you trust the files", "trust the files in this folder",
+         "yes, proceed"].contains { lower.contains($0) }
+    }
+
+    /// "Resets 2:10am (Asia/Tokyo)" or "Resets Nov 6 at 11pm (Asia/Tokyo)": the next such
+    /// moment in that time zone (or the Mac's own when none is given).
+    static func absoluteReset(_ text: String, now: Date) -> Date? {
+        guard let regex = try? NSRegularExpression(pattern: #"resets\s+(?!in\b)(?:on\s+)?([^\n(]*?)\s*(?:\(([^)\n]+)\))?\s*$"#,
+                                                   options: [.caseInsensitive, .anchorsMatchLines]),
+              let match = regex.firstMatch(in: text, range: NSRange(text.startIndex..., in: text)),
+              let whenRange = Range(match.range(at: 1), in: text) else { return nil }
+        let when = text[whenRange].trimmingCharacters(in: .whitespaces)
+            .replacingOccurrences(of: #"(?<=\d)\s*[aA][mM]\b"#, with: "AM", options: .regularExpression)
+            .replacingOccurrences(of: #"(?<=\d)\s*[pP][mM]\b"#, with: "PM", options: .regularExpression)
+        let zone = Range(match.range(at: 2), in: text).flatMap { TimeZone(identifier: String(text[$0])) } ?? .current
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = zone
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.timeZone = zone
+        for format in ["h:mma", "ha", "MMM d 'at' h:mma", "MMM d 'at' ha", "MMM d, h:mma", "MMM d, ha", "MMM d"] {
+            formatter.dateFormat = format
+            guard let parsed = formatter.date(from: when) else { continue }
+            let parts = calendar.dateComponents([.month, .day, .hour, .minute], from: parsed)
+            let today = calendar.dateComponents([.year, .month, .day], from: now)
+            var target = DateComponents(year: today.year, month: today.month, day: today.day,
+                                        hour: parts.hour, minute: parts.minute)
+            if format.hasPrefix("MMM") { target.month = parts.month; target.day = parts.day }
+            guard var date = calendar.date(from: target) else { return nil }
+            // A time alone is the next one; a date without a year is this year's, or next year's once past.
+            if date < now.addingTimeInterval(-60) {
+                date = calendar.date(byAdding: format.hasPrefix("MMM") ? .year : .day, value: 1, to: date) ?? date
+            }
+            return date
+        }
+        return nil
     }
 
     static func failure(in screen: String, now: Date) -> QuotaFailure? {

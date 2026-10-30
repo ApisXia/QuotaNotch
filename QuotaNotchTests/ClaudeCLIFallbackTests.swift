@@ -12,6 +12,32 @@ final class ClaudeUsageScreenTests: XCTestCase {
         XCTAssertNil(result.windows[1].resetsAt)
     }
 
+    /// The /usage screen of current Claude Code versions: clock times with a time zone and a
+    /// weekly window per model.
+    func testAbsoluteResetsAndModelWeeks() throws {
+        let screen = """
+        Current session
+        ██████████████████          67% used
+        Resets 2:10am (Asia/Tokyo)
+
+        Current week (all models)
+        ██                          5% used
+        Resets Nov 6 at 11pm (Asia/Tokyo)
+
+        Current week (Fable)
+        █                           2% used
+        Resets Nov 6 at 10:59pm (Asia/Tokyo)
+        """
+        let result = try ClaudeUsageScreen.parse(screen, now: instant)
+        XCTAssertEqual(result.windows.map(\.id), ["five_hour", "seven_day", "seven_day_fable"])
+        XCTAssertEqual(result.windows.map(\.remainingPercent), [33, 95, 98])
+        XCTAssertEqual(result.windows.map(\.title).last, "Fable · 7 天")
+        XCTAssertEqual(result.windows[0].resetsAt, instant.addingTimeInterval(5800))
+        XCTAssertEqual(result.windows[1].resetsAt, instant.addingTimeInterval(4_573_600))
+        XCTAssertEqual(result.windows[2].resetsAt, instant.addingTimeInterval(4_573_540))
+        XCTAssertTrue(ClaudeUsageScreen.asksForTrust("do you trust the files in this folder?"))
+    }
+
     func testPromotionalRateLimitTextIsNotAnError() throws {
         let result = try ClaudeUsageScreen.parse("Rate limits are 2x higher this week\nCurrent session\n25% used", now: instant)
         XCTAssertEqual(result.windows.first?.remainingPercent, 75)

@@ -72,6 +72,8 @@ actor QuotaClient {
     /// `probeSpacing`, and otherwise when the reading is older than `idleProbeAge`.
     static let probeSpacing: TimeInterval = 180
     static let idleProbeAge: TimeInterval = 1800
+    /// After a failed /usage run (for example no network), wait this long before the next.
+    static let failedProbeSpacing: TimeInterval = 600
 
     init(credentials: any QuotaCredentialSource = LocalQuotaCredentials(),
          transport: any QuotaTransport = QuotaURLTransport(),
@@ -110,7 +112,7 @@ actor QuotaClient {
                     reading.map { now.timeIntervalSince($0.fetchedAt) > 600 } ?? true
                 }
             } else if claudeConnected(),
-                      now.timeIntervalSince(lastProbe) >= (lastProbeFailed ? Self.idleProbeAge : Self.probeSpacing) {
+                      now.timeIntervalSince(lastProbe) >= (lastProbeFailed ? Self.failedProbeSpacing : Self.probeSpacing) {
                 let idle = Self.idleProbeAge
                 probe = ClaudeProbe(fallback: fallback) { reading in
                     guard let reading else { return true }
