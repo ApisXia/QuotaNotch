@@ -610,6 +610,17 @@ enum QuotaPetArt {
 
     static func brandColor(_ provider: QuotaProvider) -> UInt32 { provider == .claude ? 0xE39B7A : 0x9ED4BF }
 
+    /// The column the pet's body is centered on in its 20-pixel widget sprite. Mochi and Bit
+    /// are 16 pixels wide (Mochi's bowl sits beside her), Jelly 18; the newer pets use the
+    /// grid's middle.
+    static func visualCenterX(_ kind: QuotaPetKind) -> Double {
+        switch kind {
+        case .mochi, .bit: return 7.5
+        case .jelly: return 8.5
+        case .ghost, .sprout: return 9.5
+        }
+    }
+
     /// Each pet's own color for task effects.
     static func themeColor(_ kind: QuotaPetKind) -> UInt32 {
         switch kind {

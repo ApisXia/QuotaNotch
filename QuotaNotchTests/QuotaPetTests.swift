@@ -334,4 +334,14 @@ final class QuotaPetTests: XCTestCase {
         } }
         XCTAssertEqual(sprite.upscaled(1), sprite)
     }
+
+    /// The visual center is where the body's outline is symmetric.
+    func testVisualCentersMatchTheArt() {
+        for kind in [QuotaPetKind.bit, .jelly, .ghost, .sprout] {
+            let sprite = QuotaPetArt.sprite(kind, size: .widget, mood: .stale, remaining: 64)
+            let filled = (0..<sprite.width).filter { x in (0..<sprite.height).contains { sprite.isFilled(x, $0) } }
+            let middle = Double(filled.first! + filled.last!) / 2
+            XCTAssertEqual(middle, QuotaPetArt.visualCenterX(kind), accuracy: 0.6, "\(kind)")
+        }
+    }
 }
