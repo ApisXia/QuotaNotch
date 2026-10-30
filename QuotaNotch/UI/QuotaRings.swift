@@ -97,6 +97,16 @@ struct QuotaNotchView: View {
                     Spacer(minLength: 0)
                     if windowPages > 1 { QuotaPageDots(count: windowPages, page: $windowPage) }
                 }
+                // Swiping sideways over the service tabs switches the service, like the header's pages.
+                .background {
+                    NotchTabSwipeRegion { step in
+                        let services = store.visibleProviders
+                        guard let current = services.firstIndex(of: provider) else { return }
+                        let next = TabSwipeNavigation.destination(current: current, step: step, count: services.count)
+                        guard next != current else { return }
+                        withAnimation(.smooth(duration: 0.24)) { store.selectedProvider = services[next]; windowPage = 0 }
+                    }
+                }
                 .padding(2)
                 .background(.white.opacity(0.035), in: RoundedRectangle(cornerRadius: 9))
                 providerRow(provider)

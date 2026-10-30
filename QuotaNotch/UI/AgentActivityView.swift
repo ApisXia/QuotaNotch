@@ -34,6 +34,16 @@ struct AgentNotchView: View {
                 .accessibilityIdentifier("task-mark-all-read")
                 .help(AgentText.t("将所有项目当前未读任务标为已读，保留任务历史和运行状态。", "Mark current unread tasks across all projects as read. Keep history and running states."))
             }.frame(height: 22)
+            // Swiping sideways over the filter tabs moves between them, like the header's pages.
+            .background {
+                NotchTabSwipeRegion { step in
+                    let filters = AgentFilter.allCases
+                    guard let current = filters.firstIndex(of: store.filter) else { return }
+                    let next = TabSwipeNavigation.destination(current: current, step: step, count: filters.count)
+                    guard next != current else { return }
+                    withAnimation(reduced ? nil : .smooth(duration: 0.24)) { store.selectNotchFilter(filters[next]) }
+                }
+            }
             if tasks.isEmpty {
                 Text(store.enabled ? AgentText.t("当前筛选下没有任务。", "No tasks match this filter.") : AgentText.t("任务监控已暂停。", "Task monitoring is paused."))
                     .font(.callout).foregroundStyle(.secondary).frame(maxWidth: .infinity, maxHeight: .infinity)
