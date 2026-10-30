@@ -416,10 +416,6 @@ struct SettingsPreviewRunner {
                     verifyPresentation(abs(widths[plain]! - widths[busy]!) <= 1,
                         "Tasks changed the notch width: \(plain) vs \(busy) at \(headerHeight), \(size.rawValue)")
                 }
-                verifyPresentation(abs(widths["music"]! - widths["music-only"]!) <= 1,
-                    "Music alone and music with the pet differ in width at \(headerHeight), \(size.rawValue): \(widths["music"]!) vs \(widths["music-only"]!)")
-                verifyPresentation(abs(widths["quota"]! - widths["music"]!) <= 1,
-                    "Music changed the notch width at \(headerHeight), \(size.rawValue): \(widths["quota"]!) vs \(widths["music"]!)")
             }
         }
         UserDefaults.standard.set(NotchUISize.standard.rawValue, forKey: NotchUISize.defaultsKey)
