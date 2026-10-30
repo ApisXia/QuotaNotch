@@ -56,19 +56,20 @@ struct NotchPetColumn: View {
                         pet(fixed: focused.map { Self.mood($0.state) }, signal: focused.map { Self.signal($0.state) } ?? .none)
                     }
                 }
-                .frame(width: 80, height: 64)
-                .padding(.top, 8)
-                Text(lines.status)
-                    .font(.system(size: 11, weight: .semibold)).foregroundStyle(lines.color)
-                    .lineLimit(1).minimumScaleFactor(0.7)
-                    .frame(maxWidth: .infinity)
-                Text(lines.detail)
-                    .font(.system(size: 9)).foregroundStyle(.secondary)
-                    .multilineTextAlignment(.center)
-                    .lineLimit(2).minimumScaleFactor(0.8)
-                    .frame(maxWidth: .infinity, minHeight: 24, maxHeight: 24, alignment: .top)
+                .frame(width: 104, height: 88)
+                Group {
+                    Text(lines.status)
+                        .font(.system(size: 11, weight: .semibold)).foregroundStyle(lines.color)
+                        .lineLimit(1).minimumScaleFactor(0.7)
+                        .frame(maxWidth: .infinity)
+                    Text(lines.detail)
+                        .font(.system(size: 9)).foregroundStyle(.secondary)
+                        .multilineTextAlignment(.center)
+                        .lineLimit(2).minimumScaleFactor(0.8)
+                        .frame(maxWidth: .infinity, minHeight: 24, maxHeight: 24, alignment: .top)
+                }
+                .padding(.horizontal, 5)
             }
-            .padding(.horizontal, 5)
             .frame(width: Self.width)
             .frame(maxHeight: .infinity, alignment: .top)
             .background(.white.opacity(0.045))
@@ -87,8 +88,9 @@ struct NotchPetColumn: View {
                      stale: pin == nil || store.isStale(provider), scale: 4,
                      tasks: QuotaPetTasks(activity.attention, enabled: activity.enabled),
                      fixedMood: fixed, fixedSignal: signal,
-                     // 12pt of room on each side: half-size ripple pixels, six rings out.
-                     rippleCell: 2, rippleReach: 12)
+                     // 12pt of room on each side: half-size ripple pixels, six rings out, all
+                     // drawn inside the pet's own frame.
+                     rippleCell: 2, rippleReach: 12, contained: true)
     }
 
     private func openWaiting() {

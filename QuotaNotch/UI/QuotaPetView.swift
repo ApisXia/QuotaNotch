@@ -44,6 +44,9 @@ struct QuotaPetView: View {
     /// panel's column) uses finer, closer ripples so every ring fits.
     var rippleCell: CGFloat? = nil
     var rippleReach: CGFloat? = nil
+    /// Draws the effects inside the view's own frame (the pet plus `rippleReach` on every side)
+    /// instead of letting them spill past it. Used where the pet sits in a clipped container.
+    var contained = false
     @ObservedObject private var store = QuotaNotchStore.shared
     @AppStorage(QuotaPetTint.defaultsKey) private var tintRaw = QuotaPetTint.original.rawValue
     @AppStorage(QuotaPetEffect.defaultsKey) private var effectRaw = QuotaPetEffect.soft.rawValue
@@ -87,9 +90,34 @@ struct QuotaPetView: View {
         let sprite = QuotaPetArt.sprite(kind, size: size, mood: mood, remaining: remaining, frame: frame, blink: blink)
         let palette = QuotaPetArt.palette(kind, provider: provider, tint: tint, remaining: remaining)
         let theme = Color(quotaPetRGB: QuotaPetArt.themeColor(kind))
-        return QuotaPetPixels(sprite: sprite, palette: palette, scale: scale)
+        let pixels = QuotaPetPixels(sprite: sprite, palette: palette, scale: scale)
             .saturation(mood == .stale ? 0 : 1)
             .opacity(mood == .stale ? 0.55 : 1)
+        return Group {
+            if contained {
+                // One fixed frame holds the effects and the pet; nothing draws outside it.
+                let margin = rippleReach ?? 8 * scale
+                ZStack {
+                    if signal != .none {
+                        QuotaPetEffectLayer(style: effect, signal: signal, sprite: sprite, scale: scale, color: theme, front: false,
+                                            rippleCell: rippleCell, rippleReach: rippleReach, marginOverride: margin)
+                    }
+                    pixels
+                    if signal != .none {
+                        QuotaPetEffectLayer(style: effect, signal: signal, sprite: sprite, scale: scale, color: theme, front: true,
+                                            marginOverride: margin)
+                    }
+                }
+                .frame(width: CGFloat(sprite.width) * scale + 2 * margin, height: CGFloat(sprite.height) * scale + 2 * margin)
+                .clipped()
+            } else {
+                overflowing(pixels, sprite: sprite, signal: signal, theme: theme)
+            }
+        }
+    }
+
+    private func overflowing(_ pixels: some View, sprite: QuotaPetSprite, signal: QuotaPetSignal, theme: Color) -> some View {
+        pixels
             .background {
                 if signal != .none {
                     QuotaPetEffectLayer(style: effect, signal: signal, sprite: sprite, scale: scale, color: theme, front: false,
@@ -116,9 +144,11 @@ struct QuotaPetEffectLayer: View {
     let front: Bool
     var rippleCell: CGFloat? = nil
     var rippleReach: CGFloat? = nil
+    /// The space around the pet that the canvas covers; 8 sprite pixels unless contained.
+    var marginOverride: CGFloat? = nil
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
-    private var margin: CGFloat { 8 * scale }
+    private var margin: CGFloat { marginOverride ?? 8 * scale }
     /// Ripple pixels per sprite pixel (a whole number), and ripple pixels per point.
     private var rippleFactor: Int { max(1, Int((scale / (rippleCell ?? scale)).rounded())) }
     private var cell: CGFloat { scale / CGFloat(rippleFactor) }
@@ -149,7 +179,9 @@ struct QuotaPetEffectLayer: View {
         let outline = style == .pixel && signal == .waiting && front ? sprite.outlineCells : []
         return Canvas(rendersAsynchronously: false) { context, size in
             let center = CGPoint(x: size.width / 2, y: size.height / 2)
-            let reach = max(CGFloat(sprite.width), CGFloat(sprite.height)) * scale * 0.62
+            // Soft rings grow to 1.15 × reach; a contained canvas keeps them inside its frame.
+            let natural = max(CGFloat(sprite.width), CGFloat(sprite.height)) * scale * 0.62
+            let reach = marginOverride == nil ? natural : min(natural, min(size.width, size.height) / 2 / 1.15)
             func pixels(_ cells: [QuotaPetCell], opacity: Double, size: CGFloat? = nil) {
                 let side = size ?? scale
                 var path = Path()
