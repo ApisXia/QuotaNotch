@@ -18,7 +18,7 @@ final class ClaudeUsageScreenTests: XCTestCase {
         let screen = """
         Current session
         ██████████████████          67% used
-        Resets 2:10am (Asia/Tokyo)
+        Resets 2:10am (Asia/Tokyo)                                       │
 
         Current week (all models)
         ██                          5% used

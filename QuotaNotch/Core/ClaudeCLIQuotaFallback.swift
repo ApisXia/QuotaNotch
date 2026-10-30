@@ -140,8 +140,12 @@ enum ClaudeUsageLog {
         var entry: String
         switch result {
         case .success(let snapshot):
-            entry = "\(stamp) ok " + snapshot.windows.map { "\($0.id)=\(Int($0.remainingPercent.rounded()))% left" }
-                .joined(separator: " ") + "\n"
+            entry = "\(stamp) ok " + snapshot.windows.map { "\($0.id)=\(Int($0.remainingPercent.rounded()))% left"
+                + ($0.resetsAt == nil ? " (no reset)" : "") }.joined(separator: " ") + "\n"
+            // A reading without reset times is kept with its screen, to see what was not understood.
+            if snapshot.windows.contains(where: { $0.resetsAt == nil }) {
+                entry += "--- screen ---\n\(String(screen.suffix(4000)))\n--- end ---\n"
+            }
         case .failure(let error):
             entry = "\(stamp) failed \(error)\n--- screen ---\n\(String(screen.suffix(4000)))\n--- end ---\n"
         }
@@ -215,8 +219,10 @@ enum ClaudeUsageScreen {
     /// "Resets 2:10am (Asia/Tokyo)" or "Resets Nov 6 at 11pm (Asia/Tokyo)": the next such
     /// moment in that time zone (or the Mac's own when none is given).
     static func absoluteReset(_ text: String, now: Date) -> Date? {
-        guard let regex = try? NSRegularExpression(pattern: #"resets\s+(?!in\b)(?:on\s+)?([^\n(]*?)\s*(?:\(([^)\n]+)\))?\s*$"#,
-                                                   options: [.caseInsensitive, .anchorsMatchLines]),
+        // Only the date and time are taken, so borders or a scroll bar drawn after them don't matter.
+        let moment = #"(?:[a-z]{3}\s+\d{1,2},?\s+(?:at\s+)?\d{1,2}(?::\d{2})?\s*[ap]m|\d{1,2}(?::\d{2})?\s*[ap]m|[a-z]{3}\s+\d{1,2})"#
+        guard let regex = try? NSRegularExpression(pattern: #"resets\s+(?:on\s+)?("# + moment + #")(?:\s*\(([^)\n]+)\))?"#,
+                                                   options: [.caseInsensitive]),
               let match = regex.firstMatch(in: text, range: NSRange(text.startIndex..., in: text)),
               let whenRange = Range(match.range(at: 1), in: text) else { return nil }
         let when = text[whenRange].trimmingCharacters(in: .whitespaces)
