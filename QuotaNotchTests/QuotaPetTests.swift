@@ -511,10 +511,12 @@ final class QuotaPetTests: XCTestCase {
         XCTAssertEqual(QuotaPetHoliday.on(day(2026, 11, 1), calendar: calendar), .halloween)
         XCTAssertNil(QuotaPetHoliday.on(day(2026, 11, 2), calendar: calendar))
         XCTAssertEqual(QuotaPetHoliday.on(day(2026, 12, 25), calendar: calendar), .christmas)
-        XCTAssertEqual(QuotaPetHoliday.on(day(2027, 2, 6), calendar: calendar), .springFestival) // New Year's Eve
-        XCTAssertEqual(QuotaPetHoliday.on(day(2027, 2, 13), calendar: calendar), .springFestival) // the 7th day
-        XCTAssertNil(QuotaPetHoliday.on(day(2027, 2, 14), calendar: calendar))
-        XCTAssertEqual(QuotaPetHoliday.on(day(2027, 9, 15), calendar: calendar), .midAutumn)
+        // Lunar New Year 2026 is Feb 17.
+        XCTAssertEqual(QuotaPetHoliday.on(day(2026, 2, 16), calendar: calendar), .springFestival) // New Year's Eve
+        XCTAssertEqual(QuotaPetHoliday.on(day(2026, 2, 23), calendar: calendar), .springFestival) // the 7th day
+        XCTAssertNil(QuotaPetHoliday.on(day(2026, 2, 24), calendar: calendar))
+        XCTAssertNil(QuotaPetHoliday.on(day(2026, 2, 14), calendar: calendar))
+        XCTAssertEqual(QuotaPetHoliday.on(day(2026, 9, 25), calendar: calendar), .midAutumn)
         XCTAssertEqual(QuotaPetHoliday.on(day(2026, 5, 3), birthday: "05-03", calendar: calendar), .birthday)
         XCTAssertNil(QuotaPetHoliday.on(day(2026, 5, 4), birthday: "05-03", calendar: calendar))
 
