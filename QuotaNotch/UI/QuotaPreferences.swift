@@ -12,6 +12,8 @@ struct QuotaPreferences: View {
     @AppStorage(QuotaPetKind.defaultsKey) private var petRaw = QuotaPetKind.defaultKind.rawValue
     @AppStorage(QuotaPetTint.defaultsKey) private var tintRaw = QuotaPetTint.original.rawValue
     @AppStorage(QuotaPetEffect.defaultsKey) private var effectRaw = QuotaPetEffect.soft.rawValue
+    @AppStorage(QuotaPetHoliday.defaultsKey) private var holidaysRaw = "auto"
+    @AppStorage(QuotaPetHoliday.birthdayKey) private var birthday = ""
     private var pet: QuotaPetKind { QuotaPetKind.choice(petRaw) }
     private var size: NotchUISize { NotchUISize.stored(sizeRaw, legacyComfortable: false) }
     var body: some View {
@@ -75,19 +77,12 @@ struct QuotaPreferences: View {
                     }
                 }
             }
-            SettingsField("宠物") {
-                Picker("宠物", selection: Binding(get: { QuotaPetKind.choice(petRaw).rawValue }, set: { petRaw = $0 })) {
-                    Text("麻薯 · 猫").tag(QuotaPetKind.mochi.rawValue)
-                    Text("比特 · 机器人").tag(QuotaPetKind.bit.rawValue)
-                    Text("果冻 · 史莱姆").tag(QuotaPetKind.jelly.rawValue)
-                    Text("飘飘 · 小幽灵").tag(QuotaPetKind.ghost.rawValue)
-                    Text("苗苗 · 豆芽").tag(QuotaPetKind.sprout.rawValue)
-                    Text("摸鱼 · 鱼缸").tag(QuotaPetKind.fish.rawValue)
-                    Text("鸭梨 · 压力山大").tag(QuotaPetKind.pear.rawValue)
-                    Text("芭比Q了 · 烤肠").tag(QuotaPetKind.bbq.rawValue)
-                    Text("牛马 · 打工牛").tag(QuotaPetKind.ox.rawValue)
-                }
+            VStack(alignment: .leading, spacing: 8) {
+                Text("宠物")
+                QuotaPetPicker(selection: Binding(get: { QuotaPetKind.choice(petRaw) }, set: { petRaw = $0.rawValue }),
+                               provider: store.activePin?.provider ?? .claude)
             }
+            .padding(.vertical, 3)
             SettingsField("宠物配色") {
                 Picker("宠物配色", selection: $tintRaw) {
                     Text("原色").tag(QuotaPetTint.original.rawValue)
@@ -100,8 +95,41 @@ struct QuotaPreferences: View {
                     Text("像素").tag(QuotaPetEffect.pixel.rawValue)
                 }
             }
+            SettingsField("节日装扮") {
+                Picker("节日装扮", selection: $holidaysRaw) {
+                    Text("自动").tag("auto")
+                    Text("关闭").tag("off")
+                }
+            }
+            if holidaysRaw != "off" { birthdayRow }
             petPreview
             sizeRow
+        }
+    }
+
+    /// Party hats on the user's birthday, if they set one ("MM-dd").
+    private var birthdayRow: some View {
+        let calendar = Calendar.current
+        let parts = birthday.split(separator: "-").compactMap { Int($0) }
+        let date = Binding<Date>(
+            get: {
+                guard parts.count == 2 else { return Date() }
+                var day = calendar.dateComponents([.year], from: Date())
+                day.month = parts[0]; day.day = parts[1]
+                return calendar.date(from: day) ?? Date()
+            },
+            set: { value in
+                let day = calendar.dateComponents([.month, .day], from: value)
+                birthday = String(format: "%02d-%02d", day.month ?? 1, day.day ?? 1)
+            })
+        return HStack {
+            Toggle("生日那天戴派对帽", isOn: Binding(get: { parts.count == 2 }, set: { on in
+                if on { date.wrappedValue = Date() } else { birthday = "" }
+            }))
+            Spacer()
+            if parts.count == 2 {
+                DatePicker("生日", selection: date, displayedComponents: .date).labelsHidden()
+            }
         }
     }
 

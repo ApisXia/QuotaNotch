@@ -456,4 +456,100 @@ final class QuotaPetTests: XCTestCase {
             }
         }
     }
+
+    /// A finished task plays the pet's own celebration; an idle pet makes a small move now and then.
+    func testPetsActOnTheirOwn() {
+        let dot = UInt8(ascii: ".")
+        let done = Date(timeIntervalSinceReferenceDate: 1_000_000)
+        XCTAssertEqual(QuotaPetMotion.moment(mood: .celebrate, completedAt: done, at: done.addingTimeInterval(1))?.reaction, .cheer)
+        XCTAssertNil(QuotaPetMotion.moment(mood: .celebrate, completedAt: done, at: done.addingTimeInterval(3)))
+        XCTAssertNil(QuotaPetMotion.moment(mood: .working, completedAt: done, at: done))
+        let quiet = (0..<90).compactMap { QuotaPetMotion.moment(mood: .idle, completedAt: nil, at: done.addingTimeInterval(Double($0))) }
+        XCTAssertFalse(quiet.isEmpty)
+        XCTAssertLessThan(quiet.count, 10)
+        XCTAssertTrue(quiet.allSatisfy { $0.reaction == .idleMove })
+        let start = Date(timeIntervalSinceReferenceDate: 45 * 1000 + 10)
+        XCTAssertEqual(QuotaPetMotion.nextFrame(after: start, mood: .idle, completedAt: nil)?.timeIntervalSinceReferenceDate ?? 0,
+                       45 * 1001 + 0.001, accuracy: 0.01)
+        XCTAssertNil(QuotaPetMotion.nextFrame(after: start, mood: .working, completedAt: nil))
+        for kind in pets {
+            for reaction in [QuotaPetReaction.cheer, .idleMove] {
+                let mood: QuotaPetMood = reaction == .cheer ? .celebrate : .idle
+                let palette = QuotaPetArt.palette(kind, provider: .claude, tint: .original, remaining: 72)
+                var t = 0.0
+                while t < reaction.duration {
+                    let pose = QuotaPetTouchPose.at(reaction, pet: kind, elapsed: t, remaining: 72)
+                    let sprite = QuotaPetArt.sprite(kind, size: .widget, mood: pose.mood ?? mood, remaining: 72,
+                                                    touch: .init(reaction: reaction, elapsed: t))
+                    XCTAssertEqual([sprite.width, sprite.height], [20, 16], "\(kind) \(reaction)")
+                    for code in sprite.codes where code != dot {
+                        XCTAssertNotNil(palette[code], "\(kind) \(reaction) \(Character(UnicodeScalar(code)))")
+                    }
+                    for particle in pose.particles {
+                        XCTAssert((0...1).contains(particle.opacity), "\(kind) \(reaction)")
+                        XCTAssert(particle.sprite.codes.allSatisfy { $0 == dot || QuotaPetParticle.palette[$0] != nil }, "\(particle.kind)")
+                    }
+                    XCTAssertLessThanOrEqual(abs(pose.dy), 5, "\(kind) \(reaction)")
+                    t += 0.1
+                }
+                let calm = QuotaPetTouchPose.at(reaction, pet: kind, elapsed: 0.5, reduceMotion: true, remaining: 72)
+                XCTAssertEqual([calm.dx, calm.dy, calm.rotation, calm.opacity], [0, 0, 0, 1], "\(kind) \(reaction)")
+            }
+        }
+        // Bit puts a tick on its screen; the sausage loses a bite.
+        XCTAssertNotEqual(QuotaPetArt.sprite(.bit, size: .widget, mood: .celebrate, remaining: 72, touch: .init(reaction: .cheer, elapsed: 0.5)),
+                          QuotaPetArt.sprite(.bit, size: .widget, mood: .celebrate, remaining: 72))
+        XCTAssertNotEqual(QuotaPetArt.sprite(.bbq, size: .widget, mood: .celebrate, remaining: 72, touch: .init(reaction: .cheer, elapsed: 1)),
+                          QuotaPetArt.sprite(.bbq, size: .widget, mood: .celebrate, remaining: 72))
+    }
+
+    func testHolidaysAndHats() {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: "Asia/Tokyo")!
+        func day(_ y: Int, _ m: Int, _ d: Int) -> Date { calendar.date(from: DateComponents(year: y, month: m, day: d, hour: 12))! }
+        XCTAssertEqual(QuotaPetHoliday.on(day(2026, 10, 31), calendar: calendar), .halloween)
+        XCTAssertEqual(QuotaPetHoliday.on(day(2026, 11, 1), calendar: calendar), .halloween)
+        XCTAssertNil(QuotaPetHoliday.on(day(2026, 11, 2), calendar: calendar))
+        XCTAssertEqual(QuotaPetHoliday.on(day(2026, 12, 25), calendar: calendar), .christmas)
+        XCTAssertEqual(QuotaPetHoliday.on(day(2027, 2, 6), calendar: calendar), .springFestival) // New Year's Eve
+        XCTAssertEqual(QuotaPetHoliday.on(day(2027, 2, 13), calendar: calendar), .springFestival) // the 7th day
+        XCTAssertNil(QuotaPetHoliday.on(day(2027, 2, 14), calendar: calendar))
+        XCTAssertEqual(QuotaPetHoliday.on(day(2027, 9, 15), calendar: calendar), .midAutumn)
+        XCTAssertEqual(QuotaPetHoliday.on(day(2026, 5, 3), birthday: "05-03", calendar: calendar), .birthday)
+        XCTAssertNil(QuotaPetHoliday.on(day(2026, 5, 4), birthday: "05-03", calendar: calendar))
+
+        let dot = UInt8(ascii: ".")
+        let hatCodes = Set(QuotaPetHoliday.colors.keys.map { UInt8(ascii: $0.unicodeScalars.first!) })
+        for kind in pets {
+            let palette = QuotaPetArt.palette(kind, provider: .claude, tint: .original, remaining: 72)
+            for holiday in QuotaPetHoliday.allCases {
+                let sprite = QuotaPetArt.sprite(kind, size: .widget, mood: .idle, remaining: 72, outfit: holiday)
+                XCTAssertTrue(sprite.codes.contains { hatCodes.contains($0) }, "\(kind) \(holiday)")
+                for code in sprite.codes where code != dot { XCTAssertNotNil(palette[code], "\(kind) \(holiday)") }
+                for particle in holiday.extras(at: 12.3) {
+                    XCTAssert(particle.sprite.codes.allSatisfy { $0 == dot || QuotaPetParticle.palette[$0] != nil }, "\(holiday)")
+                }
+            }
+            // The small pet goes without.
+            XCTAssertEqual(QuotaPetArt.sprite(kind, size: .minimal, mood: .idle, remaining: 72, outfit: .christmas),
+                           QuotaPetArt.sprite(kind, size: .minimal, mood: .idle, remaining: 72))
+        }
+    }
+
+    func testEveryPetHasItsOwnWords() {
+        for kind in pets {
+            for moment in QuotaPetVoice.Moment.allCases {
+                for chinese in [true, false] {
+                    XCTAssertFalse(QuotaPetVoice.line(kind, moment, remaining: 50, chinese: chinese).isEmpty, "\(kind) \(moment)")
+                }
+            }
+        }
+        XCTAssertEqual(QuotaPetVoice.line(.bbq, .plenty, remaining: 72, chinese: true), "三分熟")
+        XCTAssertEqual(QuotaPetVoice.line(.bbq, .plenty, remaining: 40, chinese: false), "Medium")
+        XCTAssertEqual(QuotaPetVoice.line(.ox, .plenty, remaining: 72, chinese: false), "2 boxes on the cart")
+        XCTAssertEqual(QuotaPetVoice.line(.pear, .plenty, remaining: 90, chinese: true), "毫无鸭梨")
+        XCTAssertEqual(QuotaPetVoice.moment(remaining: 0), .empty)
+        XCTAssertEqual(QuotaPetVoice.moment(remaining: 12), .low)
+        XCTAssertEqual(QuotaPetVoice.moment(remaining: 50), .plenty)
+    }
 }

@@ -107,32 +107,11 @@ struct NotchPetColumn: View {
         }
     }
 
-    /// One moment of a reaction to a click (see `QuotaPetTouchPose`): a face, a hop, squash,
-    /// spin or shake, and small sprites around it. Hops and spins are left out with Reduce Motion.
+    /// One moment of a reaction to a click (see `QuotaPetTouchPose`): the pet view draws the face,
+    /// the hop, squash, spin or shake, and the small sprites around it. Hops and spins are left
+    /// out with Reduce Motion.
     private func reacting(_ reaction: QuotaPetReaction, elapsed: TimeInterval) -> some View {
-        let scale: CGFloat = 4
-        let pose = QuotaPetTouchPose.at(reaction, pet: QuotaPetKind.choice(petRaw), elapsed: elapsed,
-                                        reduceMotion: reduceMotion, remaining: window?.remainingPercent ?? 0)
-        let moment = QuotaPetTouchMoment(reaction: reaction, elapsed: elapsed, reduceMotion: reduceMotion)
-        return ZStack {
-            Group {
-                if let mood = pose.mood { pet(fixed: mood, signal: .none) } else { currentPet(touch: moment) }
-            }
-            .scaleEffect(x: (pose.flipped ? -1 : 1) * pose.scaleX, y: pose.scaleY, anchor: .bottom)
-            .rotationEffect(.degrees(pose.rotation), anchor: .bottom)
-            .offset(x: pose.dx * scale, y: pose.dy * scale)
-            .brightness(pose.brightness)
-            // Particles are placed in the sprite's own pixels: 20 × 16 at this scale.
-            ZStack(alignment: .topLeading) {
-                ForEach(Array(pose.particles.enumerated()), id: \.offset) { _, particle in
-                    QuotaPetPixels(sprite: particle.sprite, palette: QuotaPetParticle.palette, scale: scale)
-                        .offset(x: particle.x * scale, y: particle.y * scale)
-                        .opacity(particle.opacity)
-                }
-            }
-            .frame(width: 20 * scale, height: 16 * scale, alignment: .topLeading)
-            .allowsHitTesting(false)
-        }
+        currentPet(touch: QuotaPetTouchMoment(reaction: reaction, elapsed: elapsed, reduceMotion: reduceMotion))
     }
 
     /// A click pets it; a click while a task waits also opens that task.
@@ -190,6 +169,14 @@ struct NotchPetColumn: View {
         let t = AgentText.t
         let percent = window.map { QuotaText.percent($0.remainingPercent) }
         let left = percent.map { t("额度剩 \($0)%", "\($0)% quota left") } ?? t("额度未知", "Quota unknown")
+        // The first line in the pet's own words; the numbers stay on the second.
+        let pet = QuotaPetKind.choice(petRaw)
+        let voice = { (moment: QuotaPetVoice.Moment?) -> String? in
+            guard let window else { return nil }
+            let remaining = window.remainingPercent
+            return QuotaPetVoice.line(pet, moment ?? QuotaPetVoice.moment(remaining: remaining), remaining: remaining,
+                                      chinese: AgentText.chinese)
+        }
 
         if page == .aiUsage {
             guard let window, let percent else {
@@ -197,7 +184,8 @@ struct NotchPetColumn: View {
             }
             // Window on the first line, reset time on the second.
             let reset = window.resetsAt.map { t("\(Self.clock($0)) 重置", "resets \(Self.clock($0))") } ?? t("重置时间未知", "reset unknown")
-            return (t("剩 \(percent)%", "\(percent)% left"), window.localizedTitle + "\n" + reset, .white)
+            return (voice(nil) ?? t("剩 \(percent)%", "\(percent)% left"),
+                    t("剩 \(percent)% · \(reset)", "\(percent)% left · \(reset)") + "\n" + window.localizedTitle, .white)
         }
 
         if let task = focused {
@@ -213,16 +201,22 @@ struct NotchPetColumn: View {
         let sessions = activity.enabled ? activity.visible : []
         let (waiting, running, finished) = counts
         if waiting > 0 {
-            return (t("\(waiting) 个在等你", "\(waiting) need you"), t("点我查看", "Tap to open"), AgentText.color(.waiting))
+            let count = t("\(waiting) 个在等你", "\(waiting) need you")
+            guard let line = voice(.waiting) else { return (count, t("点我查看", "Tap to open"), AgentText.color(.waiting)) }
+            return (line, count + t(" · 点我查看", " · tap to open"), AgentText.color(.waiting))
         }
         if running > 0 {
-            return (t("\(running) 个正在跑", "\(running) working"), left, AgentText.color(.running))
+            let count = t("\(running) 个正在跑", "\(running) working")
+            guard let line = voice(.working) else { return (count, left, AgentText.color(.running)) }
+            return (line, count + " · " + left, AgentText.color(.running))
         }
         if finished > 0 {
             return (t("全部完成", "All done"), t("刚完成 \(finished) 个", "\(finished) finished"), AgentText.color(.completed))
         }
         if !activity.enabled { return (t("监控已暂停", "Paused"), left, .secondary) }
-        return (sessions.isEmpty ? t("没有任务", "No tasks") : t("都处理完了", "All clear"), left, .white)
+        let quiet = sessions.isEmpty ? t("没有任务", "No tasks") : t("都处理完了", "All clear")
+        guard let line = voice(nil) else { return (quiet, left, .white) }
+        return (line, quiet + " · " + left, .white)
     }
 
     /// A short reset time: "14:20" today or tomorrow, "Mon 09:00" further out.

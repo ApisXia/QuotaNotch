@@ -4,14 +4,14 @@ import SwiftUI
 /// Redraws only while the pet moves: every frame while animating, around blinks while
 /// resting, and rarely otherwise.
 struct QuotaPetSchedule: TimelineSchedule {
-    let mood: @Sendable (Date) -> QuotaPetMood
+    let next: @Sendable (Date) -> Date
     func entries(from startDate: Date, mode: TimelineScheduleMode) -> AnyIterator<Date> {
-        var next = startDate
+        var date = startDate
         var first = true
         return AnyIterator {
-            if first { first = false; return next }
-            next = QuotaPetArt.nextRedraw(after: next, mood: mood(next))
-            return next
+            if first { first = false; return date }
+            date = next(date)
+            return date
         }
     }
 }
@@ -39,8 +39,10 @@ struct QuotaPetView: View {
     /// Overrides the tracked mood (settings previews).
     var fixedMood: QuotaPetMood? = nil
     var fixedSignal: QuotaPetSignal = .none
-    /// A click reaction the art acts out itself (fish and pear).
+    /// A click reaction to show instead of the pet's own celebration or idle move.
     var touch: QuotaPetTouchMoment? = nil
+    /// Shifts when idle moves happen, so pets side by side don't all move at once.
+    var idleOffset: TimeInterval = 0
     /// Pixel ripples: the size of one ripple pixel and how far out they reach, in points.
     /// Defaults to the pet's own pixels and the full effect margin; a tight space (the opened
     /// panel's column) uses finer, closer ripples so every ring fits.
@@ -52,6 +54,8 @@ struct QuotaPetView: View {
     @ObservedObject private var store = QuotaNotchStore.shared
     @AppStorage(QuotaPetTint.defaultsKey) private var tintRaw = QuotaPetTint.original.rawValue
     @AppStorage(QuotaPetEffect.defaultsKey) private var effectRaw = QuotaPetEffect.soft.rawValue
+    @AppStorage(QuotaPetHoliday.defaultsKey) private var holidaysRaw = "auto"
+    @AppStorage(QuotaPetHoliday.birthdayKey) private var birthday = ""
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private var key: String { QuotaPetTracker.key(provider: provider, windowID: window?.id ?? "") }
@@ -69,32 +73,61 @@ struct QuotaPetView: View {
         }
     }
 
+    /// Today's hat, unless outfits are off. Only the full-size pet wears one.
+    private var outfit: QuotaPetHoliday? {
+        guard holidaysRaw != "off", size == .widget else { return nil }
+        return QuotaPetHoliday.on(Date(), birthday: birthday)
+    }
+
     var body: some View {
         let stateFor = self.stateAt
+        let outfit = self.outfit
+        let completedAt = tasks.lastCompletedAt, offset = idleOffset
         Group {
             if reduceMotion {
                 let state = stateFor(Date())
-                pet(mood: state.mood, signal: state.signal, frame: 0, blink: false)
+                pet(mood: state.mood, signal: state.signal, frame: 0, blink: false, at: Date(), outfit: outfit)
             } else {
-                TimelineView(QuotaPetSchedule(mood: { stateFor($0).mood })) { context in
+                TimelineView(QuotaPetSchedule(next: { date in
+                    let mood = stateFor(date).mood
+                    var next = QuotaPetArt.nextRedraw(after: date, mood: mood)
+                    if let soon = QuotaPetMotion.nextFrame(after: date, mood: mood, completedAt: completedAt, offset: offset) {
+                        next = min(next, soon)
+                    }
+                    // the holiday extra moves a few times a second
+                    if outfit != nil { next = min(next, date.addingTimeInterval(0.25)) }
+                    return next
+                })) { context in
                     let state = stateFor(context.date)
                     pet(mood: state.mood, signal: state.signal,
                         frame: state.mood.animates ? QuotaPetArt.frame(at: context.date) : 0,
-                        blink: QuotaPetArt.blinking(at: context.date))
+                        blink: QuotaPetArt.blinking(at: context.date), at: context.date, outfit: outfit)
                 }
             }
         }
         .accessibilityHidden(true)
     }
 
-    private func pet(mood: QuotaPetMood, signal: QuotaPetSignal, frame: Int, blink: Bool) -> some View {
+    private func pet(mood: QuotaPetMood, signal: QuotaPetSignal, frame: Int, blink: Bool, at date: Date,
+                     outfit: QuotaPetHoliday?) -> some View {
         let remaining = window?.remainingPercent ?? 0
-        let sprite = QuotaPetArt.sprite(kind, size: size, mood: mood, remaining: remaining, frame: frame, blink: blink, touch: touch)
+        // A click, else the pet's own celebration or idle move (none with Reduce Motion).
+        let moment = touch ?? (reduceMotion ? nil : QuotaPetMotion.moment(mood: mood, completedAt: tasks.lastCompletedAt,
+                                                                           at: date, offset: idleOffset))
+        let pose = moment.map { QuotaPetTouchPose.at($0.reaction, pet: kind, elapsed: $0.elapsed,
+                                                     reduceMotion: reduceMotion || $0.reduceMotion, remaining: remaining) }
+        let shown = pose?.mood ?? mood
+        let sprite = QuotaPetArt.sprite(kind, size: size, mood: shown, remaining: remaining, frame: frame, blink: blink,
+                                        touch: moment, outfit: outfit)
         let palette = QuotaPetArt.palette(kind, provider: provider, tint: tint, remaining: remaining)
         let theme = Color(quotaPetRGB: QuotaPetArt.themeColor(kind, provider: provider, tint: tint))
+        let particles = (pose?.particles ?? []) + (outfit?.extras(at: reduceMotion ? 0 : date.timeIntervalSinceReferenceDate) ?? [])
         let pixels = QuotaPetPixels(sprite: sprite, palette: palette, scale: scale)
             .saturation(mood == .stale ? 0 : 1)
             .opacity(mood == .stale ? 0.55 : 1)
+            .modifier(QuotaPetPoseEffect(pose: pose, scale: scale))
+            // Particles are placed in the sprite's own pixels and don't follow the pose.
+            .overlay(alignment: .topLeading) { QuotaPetParticleLayer(particles: particles, scale: scale) }
         return Group {
             if contained {
                 // One fixed frame holds the effects and the pet; nothing draws outside it.
@@ -131,6 +164,42 @@ struct QuotaPetView: View {
                     QuotaPetEffectLayer(style: effect, signal: signal, sprite: sprite, scale: scale, color: theme, front: true)
                 }
             }
+    }
+}
+
+/// The shake, hop, squash, spin and fade of a reaction, around the pet's feet.
+struct QuotaPetPoseEffect: ViewModifier {
+    let pose: QuotaPetTouchPose?
+    let scale: CGFloat
+
+    @ViewBuilder func body(content: Content) -> some View {
+        if let pose {
+            content
+                .scaleEffect(x: (pose.flipped ? -1 : 1) * pose.scaleX, y: pose.scaleY, anchor: .bottom)
+                .rotationEffect(.degrees(pose.rotation), anchor: pose.pivotCenter ? .center : .bottom)
+                .offset(x: pose.dx * scale, y: pose.dy * scale)
+                .brightness(pose.brightness)
+                .opacity(pose.opacity)
+        } else {
+            content
+        }
+    }
+}
+
+/// Small sprites around the pet: hearts, stars, confetti, a holiday extra.
+struct QuotaPetParticleLayer: View {
+    let particles: [QuotaPetParticle]
+    let scale: CGFloat
+
+    var body: some View {
+        ZStack(alignment: .topLeading) {
+            ForEach(Array(particles.enumerated()), id: \.offset) { _, particle in
+                QuotaPetPixels(sprite: particle.sprite, palette: QuotaPetParticle.palette, scale: scale)
+                    .offset(x: particle.x * scale, y: particle.y * scale)
+                    .opacity(particle.opacity)
+            }
+        }
+        .allowsHitTesting(false)
     }
 }
 

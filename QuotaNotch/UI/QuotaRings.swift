@@ -207,15 +207,15 @@ struct QuotaNotchView: View {
             }
             Menu {
                 Picker("宠物", selection: Binding(get: { QuotaPetKind.choice(petRaw).rawValue }, set: { petRaw = $0 })) {
-                    Text("麻薯 · 猫").tag(QuotaPetKind.mochi.rawValue)
-                    Text("比特 · 机器人").tag(QuotaPetKind.bit.rawValue)
-                    Text("果冻 · 史莱姆").tag(QuotaPetKind.jelly.rawValue)
-                    Text("飘飘 · 小幽灵").tag(QuotaPetKind.ghost.rawValue)
-                    Text("苗苗 · 豆芽").tag(QuotaPetKind.sprout.rawValue)
-                    Text("摸鱼 · 鱼缸").tag(QuotaPetKind.fish.rawValue)
-                    Text("鸭梨 · 压力山大").tag(QuotaPetKind.pear.rawValue)
-                    Text("芭比Q了 · 烤肠").tag(QuotaPetKind.bbq.rawValue)
-                    Text("牛马 · 打工牛").tag(QuotaPetKind.ox.rawValue)
+                    Label { Text("麻薯 · 猫") } icon: { Image(nsImage: QuotaPetIcon.image(.mochi)) }.tag(QuotaPetKind.mochi.rawValue)
+                    Label { Text("比特 · 机器人") } icon: { Image(nsImage: QuotaPetIcon.image(.bit)) }.tag(QuotaPetKind.bit.rawValue)
+                    Label { Text("果冻 · 史莱姆") } icon: { Image(nsImage: QuotaPetIcon.image(.jelly)) }.tag(QuotaPetKind.jelly.rawValue)
+                    Label { Text("飘飘 · 小幽灵") } icon: { Image(nsImage: QuotaPetIcon.image(.ghost)) }.tag(QuotaPetKind.ghost.rawValue)
+                    Label { Text("苗苗 · 豆芽") } icon: { Image(nsImage: QuotaPetIcon.image(.sprout)) }.tag(QuotaPetKind.sprout.rawValue)
+                    Label { Text("摸鱼 · 鱼缸") } icon: { Image(nsImage: QuotaPetIcon.image(.fish)) }.tag(QuotaPetKind.fish.rawValue)
+                    Label { Text("鸭梨 · 压力山大") } icon: { Image(nsImage: QuotaPetIcon.image(.pear)) }.tag(QuotaPetKind.pear.rawValue)
+                    Label { Text("芭比Q了 · 烤肠") } icon: { Image(nsImage: QuotaPetIcon.image(.bbq)) }.tag(QuotaPetKind.bbq.rawValue)
+                    Label { Text("牛马 · 打工牛") } icon: { Image(nsImage: QuotaPetIcon.image(.ox)) }.tag(QuotaPetKind.ox.rawValue)
                 }
                 Picker("大小", selection: $sizeRaw) {
                     Text("小").tag(NotchUISize.small.rawValue)

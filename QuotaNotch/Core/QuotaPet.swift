@@ -236,9 +236,12 @@ enum QuotaPetArt {
     /// their own sprite); the other pets react through `QuotaPetTouchPose` alone.
     static func sprite(_ kind: QuotaPetKind, size: QuotaPetSize, mood: QuotaPetMood,
                        remaining: Double, frame: Int = 0, blink: Bool = false,
-                       touch: QuotaPetTouchMoment? = nil) -> QuotaPetSprite {
+                       touch: QuotaPetTouchMoment? = nil, outfit: QuotaPetHoliday? = nil) -> QuotaPetSprite {
         let q = min(100, max(0, remaining.isFinite ? remaining : 0))
-        let grid: Grid
+        let live = touch.flatMap { $0.elapsed < $0.reaction.duration ? $0 : nil }
+        // 麻薯's idle move is a stretch with its eyes closed.
+        let blink = blink || (kind == .mochi && live?.reaction == .idleMove && (0.15..<1.5).contains(live?.elapsed ?? 0))
+        var grid: Grid
         switch (kind, size) {
         case (.fish, .widget): grid = fish(mood: mood, remaining: q, frame: frame, touch: touch)
         case (.fish, .minimal): grid = crop(fish(mood: mood, remaining: q, frame: 0, touch: nil), x: 2, y: 4, width: 16, height: 12)
@@ -264,7 +267,64 @@ enum QuotaPetArt {
             grid = crop(Array(whole[3...6]) + Array(whole[8...15]), x: 2, y: 0, width: 16, height: 12)
         case (_, .minimal): grid = minimal(kind, mood: mood, remaining: q, blink: blink)
         }
+        if size == .widget, let live { acted(&grid, kind: kind, live) }
+        if size == .widget, let outfit { dress(&grid, kind: kind, outfit) }
         return QuotaPetSprite(width: grid.first?.count ?? 0, height: grid.count, codes: grid.flatMap { $0 })
+    }
+
+    /// The reaction a pet acts out in its own art. Idle moves borrow a click reaction's moves:
+    /// the fish swims its lap, the pear lifts its mountain, the sausage rolls over slowly.
+    private static func acting(_ touch: QuotaPetTouchMoment?, _ kind: QuotaPetKind) -> (QuotaPetReaction?, TimeInterval) {
+        guard let touch, touch.elapsed < touch.reaction.duration else { return (nil, 0) }
+        let e = touch.elapsed
+        guard touch.reaction == .idleMove else { return (touch.reaction, e) }
+        switch kind {
+        case .fish, .pear: return e < 1.3 ? (.pat, e) : (nil, 0)
+        case .bbq: return e < 1.6 ? (.dizzy, e * 0.3) : (nil, 0)
+        default: return (nil, 0)
+        }
+    }
+
+    /// Art changes for celebrations and idle moves that a pose can't make.
+    private static func acted(_ g: inout Grid, kind: QuotaPetKind, _ moment: QuotaPetTouchMoment) {
+        let e = moment.elapsed
+        let k = UInt8(ascii: "k"), led = UInt8(ascii: "e"), c = UInt8(ascii: "c")
+        func clearFace() { for y in 5...9 { for x in 4...15 where g[y][x] == led { g[y][x] = k } } }
+        switch (kind, moment.reaction) {
+        case (.bit, .cheer) where e < 1.1:
+            // a big tick on its screen
+            clearFace()
+            paint(&g, ["......e", ".....e.", "e...e..", ".e.e...", "..e...."], 6, 5)
+        case (.bit, .idleMove) where e < 1.8:
+            // screensaver: three dots, one hopping along
+            clearFace()
+            for x in [6, 9, 12] { g[7][x] = led }
+            g[6][6 + (Int(e / 0.18) % 3) * 3] = led
+        case (.sprout, .idleMove) where e > 0.6 && e < 1.3:
+            // ^ ^ when the drop lands
+            for y in 10...11 { for x in 0..<20 where g[y][x] == led { g[y][x] = c } }
+            for (x, y) in [(7, 10), (12, 10), (6, 11), (8, 11), (11, 11), (13, 11)] { g[y][x] = led }
+        case (.bbq, .cheer) where e > 0.5:
+            // a bite out of the top right
+            for y in 1...3 { for x in 10...13 {
+                let d = (Double(x) - 13.5) * (Double(x) - 13.5) + (Double(y) - 0.8) * (Double(y) - 0.8)
+                if d < 2.6 * 2.6 { g[y][x] = dot } else if d < 3.4 * 3.4 && g[y][x] == c { g[y][x] = UInt8(ascii: "o") }
+            } }
+        default:
+            break
+        }
+    }
+
+    /// A holiday hat on the pet's head: centered on the head, its brim on the head's top row.
+    private static func dress(_ g: inout Grid, kind: QuotaPetKind, _ holiday: QuotaPetHoliday) {
+        let (center, columns): (Double, ClosedRange<Int>) = kind == .mochi ? (7.5, 4...11) : kind == .ox ? (6.5, 3...10) : (9.5, 7...12)
+        // Marks and sparkles above the head don't count as the head.
+        let ignored = kind == .ox ? Set<UInt8>() : Set("ZzXwdH".utf8)
+        let top = (0..<g.count).first { y in columns.contains { g[y][$0] != dot && !ignored.contains(g[y][$0]) } } ?? 15
+        let hat = holiday.hat
+        let width = hat[0].utf8.count
+        let bottom = max(3, min(15, top + 1))
+        paint(&g, hat, Int((center - Double(width) / 2 + 0.01).rounded()), bottom - hat.count + 1)
     }
 
     /// The jelly's body, filled with water up to the quota, before its face.
@@ -588,8 +648,8 @@ enum QuotaPetArt {
     /// it's charred, with × × eyes and smoke.
     private static func bbq(mood: QuotaPetMood, remaining q: Double, frame f: Int, blink: Bool, touch: QuotaPetTouchMoment?) -> Grid {
         var g = blank()
-        let t = touch.flatMap { $0.elapsed < $0.reaction.duration ? $0.reaction : nil }
-        let e = touch?.elapsed ?? 0, still = touch?.reduceMotion ?? false
+        let (t, e) = acting(touch, .bbq)
+        let still = touch?.reduceMotion ?? false
         let happy = mood == .refilled || mood == .celebrate
         let level = happy ? 0 : doneness(q)
         let charred = level == 5 && !happy
@@ -669,8 +729,8 @@ enum QuotaPetArt {
     /// 牛马: a little cow hitched to a cart. Every sixth of the quota used is one more box on the cart.
     private static func ox(mood: QuotaPetMood, remaining q: Double, frame f: Int, touch: QuotaPetTouchMoment?) -> Grid {
         var g = blank()
-        let t = touch.flatMap { $0.elapsed < $0.reaction.duration ? $0.reaction : nil }
-        let e = touch?.elapsed ?? 0, still = touch?.reduceMotion ?? false
+        let (t, e) = acting(touch, .ox)
+        let still = touch?.reduceMotion ?? false
         let lying = (mood == .empty || mood == .stale) && t != .open
         let pulling = mood == .working || mood == .low || mood == .pacing
         let happy = mood == .refilled || mood == .celebrate
@@ -718,7 +778,7 @@ enum QuotaPetArt {
         case .dizzy: look = ["roll", "open", "rollR", "open"][Int(e / 0.11) % 4]
         case .stir: look = e < 0.75 ? "peek" : "closed"
         case .open: look = "open"
-        case nil: break
+        case .cheer, .idleMove, nil: break
         }
         let ey = oy + 4
         for (x, out) in [(4, -1), (9, 1)] {
@@ -769,8 +829,8 @@ enum QuotaPetArt {
     /// a lap with bubbles, a pufferfish, a whirlpool, a leap out of the water.
     private static func fish(mood: QuotaPetMood, remaining q: Double, frame f: Int, touch: QuotaPetTouchMoment?) -> Grid {
         var g = blank()
-        let t = touch.flatMap { $0.elapsed < $0.reaction.duration ? $0.reaction : nil }
-        let e = touch?.elapsed ?? 0, still = touch?.reduceMotion ?? false
+        let (t, e) = acting(touch, .fish)
+        let still = touch?.reduceMotion ?? false
         let G = UInt8(ascii: "G"), v = UInt8(ascii: "v"), u = UInt8(ascii: "u"), U = UInt8(ascii: "U"), B = UInt8(ascii: "B")
         func inside(_ x: Int, _ y: Int) -> Bool {
             let dx = Double(x) - 9.5, dy = Double(y) - 9
@@ -837,7 +897,7 @@ enum QuotaPetArt {
             fx = 7; face = fishHappy
             fy = still ? base : max(0, Int((Double(base) - Double(base + 1) * sin(.pi * min(1, e / 0.7))).rounded()))
             if e < 0.25 || e > 0.55 { paint(&g, ["d.d", ".d."], 3, 2); paint(&g, ["d.d", ".d."], 14, 2) }
-        case nil: break
+        case .cheer, .idleMove, nil: break
         }
         paint(&g, face, fx, fy)
 
@@ -863,8 +923,8 @@ enum QuotaPetArt {
     /// 鸭梨 (鸭梨山大): a duck-billed pear holding up a mountain that grows as quota runs out.
     private static func pear(mood: QuotaPetMood, remaining q: Double, frame f: Int, blink: Bool, touch: QuotaPetTouchMoment?) -> Grid {
         var g = blank()
-        let t = touch.flatMap { $0.elapsed < $0.reaction.duration ? $0.reaction : nil }
-        let e = touch?.elapsed ?? 0, still = touch?.reduceMotion ?? false
+        let (t, e) = acting(touch, .pear)
+        let still = touch?.reduceMotion ?? false
         let happy = mood == .refilled || mood == .celebrate
         let pressure = pearPressure(mood: mood, remaining: q)
         let squash = pressure >= 3
@@ -914,7 +974,7 @@ enum QuotaPetArt {
             eyes = ["e", "e"]; bill = billOpen
             // a jump with the mountain held up high
             lift = pressure > 0 && e > 0.1 && e < 0.6 ? 1 : 0
-        case nil: break
+        case .cheer, .idleMove, nil: break
         }
 
         let fy = top + (squash ? 4 : 5)
@@ -1180,6 +1240,7 @@ enum QuotaPetArt {
             let solid = 0.12 + 0.88 * min(100, max(0, remaining)) / 100
             for key in ["c", "s", "h", "p"] as [Character] { if let color = colors[key] { colors[key] = fade(color, solid) } }
         }
+        for (key, value) in QuotaPetHoliday.colors { colors[key] = value }
         var result: [UInt8: UInt32] = [:]
         for (key, value) in colors { result[UInt8(ascii: key.unicodeScalars.first!)] = value }
         return result
