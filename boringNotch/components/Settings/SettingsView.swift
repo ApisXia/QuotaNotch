@@ -274,6 +274,8 @@ struct Media: View {
 struct CalendarSettings: View {
     @ObservedObject private var calendarManager = CalendarManager.shared
     @Default(.showCalendar) private var showCalendar
+    @Default(.calendarWeekView) private var calendarWeekView
+    @Default(.weekStartDay) private var weekStartDay
     @State private var requestingAccess = false
 
     var body: some View {
@@ -286,6 +288,15 @@ struct CalendarSettings: View {
                     Defaults.Toggle(key: .hideAllDayEvents) { Text("Hide all-day events").fixedSize(horizontal: false, vertical: true) }
                     Defaults.Toggle(key: .autoScrollToNextEvent) { Text("Auto-scroll to next event").fixedSize(horizontal: false, vertical: true) }
                     Defaults.Toggle(key: .showFullEventTitles) { Text("Always show full event titles").fixedSize(horizontal: false, vertical: true) }
+                    Defaults.Toggle(key: .joinMeetingOnEventTap) { Text("Join meeting when tapping an event").fixedSize(horizontal: false, vertical: true) }
+                    Defaults.Toggle(key: .calendarWeekView) { Text("Weekly view").fixedSize(horizontal: false, vertical: true) }
+                    if calendarWeekView {
+                        SettingsField("Week starts on") {
+                            Picker("Week starts on", selection: $weekStartDay) {
+                                ForEach(WeekStartDay.allCases) { day in Text(day.localizedString).tag(day) }
+                            }
+                        }
+                    }
                 }.disabled(!showCalendar)
             }
             Section("Calendars") {
