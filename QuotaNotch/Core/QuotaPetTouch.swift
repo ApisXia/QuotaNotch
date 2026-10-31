@@ -25,6 +25,14 @@ enum QuotaPetReaction: Equatable, Sendable {
     }
 }
 
+/// A reaction at one moment, for pets that act it out inside their own art (the fish swims
+/// around its bowl, the pear lifts its mountain).
+struct QuotaPetTouchMoment: Equatable, Sendable {
+    let reaction: QuotaPetReaction
+    let elapsed: TimeInterval
+    var reduceMotion = false
+}
+
 /// Counts clicks to pick the reaction.
 struct QuotaPetTouch: Sendable {
     static let window: TimeInterval = 2.5
@@ -91,8 +99,14 @@ struct QuotaPetTouchPose: Equatable, Sendable {
 
     /// `reduceMotion` keeps faces and particles but drops hops, squashes, spins and shakes.
     static func at(_ reaction: QuotaPetReaction, pet: QuotaPetKind, elapsed e: TimeInterval,
-                   reduceMotion: Bool = false) -> QuotaPetTouchPose {
+                   reduceMotion: Bool = false, remaining: Double = 100) -> QuotaPetTouchPose {
         var pose = QuotaPetTouchPose()
+        if pet == .fish || pet == .pear {
+            pose = inArt(reaction, pet: pet, elapsed: e, remaining: remaining)
+            pose.particles = pose.particles.map { .init(kind: $0.kind, x: $0.x, y: $0.y, opacity: max(0, min(1, $0.opacity))) }
+            if reduceMotion { pose.dx = 0; pose.dy = 0; pose.rotation = 0 }
+            return pose
+        }
         let hop: Double = e < 0.15 ? -2 : e < 0.3 ? -3 : e < 0.45 ? -1 : e < 0.6 ? 0 : e < 0.7 ? -1 : 0
         func alternate(_ period: Double) -> Double { Int(e / period) % 2 == 0 ? -1 : 1 }
         switch reaction {
@@ -124,6 +138,8 @@ struct QuotaPetTouchPose: Equatable, Sendable {
             case .sprout:
                 pose.rotation = e < 0.9 ? 4 * alternate(0.13) : 0
                 pose.particles = [.init(kind: .flower, x: 8.5, y: -1 - rise * 2, opacity: min(1, e / 0.2))]
+            case .fish, .pear:
+                break // handled by inArt
             }
         case .annoyed:
             pose.mood = .low
@@ -148,6 +164,46 @@ struct QuotaPetTouchPose: Equatable, Sendable {
         pose.particles = pose.particles.map { .init(kind: $0.kind, x: $0.x, y: $0.y, opacity: max(0, min(1, $0.opacity))) }
         if reduceMotion {
             pose.dx = 0; pose.dy = 0; pose.scaleX = 1; pose.scaleY = 1; pose.rotation = 0; pose.flipped = false
+        }
+        return pose
+    }
+
+    /// The fish and the pear draw their faces and moves into the art (see
+    /// `QuotaPetArt.sprite(touch:)`); this adds the shake, tilt, hop and particles around them.
+    private static func inArt(_ reaction: QuotaPetReaction, pet: QuotaPetKind, elapsed e: TimeInterval,
+                              remaining: Double) -> QuotaPetTouchPose {
+        var pose = QuotaPetTouchPose()
+        let rise = e / reaction.duration
+        func alternate(_ period: Double) -> Double { Int(e / period) % 2 == 0 ? -1 : 1 }
+        func stars(_ y: Double) -> [QuotaPetParticle] {
+            (0..<3).map { k in
+                let angle = e / 0.26 + Double(k) * 2 * .pi / 3
+                return .init(kind: .star, x: 8.5 + 8 * cos(angle), y: y + 1.6 * sin(angle), opacity: 1)
+            }
+        }
+        let fish = pet == .fish
+        switch reaction {
+        case .pat:
+            if fish {
+                // a knock on the glass
+                pose.dx = e < 0.36 ? alternate(0.09) : 0
+                pose.particles = [.init(kind: .heart, x: 15, y: 1 - rise * 5, opacity: 1.2 - rise),
+                                  .init(kind: .heart, x: 2, y: 2 - rise * 6, opacity: 1 - rise)]
+            } else {
+                if QuotaPetArt.pearPressure(mood: .idle, remaining: remaining) == 0 { pose.dy = Double(QuotaPetArt.hop(e)) }
+                pose.particles = [.init(kind: .heart, x: 16, y: 3 - rise * 5, opacity: 1.2 - rise),
+                                  .init(kind: .note, x: 1, y: 5 - rise * 6, opacity: 1 - rise)]
+            }
+        case .annoyed:
+            pose.dx = e < 0.6 ? alternate(0.06) : 0
+            pose.particles = [.init(kind: .anger, x: 16, y: fish ? 0 : 2, opacity: Int(e / 0.15) % 2 == 0 ? 0.4 : 1)]
+        case .dizzy:
+            pose.rotation = sin(e / 0.14) * (fish ? 5 : 6)
+            pose.particles = stars(fish || QuotaPetArt.pearPressure(mood: .idle, remaining: remaining) > 0 ? 0.5 : 2)
+        case .stir:
+            if e < 0.75 { pose.particles = [.init(kind: .question, x: 16, y: fish ? 1 : 3, opacity: 1)] }
+        case .open:
+            if !fish { pose.dy = Double(QuotaPetArt.hop(e)) }
         }
         return pose
     }

@@ -24346,6 +24346,40 @@
         }
       }
     },
+    "摸鱼 · 鱼缸" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Slacker · Fishbowl"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "摸鱼 · 鱼缸"
+          }
+        }
+      }
+    },
+    "鸭梨 · 压力山大" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Duck Pear · Under Pressure"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "鸭梨 · 压力山大"
+          }
+        }
+      }
+    },
     "苗苗 · 豆芽" : {
       "extractionState" : "manual",
       "localizations" : {

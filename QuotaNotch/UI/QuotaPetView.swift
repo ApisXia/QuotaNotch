@@ -39,6 +39,8 @@ struct QuotaPetView: View {
     /// Overrides the tracked mood (settings previews).
     var fixedMood: QuotaPetMood? = nil
     var fixedSignal: QuotaPetSignal = .none
+    /// A click reaction the art acts out itself (fish and pear).
+    var touch: QuotaPetTouchMoment? = nil
     /// Pixel ripples: the size of one ripple pixel and how far out they reach, in points.
     /// Defaults to the pet's own pixels and the full effect margin; a tight space (the opened
     /// panel's column) uses finer, closer ripples so every ring fits.
@@ -87,7 +89,7 @@ struct QuotaPetView: View {
 
     private func pet(mood: QuotaPetMood, signal: QuotaPetSignal, frame: Int, blink: Bool) -> some View {
         let remaining = window?.remainingPercent ?? 0
-        let sprite = QuotaPetArt.sprite(kind, size: size, mood: mood, remaining: remaining, frame: frame, blink: blink)
+        let sprite = QuotaPetArt.sprite(kind, size: size, mood: mood, remaining: remaining, frame: frame, blink: blink, touch: touch)
         let palette = QuotaPetArt.palette(kind, provider: provider, tint: tint, remaining: remaining)
         let theme = Color(quotaPetRGB: QuotaPetArt.themeColor(kind, provider: provider, tint: tint))
         let pixels = QuotaPetPixels(sprite: sprite, palette: palette, scale: scale)

@@ -3,10 +3,10 @@ import Foundation
 
 /// The small pixel pet that shows quota and tasks in the closed notch.
 enum QuotaPetKind: String, CaseIterable, Sendable {
-    case mochi, bit, jelly, ghost, sprout
+    case mochi, bit, jelly, ghost, sprout, fish, pear
     static let defaultsKey = "quotaPet"
     static let defaultKind: QuotaPetKind = .bit
-    static let pets: [QuotaPetKind] = [.mochi, .bit, .jelly, .ghost, .sprout]
+    static let pets: [QuotaPetKind] = [.mochi, .bit, .jelly, .ghost, .sprout, .fish, .pear]
     /// The saved pet; older values such as "off" fall back to the default.
     static func choice(_ raw: String?) -> QuotaPetKind {
         raw.flatMap(QuotaPetKind.init(rawValue:)) ?? defaultKind
@@ -232,11 +232,18 @@ enum QuotaPetArt {
         }
     }
 
+    /// `touch` is a click reaction drawn into the art itself (the fish and the pear move inside
+    /// their own sprite); the other pets react through `QuotaPetTouchPose` alone.
     static func sprite(_ kind: QuotaPetKind, size: QuotaPetSize, mood: QuotaPetMood,
-                       remaining: Double, frame: Int = 0, blink: Bool = false) -> QuotaPetSprite {
+                       remaining: Double, frame: Int = 0, blink: Bool = false,
+                       touch: QuotaPetTouchMoment? = nil) -> QuotaPetSprite {
         let q = min(100, max(0, remaining.isFinite ? remaining : 0))
         let grid: Grid
         switch (kind, size) {
+        case (.fish, .widget): grid = fish(mood: mood, remaining: q, frame: frame, touch: touch)
+        case (.fish, .minimal): grid = crop(fish(mood: mood, remaining: q, frame: 0, touch: nil), x: 2, y: 4, width: 16, height: 12)
+        case (.pear, .widget): grid = pear(mood: mood, remaining: q, frame: frame, blink: blink, touch: touch)
+        case (.pear, .minimal): grid = crop(pear(mood: mood, remaining: q, frame: 0, blink: blink, touch: nil), x: 2, y: 4, width: 16, height: 12)
         case (.mochi, .widget): grid = mochi(mood: mood, remaining: q, frame: frame, blink: blink, props: true)
         case (.bit, .widget): grid = bit(mood: mood, remaining: q, frame: frame, blink: blink, props: true)
         case (.jelly, .widget):
@@ -561,6 +568,227 @@ enum QuotaPetArt {
         return g
     }
 
+    // MARK: 摸鱼 and 鸭梨
+
+    private static let fishRight = ["...ff..", "f.ffffo", "fffffef", "f.fbbff", "...f..."]
+    private static let fishSleep = ["...ff..", "f.ffffo", "fffffcc", "f.fbbff", "...f..."]
+    private static let fishHappy = ["...ff..", "f.ffffo", "ffffeff", "f.ffbMf", "...f..."]
+    /// Tapped on the glass three times: a round, spiky pufferfish.
+    private static let fishPuff = [".o.o.o.", "offfffo", "fefffef", "fffMfff", "ofbbbfo", ".o.o.o."]
+
+    private static func flipped(_ rows: [String]) -> [String] { rows.map { String($0.reversed()) } }
+    /// -1 / 1, switching every `period` seconds.
+    private static func alternate(_ e: TimeInterval, _ period: TimeInterval) -> Int { Int(e / period) % 2 == 1 ? 1 : -1 }
+    /// The hop used by the reactions, in sprite pixels (negative is up).
+    static func hop(_ e: TimeInterval) -> Int { e < 0.15 ? -2 : e < 0.3 ? -3 : e < 0.45 ? -1 : e < 0.6 ? 0 : e < 0.7 ? -1 : 0 }
+
+    /// 摸鱼: a goldfish in a round bowl; the water is the quota. Clicks happen inside the bowl:
+    /// a lap with bubbles, a pufferfish, a whirlpool, a leap out of the water.
+    private static func fish(mood: QuotaPetMood, remaining q: Double, frame f: Int, touch: QuotaPetTouchMoment?) -> Grid {
+        var g = blank()
+        let t = touch.flatMap { $0.elapsed < $0.reaction.duration ? $0.reaction : nil }
+        let e = touch?.elapsed ?? 0, still = touch?.reduceMotion ?? false
+        let G = UInt8(ascii: "G"), v = UInt8(ascii: "v"), u = UInt8(ascii: "u"), U = UInt8(ascii: "U"), B = UInt8(ascii: "B")
+        func inside(_ x: Int, _ y: Int) -> Bool {
+            let dx = Double(x) - 9.5, dy = Double(y) - 9
+            return y >= 4 && y <= 15 && dx * dx / (8.2 * 8.2) + dy * dy / (6.6 * 6.6) <= 1
+        }
+        let water = q > 0, level = 15 - gaugeLevel(q, steps: 10)
+        // A tap on the glass makes the water slosh.
+        let slosh = (t == .pat || t == .annoyed) && e < 0.6 && !still ? alternate(e, 0.12) : 0
+        for y in 0..<16 { for x in 0..<20 where inside(x, y) {
+            let edge = !inside(x - 1, y) || !inside(x + 1, y) || !inside(x, y + 1) || !inside(x, y - 1)
+            let surface = level + (x < 10 ? slosh : -slosh)
+            g[y][x] = edge ? G : (water && y >= surface ? (y == surface ? U : u) : v)
+        } }
+        if t == .dizzy && water && !still {
+            // a whirlpool
+            for x in 2..<18 { for y in level..<15 where g[y][x] == u && (x + y + Int(e / 0.09)) % 5 == 0 { g[y][x] = U } }
+        }
+        paint(&g, ["GGGGGGGGGGGG"], 4, 3)
+        paint(&g, ["h", "h", ".", "h"], 4, 6)
+
+        let base = water ? min(10, max(level, 8) - 1) : 10
+        var fx = 6, fy = base, face = fishRight
+        switch mood {
+        case .working, .pacing: fx = f % 2 == 1 ? 9 : 4; face = f % 2 == 1 ? fishRight : flipped(fishRight)
+        case .idle: fx = f % 2 == 1 ? 7 : 6; fy = base + (f % 2 == 1 ? 0 : 1)
+        case .refilled, .celebrate: fx = f % 2 == 1 ? 7 : 6; fy = base + (f % 2 == 1 ? 0 : 1); face = fishHappy
+        case .needsYou: fy = f % 2 == 1 ? 0 : 1; fx = 7
+        case .empty, .stale: face = fishSleep
+        case .low: break
+        }
+        fy = min(fy, 10)
+
+        switch t {
+        case .pat:
+            let r = e / QuotaPetReaction.pat.duration
+            face = fishHappy
+            if still { fx = 6; fy = base }
+            else if water && r < 0.8 {
+                // one happy lap around the bowl
+                let a = r / 0.8 * 2 * .pi
+                fx = 6 + Int((3.5 * cos(a)).rounded()); fy = min(10, base - 1 + Int((1.5 * sin(a)).rounded()))
+                if sin(a) > 0 { face = flipped(fishHappy) }
+            } else if !water { fy = 10 + min(0, hop(e)) }
+            else { fx = 6; fy = base }
+            if water {
+                // a string of bubbles from its mouth
+                for k in 0..<3 {
+                    let by = fy + 1 - ((Int(e / 0.11) + k * 2) % 7), bx = fx + (face == fishHappy ? 7 : -1) + k % 2
+                    if by >= 0, by < 16, bx >= 0, bx < 20, g[by][bx] == u || g[by][bx] == U { g[by][bx] = B }
+                }
+            }
+        case .annoyed:
+            face = fishPuff; fx = 6; fy = min(9, base)
+        case .dizzy:
+            if water && e < 1.5 && !still {
+                let a = e / 0.17
+                fx = 6 + Int((3 * cos(a)).rounded()); fy = min(10, base - 1 + Int((1.5 * sin(a)).rounded()))
+                face = sin(a) > 0 ? flipped(fishRight) : fishRight
+            } else { face = fishRight; fy = base }
+        case .stir:
+            face = e < 0.75 ? fishRight : fishSleep
+            fy = 10 + (e > 0.15 && e < 0.45 && !still ? -1 : 0)
+        case .open:
+            fx = 7; face = fishHappy
+            fy = still ? base : max(0, Int((Double(base) - Double(base + 1) * sin(.pi * min(1, e / 0.7))).rounded()))
+            if e < 0.25 || e > 0.55 { paint(&g, ["d.d", ".d."], 3, 2); paint(&g, ["d.d", ".d."], 14, 2) }
+        case nil: break
+        }
+        paint(&g, face, fx, fy)
+
+        if t == nil {
+            switch mood {
+            case .empty: sleepZ(&g, frame: f, 16, 0)
+            case .low, .pacing: drop(&g, frame: f, 15, 2)
+            case .needsYou:
+                bang(&g, frame: f, 17, 1)
+                paint(&g, ["d.d", ".d."], 4, 3 + f % 2); paint(&g, ["d.d"], 13, 3 + (f + 1) % 2)
+            case .refilled, .celebrate: paint(&g, ["H.H", "HHH", ".H."], 13, f % 2); sparkle(&g, frame: f, 2, 0)
+            default: break
+            }
+            if [.idle, .working, .refilled, .celebrate].contains(mood) {
+                let by = 7 - (f % 2) * 2, bx = fx + 7
+                if bx < 20, g[by][bx] == u || g[by][bx] == U { g[by][bx] = B }
+            }
+        }
+        if t == .open { bang(&g, frame: f, 17, 1) }
+        return g
+    }
+
+    /// 鸭梨 (鸭梨山大): a duck-billed pear holding up a mountain that grows as quota runs out.
+    private static func pear(mood: QuotaPetMood, remaining q: Double, frame f: Int, blink: Bool, touch: QuotaPetTouchMoment?) -> Grid {
+        var g = blank()
+        let t = touch.flatMap { $0.elapsed < $0.reaction.duration ? $0.reaction : nil }
+        let e = touch?.elapsed ?? 0, still = touch?.reduceMotion ?? false
+        let happy = mood == .refilled || mood == .celebrate
+        let pressure = pearPressure(mood: mood, remaining: q)
+        let squash = pressure >= 3
+        var body = ["....oooo....", "...occcco...", "...occccso..", "..occcccsso.", ".occcccccsso", "occccccccsso",
+                    "occccccccsso", "occccccccsso", ".occcccccso.", "..oooooooo.."]
+        if squash { body.remove(at: 2) }
+        let top = 16 - body.count
+        paint(&g, body, 4, top)
+
+        let billOpen = ["bbbb", "bMMb", "bbbb"], billSmile = ["bbbb", "bTTb", ".bb."]
+        var eyes: [String], eyesR: [String]? = nil, bill: [String]
+        switch mood {
+        case .empty, .stale: eyes = ["ee"]
+        case .refilled, .celebrate: eyes = [".e.", "e.e"]
+        case .needsYou: eyes = ["e", "e"]
+        default: eyes = blink ? ["ee"] : (pressure >= 3 || mood == .pacing ? ["e.", ".e"] : ["e", "e"])
+        }
+        switch mood {
+        case .needsYou: bill = billOpen
+        case .refilled, .celebrate: bill = billSmile
+        default: bill = pressure >= 3 || mood == .pacing ? [".bb.", "bbbb"] : ["bbbb", ".bb."]
+        }
+        var cheek = ["p"], lift = 0, wobble = (mood == .needsYou || mood == .working) && f % 2 == 1 ? 1 : 0
+        var leaf = ["..ll.", ".lln.", "...n."], sweat = true
+
+        switch t {
+        case .pat:
+            eyes = [".e.", "e.e"]
+            bill = e < 0.7 && Int(e / 0.14) % 2 == 0 ? billOpen : billSmile
+            // it lifts the mountain off its head for a moment
+            lift = pressure > 0 ? (e < 0.12 || e > 1 ? 0 : (e < 0.22 || e > 0.9 ? 1 : 2)) : 0
+            sweat = false
+            if pressure == 0 && !still {
+                leaf = [["..ll.", ".lln.", "...n."], [".....", ".lln.", ".lln."], [".ll..", ".nll.", ".n..."], [".....", ".nll.", ".nll."]][Int(e / 0.11) % 4]
+            }
+        case .annoyed:
+            eyes = ["e.", ".e", "e."]; eyesR = [".e", "e.", ".e"]
+            bill = ["bbbb", "bbbb"]; cheek = ["qq"]
+            wobble = e < 0.6 && !still ? -alternate(e, 0.06) : 0
+        case .dizzy:
+            eyes = [["ee", ".."], [".e", ".e"], ["..", "ee"], ["e.", "e."]][Int(e / 0.11) % 4]; eyesR = eyes
+            bill = ["bbbb", ".bb."]
+            wobble = still ? 0 : Int((sin(e / 0.12) * 1.5).rounded())
+        case .stir:
+            if e < 0.75 { eyes = ["ee"]; eyesR = ["e"] }
+        case .open:
+            eyes = ["e", "e"]; bill = billOpen
+            // a jump with the mountain held up high
+            lift = pressure > 0 && e > 0.1 && e < 0.6 ? 1 : 0
+        case nil: break
+        }
+
+        let fy = top + (squash ? 4 : 5)
+        let tall = eyes.count == 3, width = eyes[0].count
+        let ey = tall ? fy - 1 : fy - eyes.count + 1
+        paint(&g, eyes, 8 - width, ey); paint(&g, eyesR ?? flipped(eyes), 12, ey)
+        paint(&g, bill, 8, fy + 1)
+        let cy = tall ? fy + 2 : fy + 1
+        paint(&g, cheek, 7 - cheek[0].count, cy); paint(&g, cheek, 13, cy)
+
+        if pressure == 0 {
+            paint(&g, leaf, 7 + (happy && f % 2 == 1 && t == nil ? 1 : 0), top - 3)
+        } else {
+            let mountains: [[String]] = [
+                ["...WW...", "..rrrr..", ".rrrRrr."],
+                ["....W....", "...WWW...", "..rrWrr..", ".rrrrRrr."],
+                ["....WW....", "...WWWW...", "..rrWWrr..", ".rrrrrrRr."],
+                [".....WW.....", "....WWWW....", "...rWWWrr...", "..rrrrrrRr..", ".rrRrrrrrrr."]
+            ]
+            let mountain = mountains[pressure - 1], w = mountain[0].count
+            let mx = Int((10 - Double(w) / 2).rounded()) + wobble, base = top - 2 - lift
+            paint(&g, mountain, mx, base - mountain.count + 1)
+            paint(&g, ["n"], 9, top - 1)
+            // little arms reach up from the shoulders to the mountain's base
+            func arm(_ x0: Int, _ y0: Int, _ x1: Int, _ y1: Int) {
+                let n = max(abs(x1 - x0), abs(y1 - y0))
+                guard n > 0 else { return }
+                for i in 0...n {
+                    let x = Int((Double(x0) + Double(x1 - x0) * Double(i) / Double(n)).rounded())
+                    let y = Int((Double(y0) + Double(y1 - y0) * Double(i) / Double(n)).rounded())
+                    if y >= 0, y < 16, x >= 0, x < 20, g[y][x] == dot { g[y][x] = i == n ? UInt8(ascii: "c") : UInt8(ascii: "a") }
+                }
+            }
+            arm(5, top + 3, mx + 1, base + 1); arm(14, top + 3, mx + w - 2, base + 1)
+            if sweat && t == nil {
+                if pressure >= 2 { paint(&g, ["d", "d"], 3 - f % 2, top + 5) }
+                if pressure >= 3 { paint(&g, ["d", "d"], 17 + f % 2, top + 4) }
+            }
+        }
+        if t == nil {
+            switch mood {
+            case .needsYou: bang(&g, frame: f, 18, 0)
+            case .empty: sleepZ(&g, frame: f, 16, 0)
+            case .refilled, .celebrate: sparkle(&g, frame: f, 1, 2)
+            default: break
+            }
+        }
+        if t == .open { bang(&g, frame: f, 18, 0) }
+        return g
+    }
+
+    /// How big the pear's mountain is: none with plenty of quota (or just refilled), four steps as it runs out.
+    static func pearPressure(mood: QuotaPetMood, remaining q: Double) -> Int {
+        if mood == .refilled || mood == .celebrate { return 0 }
+        return q >= 80 ? 0 : q >= 55 ? 1 : q >= 35 ? 2 : q >= 15 ? 3 : 4
+    }
+
     private static func minimal(_ kind: QuotaPetKind, mood: QuotaPetMood, remaining q: Double, blink: Bool) -> Grid {
         switch kind {
         case .jelly:
@@ -591,7 +819,7 @@ enum QuotaPetArt {
             var grid = crop(bit(mood: mood, remaining: q, frame: 0, blink: blink, props: false), x: 2, y: 1, width: 16, height: 11)
             grid.append(meter(width: 16, remaining: q, fill: UInt8(ascii: "m"), empty: UInt8(ascii: "d")))
             return grid
-        case .ghost, .sprout:
+        case .ghost, .sprout, .fish, .pear:
             return sprite(kind, size: .minimal, mood: mood, remaining: q, blink: blink).rows.map { Array($0.utf8) }
         }
     }
@@ -636,6 +864,8 @@ enum QuotaPetArt {
         case .jelly: return 0x7AA2FF
         case .ghost: return 0xB9C2FF
         case .sprout: return 0x8FDC6A
+        case .fish: return 0xFF9F4A
+        case .pear: return 0xDFE874
         }
     }
 
@@ -689,6 +919,8 @@ enum QuotaPetArt {
         case .jelly: return palette[UInt8(ascii: "f")] ?? 0x7AA2FF
         case .ghost: return warning ?? (tint == .service ? brandColor(provider) : 0xDFE3FB)
         case .sprout: return palette[UInt8(ascii: "m")] ?? 0x6FC3FF
+        case .fish: return palette[UInt8(ascii: "u")] ?? 0x5FB3FF
+        case .pear: return warning ?? (tint == .service ? brandColor(provider) : 0xDFE874)
         }
     }
 
@@ -713,6 +945,14 @@ enum QuotaPetArt {
             colors = ["o": 0x3A2A24, "c": 0xE58A5A, "r": 0xD1774A, "n": 0x8A4A32, "m": 0x6FC3FF, "g": 0x5AA14A, "l": 0x8FDC6A,
                       "L": 0x5AA14A, "y": 0xD9C25A, "Y": 0xB89A45, "q": 0xFF8FB1, "Q": 0xFFE27A, "e": 0x2A1F1C, "p": 0xF7B9A0,
                       "w": 0xFFFFFF, "M": 0x5A2E2E, "T": 0xFF7A8A, "Z": 0xCFD8E0, "X": 0xFF9F0A, "d": 0x7AA2FF]
+        case .fish:
+            colors = ["G": 0xC9D3E2, "h": 0xFFFFFF, "v": 0x1D2433, "u": 0x5FB3FF, "U": 0x9FD4FF, "f": 0xFF9F4A, "o": 0xE0702A,
+                      "b": 0xFFE2C2, "c": 0x2A1F1C, "e": 0x2A1F1C, "B": 0xE8F6FF, "M": 0x5A2E2E, "T": 0xFF7A8A, "X": 0xFF9F0A,
+                      "Z": 0xCFD8E0, "w": 0xFFFFFF, "d": 0x7AA2FF, "H": 0xFF8FB1]
+        case .pear:
+            colors = ["o": 0x4D5A1F, "c": 0xDFE874, "s": 0xB9C64E, "a": 0x8D9A35, "l": 0x5AA14A, "n": 0x7A4A2A, "r": 0x8A8F99,
+                      "R": 0x6C717B, "W": 0xF2F4F8, "e": 0x2A1F1C, "b": 0xFF9F2A, "d": 0x7AA2FF, "q": 0xFF6B6B, "p": 0xFFA3B8,
+                      "M": 0x5A2E2E, "T": 0xFF7A8A, "X": 0xFF9F0A, "Z": 0xCFD8E0, "w": 0xFFFFFF]
         }
         let brand = brandColor(provider)
         let warning: UInt32? = remaining < 20 ? 0xFF5A4F : (remaining < 35 ? 0xF4D35E : nil)
@@ -723,6 +963,8 @@ enum QuotaPetArt {
             case .mochi: colors["f"] = brand; colors["F"] = lighten(brand)
             case .ghost: colors["p"] = brand
             case .sprout: colors["m"] = brand
+            case .fish: colors["u"] = brand; colors["U"] = lighten(brand)
+            case .pear: colors["c"] = lighten(brand); colors["s"] = brand
             }
         }
         if kind == .bit {
@@ -731,6 +973,7 @@ enum QuotaPetArt {
         }
         if kind == .jelly || kind == .mochi, let warning { colors["f"] = warning; colors["F"] = lighten(warning) }
         if kind == .sprout, let warning { colors["m"] = warning }
+        if kind == .fish, let warning { colors["u"] = warning; colors["U"] = lighten(warning) }
         if kind == .ghost {
             // The ghost fades as quota is used; the notch behind it is black, so fading is
             // blending toward black. The outline and face stay.

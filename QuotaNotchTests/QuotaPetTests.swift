@@ -259,6 +259,8 @@ final class QuotaPetTests: XCTestCase {
         XCTAssertEqual(QuotaPetKind.choice("jelly"), .jelly)
         XCTAssertEqual(QuotaPetKind.choice("ghost"), .ghost)
         XCTAssertEqual(QuotaPetKind.choice("sprout"), .sprout)
+        XCTAssertEqual(QuotaPetKind.choice("fish"), .fish)
+        XCTAssertEqual(QuotaPetKind.choice("pear"), .pear)
         XCTAssertEqual(QuotaPetKind.choice("unknown"), .bit)
         XCTAssertEqual(QuotaPetKind.choice("off"), .bit)
         XCTAssertEqual(QuotaPetKind.allCases, QuotaPetKind.pets)
@@ -390,6 +392,55 @@ final class QuotaPetTests: XCTestCase {
                 let calm = QuotaPetTouchPose.at(reaction, pet: kind, elapsed: t, reduceMotion: true)
                 XCTAssertEqual([calm.dx, calm.dy, calm.rotation], [0, 0, 0])
                 XCTAssertFalse(calm.flipped)
+            }
+        }
+    }
+
+    /// The fish's water is the quota; the pear's mountain grows as quota runs out.
+    func testFishWaterAndPearMountainFollowQuota() {
+        func count(_ sprite: QuotaPetSprite, _ codes: String) -> Int {
+            let set = Set(codes.utf8)
+            return sprite.codes.filter { set.contains($0) }.count
+        }
+        let water = { (q: Double) in count(QuotaPetArt.sprite(.fish, size: .widget, mood: .idle, remaining: q), "uU") }
+        XCTAssertGreaterThan(water(90), water(40))
+        XCTAssertGreaterThan(water(40), water(5))
+        XCTAssertEqual(water(0), 0)
+        let mountain = { (q: Double) in count(QuotaPetArt.sprite(.pear, size: .widget, mood: .idle, remaining: q), "rRW") }
+        XCTAssertEqual(mountain(90), 0)
+        XCTAssertGreaterThan(mountain(60), 0)
+        XCTAssertGreaterThan(mountain(40), mountain(60))
+        XCTAssertGreaterThan(mountain(20), mountain(40))
+        XCTAssertGreaterThan(mountain(5), mountain(20))
+        // Just refilled, the mountain is gone whatever the number says.
+        XCTAssertEqual(count(QuotaPetArt.sprite(.pear, size: .widget, mood: .refilled, remaining: 30), "rRW"), 0)
+    }
+
+    /// The fish and the pear act clicks out inside their art; every moment stays on the grid,
+    /// is fully colored, and goes back to the plain pet when the reaction ends.
+    func testFishAndPearActOutClicks() {
+        for kind in [QuotaPetKind.fish, .pear] {
+            for (reaction, mood, remaining) in [(QuotaPetReaction.pat, QuotaPetMood.idle, 70.0), (.annoyed, .idle, 70), (.dizzy, .idle, 20),
+                                                (.stir, .empty, 0), (.open, .needsYou, 41), (.pat, .idle, 90), (.pat, .empty, 0)] {
+                let palette = QuotaPetArt.palette(kind, provider: .codex, tint: .original, remaining: remaining)
+                let plain = QuotaPetArt.sprite(kind, size: .widget, mood: mood, remaining: remaining)
+                var changed = false
+                for still in [false, true] {
+                    var t = 0.0
+                    while t < reaction.duration {
+                        let moment = QuotaPetTouchMoment(reaction: reaction, elapsed: t, reduceMotion: still)
+                        let sprite = QuotaPetArt.sprite(kind, size: .widget, mood: mood, remaining: remaining, touch: moment)
+                        XCTAssertEqual([sprite.width, sprite.height], [20, 16], "\(kind) \(reaction)")
+                        for code in sprite.codes where code != UInt8(ascii: ".") {
+                            XCTAssertNotNil(palette[code], "\(kind) \(reaction) \(Character(UnicodeScalar(code)))")
+                        }
+                        if sprite != plain { changed = true }
+                        t += 0.05
+                    }
+                }
+                XCTAssertTrue(changed, "\(kind) \(reaction) \(mood)")
+                let after = QuotaPetTouchMoment(reaction: reaction, elapsed: reaction.duration + 0.01)
+                XCTAssertEqual(QuotaPetArt.sprite(kind, size: .widget, mood: mood, remaining: remaining, touch: after), plain)
             }
         }
     }

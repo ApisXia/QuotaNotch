@@ -94,14 +94,16 @@ struct NotchPetColumn: View {
     }
 
     /// The pet as it shows quota and tasks, between reactions.
-    @ViewBuilder private var ownPet: some View {
+    private var ownPet: some View { currentPet(touch: nil) }
+
+    @ViewBuilder private func currentPet(touch: QuotaPetTouchMoment?) -> some View {
         if resting {
             TimelineView(.periodic(from: .now, by: 1)) { context in
                 let dozing = Int(context.date.timeIntervalSinceReferenceDate / 4.2) % 2 == 1
-                pet(fixed: dozing ? .empty : .idle, signal: .none)
+                pet(fixed: dozing ? .empty : .idle, signal: .none, touch: touch)
             }
         } else {
-            pet(fixed: focused.map { Self.mood($0.state) }, signal: focused.map { Self.signal($0.state) } ?? .none)
+            pet(fixed: focused.map { Self.mood($0.state) }, signal: focused.map { Self.signal($0.state) } ?? .none, touch: touch)
         }
     }
 
@@ -110,10 +112,11 @@ struct NotchPetColumn: View {
     private func reacting(_ reaction: QuotaPetReaction, elapsed: TimeInterval) -> some View {
         let scale: CGFloat = 4
         let pose = QuotaPetTouchPose.at(reaction, pet: QuotaPetKind.choice(petRaw), elapsed: elapsed,
-                                        reduceMotion: reduceMotion)
+                                        reduceMotion: reduceMotion, remaining: window?.remainingPercent ?? 0)
+        let moment = QuotaPetTouchMoment(reaction: reaction, elapsed: elapsed, reduceMotion: reduceMotion)
         return ZStack {
             Group {
-                if let mood = pose.mood { pet(fixed: mood, signal: .none) } else { ownPet }
+                if let mood = pose.mood { pet(fixed: mood, signal: .none) } else { currentPet(touch: moment) }
             }
             .scaleEffect(x: (pose.flipped ? -1 : 1) * pose.scaleX, y: pose.scaleY, anchor: .bottom)
             .rotationEffect(.degrees(pose.rotation), anchor: .bottom)
@@ -143,11 +146,11 @@ struct NotchPetColumn: View {
         if next == .open { openWaiting() }
     }
 
-    private func pet(fixed: QuotaPetMood?, signal: QuotaPetSignal) -> some View {
+    private func pet(fixed: QuotaPetMood?, signal: QuotaPetSignal, touch: QuotaPetTouchMoment? = nil) -> some View {
         QuotaPetView(kind: QuotaPetKind.choice(petRaw), size: .widget, provider: provider, window: window,
                      stale: pin == nil || store.isStale(provider), scale: 4,
                      tasks: QuotaPetTasks(activity.attention, enabled: activity.enabled),
-                     fixedMood: fixed, fixedSignal: signal,
+                     fixedMood: fixed, fixedSignal: signal, touch: touch,
                      // 12pt of room on each side: half-size ripple pixels, six rings out, all
                      // drawn inside the pet's own frame.
                      rippleCell: 2, rippleReach: 12, contained: true)
