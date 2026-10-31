@@ -41,6 +41,7 @@ struct AlbumArtView: View {
 
     private var albumArtBackground: some View {
         Image(nsImage: musicManager.albumArt)
+            .interpolation(.high)
             .resizable()
             .clipped()
             .clipShape(
@@ -84,6 +85,7 @@ struct AlbumArtView: View {
 
     private var albumArtImage: some View {
         Image(nsImage: musicManager.albumArt)
+            .interpolation(.high)
             .resizable()
             .aspectRatio(1, contentMode: .fit)
             .matchedGeometryEffect(id: "albumArt", in: albumArtNamespace)

@@ -71,6 +71,14 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         return false
     }
 
+    /// Opening the app again (from Launchpad or Applications) shows Settings: with no Dock
+    /// icon there is no other window to bring back. (From boring.notch dev.)
+    @MainActor
+    func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
+        SettingsWindowController.shared.showWindow()
+        return false
+    }
+
     func applicationWillTerminate(_ notification: Notification) {
         NotificationCenter.default.removeObserver(self)
         if let observer = screenLockedObserver {

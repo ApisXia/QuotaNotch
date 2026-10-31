@@ -373,6 +373,7 @@ struct ContentView: View {
         let album = QuotaPetArt.albumSize(size: notchSize, notchHeight: vm.effectiveClosedNotchHeight, displayScale: displayScale)
         return HStack(spacing: QuotaCompactMetrics.spacing) {
             Image(nsImage: musicManager.albumArt)
+                .interpolation(.high)
                 .resizable()
                 .clipped()
                 .clipShape(
