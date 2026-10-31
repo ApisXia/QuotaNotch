@@ -15,6 +15,9 @@ struct NotchPetColumn: View {
     @ObservedObject private var coordinator = BoringViewCoordinator.shared
     @AppStorage(QuotaPetKind.defaultsKey) private var petRaw = QuotaPetKind.defaultKind.rawValue
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var touch = QuotaPetTouch()
+    @State private var reaction: QuotaPetReaction?
+    @State private var reactionStart = Date.distantPast
 
     private var pin: QuotaPin? { store.activePin }
     private var provider: QuotaProvider { pin?.provider ?? store.selectedProvider }
@@ -42,21 +45,27 @@ struct NotchPetColumn: View {
 
     var body: some View {
         let lines = self.lines
-        Button(action: openWaiting) {
+        Button(action: tapPet) {
             // The pet sits at a fixed spot from the top, so it doesn't move when the page or the
             // text below it changes; two lines are always reserved for the detail.
             VStack(spacing: 4) {
                 Group {
-                    if resting {
-                        TimelineView(.periodic(from: .now, by: 1)) { context in
-                            let dozing = Int(context.date.timeIntervalSinceReferenceDate / 4.2) % 2 == 1
-                            pet(fixed: dozing ? .empty : .idle, signal: .none)
+                    if let reaction {
+                        TimelineView(.animation(minimumInterval: 1.0 / 30)) { context in
+                            reacting(reaction, elapsed: context.date.timeIntervalSince(reactionStart))
                         }
                     } else {
-                        pet(fixed: focused.map { Self.mood($0.state) }, signal: focused.map { Self.signal($0.state) } ?? .none)
+                        ownPet
                     }
                 }
                 .frame(width: 104, height: 88)
+                .task(id: reactionStart) {
+                    // The reaction ends on its own; a newer click restarts this with its own start.
+                    guard let current = reaction else { return }
+                    let start = reactionStart
+                    try? await Task.sleep(for: .seconds(current.duration))
+                    if reactionStart == start { reaction = nil }
+                }
                 Group {
                     Text(lines.status)
                         .font(.system(size: 11, weight: .semibold)).foregroundStyle(lines.color)
@@ -78,9 +87,60 @@ struct NotchPetColumn: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .help(waitingTask == nil ? lines.status : AgentText.t("打开在等你的任务", "Open the task that needs you"))
+        .help(waitingTask == nil ? lines.status + " · " + AgentText.t("点一下摸摸它", "Click to pet it")
+                                 : AgentText.t("打开在等你的任务", "Open the task that needs you"))
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(lines.status + " · " + lines.detail)
+    }
+
+    /// The pet as it shows quota and tasks, between reactions.
+    @ViewBuilder private var ownPet: some View {
+        if resting {
+            TimelineView(.periodic(from: .now, by: 1)) { context in
+                let dozing = Int(context.date.timeIntervalSinceReferenceDate / 4.2) % 2 == 1
+                pet(fixed: dozing ? .empty : .idle, signal: .none)
+            }
+        } else {
+            pet(fixed: focused.map { Self.mood($0.state) }, signal: focused.map { Self.signal($0.state) } ?? .none)
+        }
+    }
+
+    /// One moment of a reaction to a click (see `QuotaPetTouchPose`): a face, a hop, squash,
+    /// spin or shake, and small sprites around it. Hops and spins are left out with Reduce Motion.
+    private func reacting(_ reaction: QuotaPetReaction, elapsed: TimeInterval) -> some View {
+        let scale: CGFloat = 4
+        let pose = QuotaPetTouchPose.at(reaction, pet: QuotaPetKind.choice(petRaw), elapsed: elapsed,
+                                        reduceMotion: reduceMotion)
+        return ZStack {
+            Group {
+                if let mood = pose.mood { pet(fixed: mood, signal: .none) } else { ownPet }
+            }
+            .scaleEffect(x: (pose.flipped ? -1 : 1) * pose.scaleX, y: pose.scaleY, anchor: .bottom)
+            .rotationEffect(.degrees(pose.rotation), anchor: .bottom)
+            .offset(x: pose.dx * scale, y: pose.dy * scale)
+            .brightness(pose.brightness)
+            // Particles are placed in the sprite's own pixels: 20 × 16 at this scale.
+            ZStack(alignment: .topLeading) {
+                ForEach(Array(pose.particles.enumerated()), id: \.offset) { _, particle in
+                    QuotaPetPixels(sprite: particle.sprite, palette: QuotaPetParticle.palette, scale: scale)
+                        .offset(x: particle.x * scale, y: particle.y * scale)
+                        .opacity(particle.opacity)
+                }
+            }
+            .frame(width: 20 * scale, height: 16 * scale, alignment: .topLeading)
+            .allowsHitTesting(false)
+        }
+    }
+
+    /// A click pets it; a click while a task waits also opens that task.
+    private func tapPet() {
+        let now = Date()
+        let dozing = resting && Int(now.timeIntervalSinceReferenceDate / 4.2) % 2 == 1
+        let asleep = dozing || (window.map { $0.remainingPercent <= 0 } ?? false)
+        let next = touch.tap(at: now, asleep: asleep, waiting: waitingTask != nil)
+        reaction = next
+        reactionStart = now
+        if next == .open { openWaiting() }
     }
 
     private func pet(fixed: QuotaPetMood?, signal: QuotaPetSignal) -> some View {

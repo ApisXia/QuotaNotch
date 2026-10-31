@@ -353,4 +353,44 @@ final class QuotaPetTests: XCTestCase {
             XCTAssertEqual(middle, 9.5, accuracy: 0.6, "\(kind)")
         }
     }
+
+    /// One click pets; the third within 2.5 s annoys; the fifth makes it dizzy and starts over.
+    func testClicksPickTheReaction() {
+        var touch = QuotaPetTouch()
+        let start = Date(timeIntervalSince1970: 1_000)
+        let reactions = (0..<6).map { touch.tap(at: start.addingTimeInterval(Double($0) * 0.3), asleep: false, waiting: false) }
+        XCTAssertEqual(reactions, [.pat, .pat, .annoyed, .annoyed, .dizzy, .pat])
+        // Clicks further apart than the window are each a single pat.
+        var slow = QuotaPetTouch()
+        XCTAssertEqual((0..<4).map { slow.tap(at: start.addingTimeInterval(Double($0) * 3), asleep: false, waiting: false) },
+                       [.pat, .pat, .pat, .pat])
+        // Asleep, it stirs twice and wakes on the third click; a waiting task always opens.
+        var sleepy = QuotaPetTouch()
+        XCTAssertEqual((0..<3).map { sleepy.tap(at: start.addingTimeInterval(Double($0) * 0.4), asleep: true, waiting: false) },
+                       [.stir, .stir, .pat])
+        var busy = QuotaPetTouch()
+        XCTAssertEqual(busy.tap(at: start, asleep: false, waiting: true), .open)
+    }
+
+    func testReactionPosesStayNearThePetAndSettle() {
+        for kind in pets {
+            for reaction in [QuotaPetReaction.pat, .annoyed, .dizzy, .stir, .open] {
+                var t = 0.0
+                while t < reaction.duration {
+                    let pose = QuotaPetTouchPose.at(reaction, pet: kind, elapsed: t)
+                    XCTAssertLessThanOrEqual(abs(pose.dx), 1, "\(kind) \(reaction)")
+                    XCTAssertLessThanOrEqual(abs(pose.dy), 3, "\(kind) \(reaction)")
+                    XCTAssertLessThanOrEqual(abs(pose.rotation), 6.01, "\(kind) \(reaction)")
+                    for particle in pose.particles {
+                        XCTAssert((0...1).contains(particle.opacity), "\(kind) \(reaction)")
+                        XCTAssert(particle.sprite.codes.allSatisfy { $0 == UInt8(ascii: ".") || QuotaPetParticle.palette[$0] != nil })
+                    }
+                    t += 0.05
+                }
+                let calm = QuotaPetTouchPose.at(reaction, pet: kind, elapsed: t, reduceMotion: true)
+                XCTAssertEqual([calm.dx, calm.dy, calm.rotation], [0, 0, 0])
+                XCTAssertFalse(calm.flipped)
+            }
+        }
+    }
 }
