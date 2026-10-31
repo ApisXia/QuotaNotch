@@ -211,6 +211,7 @@ struct Media: View {
     @Default(.mediaController) private var mediaController
     @Default(.enableSneakPeek) private var enableSneakPeek
     @Default(.sneakPeekStyles) private var sneakPeekStyles
+    @Default(.showMediaSourceAppIcon) private var showMediaSourceAppIcon
 
     @ObservedObject private var coordinator = BoringViewCoordinator.shared
 
@@ -230,7 +231,10 @@ struct Media: View {
                 }
                 if musicManager.isNowPlayingDeprecated && mediaController == .nowPlaying {
                     SettingsHint("Now Playing is unavailable. Apple Music is used instead.")
+                } else if mediaController == .nowPlaying {
+                    SettingsHint("Shows any app that appears in Control Center's Now Playing, such as QQ Music, NetEase Cloud Music or a browser. Songs without a cover get one from Apple's music catalog.")
                 }
+                Toggle("Show the playing app's icon on the album art", isOn: $showMediaSourceAppIcon)
             }
             Section("Media playback live activity") {
                 Toggle("Show music live activity", isOn: $coordinator.musicLiveActivityEnabled)

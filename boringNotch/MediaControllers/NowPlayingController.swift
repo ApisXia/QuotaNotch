@@ -68,6 +68,11 @@ final class NowPlayingController: ObservableObject, MediaControllerProtocol {
     private var process: Process?
     private var pipeHandler: JSONLinesPipeHandler?
     private var streamTask: Task<Void, Never>?
+    /// The adapter restarts by itself if it exits; this counts tries since the last update.
+    private var restartAttempts = 0
+    private var stopped = false
+    /// Covers looked up online for apps that report a song without one (QQ Music, some browsers).
+    private let artworkFallback = ArtworkFallback()
 
     // MARK: - Initialization
     init?() {
@@ -100,6 +105,7 @@ final class NowPlayingController: ObservableObject, MediaControllerProtocol {
     }
 
     deinit {
+        stopped = true
         streamTask?.cancel()
         
         if let pipeHandler = self.pipeHandler {
@@ -202,6 +208,11 @@ final class NowPlayingController: ObservableObject, MediaControllerProtocol {
         
         let pipeHandler = JSONLinesPipeHandler()
         process.standardOutput = await pipeHandler.getPipe()
+        // If the adapter dies (it can after sleep or a MediaRemote hiccup), start it again;
+        // otherwise the notch would stop following the music until the app is relaunched.
+        process.terminationHandler = { [weak self] _ in
+            Task { [weak self] in await self?.adapterExited() }
+        }
         
         self.process = process
         self.pipeHandler = pipeHandler
@@ -212,8 +223,24 @@ final class NowPlayingController: ObservableObject, MediaControllerProtocol {
                 await self?.processJSONStream()
             }
         } catch {
-            assertionFailure("Failed to launch mediaremote-adapter.pl: \(error)")
+            print("Failed to launch mediaremote-adapter.pl: \(error)")
+            Task { [weak self] in await self?.adapterExited() }
         }
+    }
+
+    /// Restarts the adapter after a pause that grows with each try: 2, 4, 8, 16, then 30 s.
+    private func adapterExited() async {
+        guard !stopped else { return }
+        streamTask?.cancel()
+        streamTask = nil
+        if let pipeHandler { await pipeHandler.close() }
+        pipeHandler = nil
+        process = nil
+        restartAttempts += 1
+        let delay = min(30, pow(2, Double(min(restartAttempts, 5))))
+        try? await Task.sleep(for: .seconds(delay))
+        guard !stopped, process == nil else { return }
+        await setupNowPlayingObserver()
     }
 
     // MARK: - Async Stream Processing
@@ -272,6 +299,9 @@ final class NowPlayingController: ObservableObject, MediaControllerProtocol {
             )
         } else if !diff {
             newPlaybackState.artwork = nil
+        } else {
+            // A diff without artwork means the artwork didn't change.
+            newPlaybackState.artwork = self.playbackState.artwork
         }
 
         if let dateString = payload.timestamp,
@@ -292,13 +322,32 @@ final class NowPlayingController: ObservableObject, MediaControllerProtocol {
         )
         
         newPlaybackState.volume = payload.volume ?? (diff ? self.playbackState.volume : 0.5)
-        
+        restartAttempts = 0
+
+        // Some apps (QQ Music among them) report the song without its cover: look it up.
+        if newPlaybackState.artwork == nil {
+            newPlaybackState.artwork = artworkFallback.artwork(
+                title: newPlaybackState.title, artist: newPlaybackState.artist, album: newPlaybackState.album
+            ) { [weak self] data, key in
+                Task { [weak self] in self?.applyFallbackArtwork(data, key: key) }
+            }
+        }
+
         self.playbackState = newPlaybackState
         
         // Fetch favorite state for supported apps asynchronously
         // await fetchFavoriteStateIfSupported()
     }
     
+    /// A looked-up cover arrived: show it if the same album is still playing without one.
+    private func applyFallbackArtwork(_ data: Data, key: String) {
+        var current = playbackState
+        guard current.artwork == nil,
+              ArtworkFallback.key(title: current.title, artist: current.artist, album: current.album) == key else { return }
+        current.artwork = data
+        playbackState = current
+    }
+
      private func fetchFavoriteStateIfSupported() async {
          let bundleID = playbackState.bundleIdentifier
         

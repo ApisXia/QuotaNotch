@@ -23836,6 +23836,40 @@
         }
       }
     },
+    "Show the playing app's icon on the album art" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Show the playing app's icon on the album art"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "在专辑封面角上显示正在播放的 App 图标"
+          }
+        }
+      }
+    },
+    "Shows any app that appears in Control Center's Now Playing, such as QQ Music, NetEase Cloud Music or a browser. Songs without a cover get one from Apple's music catalog." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Shows any app that appears in Control Center's Now Playing, such as QQ Music, NetEase Cloud Music or a browser. Songs without a cover get one from Apple's music catalog."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "显示控制中心“正在播放”里的任何 App，比如 QQ 音乐、网易云音乐或浏览器。没有封面的歌会从 Apple 音乐目录里找一张。"
+          }
+        }
+      }
+    },
     "Now Playing is unavailable. Apple Music is used instead." : {
       "extractionState" : "manual",
       "localizations" : {

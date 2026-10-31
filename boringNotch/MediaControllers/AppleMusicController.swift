@@ -29,6 +29,8 @@ class AppleMusicController: MediaControllerProtocol {
     }
 
     private var notificationTask: Task<Void, Never>?
+    /// Artwork looked up online for tracks whose artwork isn't scriptable (streamed Apple Music tracks).
+    private let artworkFallback = ArtworkFallback()
     
     // MARK: - Initialization
     init() {
@@ -144,11 +146,35 @@ class AppleMusicController: MediaControllerProtocol {
         updatedState.repeatMode = RepeatMode(rawValue: Int(repeatModeValue)) ?? .off
         let volumePercentage = descriptor.atIndex(9)?.int32Value ?? 50
         updatedState.volume = Double(volumePercentage) / 100.0
-        updatedState.artwork = descriptor.atIndex(10)?.data as Data?
+        updatedState.artwork = Self.imageData(from: descriptor.atIndex(10))
         let lovedState = descriptor.atIndex(11)?.booleanValue ?? false
         updatedState.isFavorite = lovedState
         updatedState.lastUpdated = Date()
+        if updatedState.artwork == nil {
+            updatedState.artwork = artworkFallback.artwork(
+                title: updatedState.title, artist: updatedState.artist, album: updatedState.album
+            ) { [weak self] data, key in
+                Task { @MainActor [weak self] in self?.applyFallbackArtwork(data, key: key) }
+            }
+        }
         self.playbackState = updatedState
+    }
+
+    /// The script returns "" when a track has no artwork; only keep real image payloads.
+    private static func imageData(from descriptor: NSAppleEventDescriptor?) -> Data? {
+        guard let descriptor, descriptor.descriptorType != typeUnicodeText,
+              descriptor.descriptorType != typeUTF8Text else { return nil }
+        let data = descriptor.data
+        return data.isEmpty || NSImage(data: data) == nil ? nil : data
+    }
+
+    /// A looked-up cover arrived: show it if the same album is still playing without one.
+    private func applyFallbackArtwork(_ data: Data, key: String) {
+        var current = playbackState
+        guard current.artwork == nil,
+              ArtworkFallback.key(title: current.title, artist: current.artist, album: current.album) == key else { return }
+        current.artwork = data
+        playbackState = current
     }
     
     // MARK: - Private Methods

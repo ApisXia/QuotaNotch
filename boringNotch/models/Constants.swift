@@ -118,6 +118,8 @@ extension Defaults.Keys {
     
     // MARK: Media Controller
     static let mediaController = Key<MediaControllerType>("mediaController", default: defaultMediaController)
+    /// The playing app's icon on the corner of the album art in the opened notch.
+    static let showMediaSourceAppIcon = Key<Bool>("showMediaSourceAppIcon", default: true)
     
     // MARK: Advanced Settings
     static let useCustomAccentColor = Key<Bool>("useCustomAccentColor", default: false)
