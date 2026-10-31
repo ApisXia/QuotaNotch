@@ -101,10 +101,10 @@ struct QuotaPetTouchPose: Equatable, Sendable {
     static func at(_ reaction: QuotaPetReaction, pet: QuotaPetKind, elapsed e: TimeInterval,
                    reduceMotion: Bool = false, remaining: Double = 100) -> QuotaPetTouchPose {
         var pose = QuotaPetTouchPose()
-        if pet == .fish || pet == .pear {
+        if [.fish, .pear, .bbq, .ox].contains(pet) {
             pose = inArt(reaction, pet: pet, elapsed: e, remaining: remaining)
             pose.particles = pose.particles.map { .init(kind: $0.kind, x: $0.x, y: $0.y, opacity: max(0, min(1, $0.opacity))) }
-            if reduceMotion { pose.dx = 0; pose.dy = 0; pose.rotation = 0 }
+            if reduceMotion { pose.dx = 0; pose.dy = 0; pose.rotation = 0; pose.flipped = false }
             return pose
         }
         let hop: Double = e < 0.15 ? -2 : e < 0.3 ? -3 : e < 0.45 ? -1 : e < 0.6 ? 0 : e < 0.7 ? -1 : 0
@@ -138,7 +138,7 @@ struct QuotaPetTouchPose: Equatable, Sendable {
             case .sprout:
                 pose.rotation = e < 0.9 ? 4 * alternate(0.13) : 0
                 pose.particles = [.init(kind: .flower, x: 8.5, y: -1 - rise * 2, opacity: min(1, e / 0.2))]
-            case .fish, .pear:
+            case .fish, .pear, .bbq, .ox:
                 break // handled by inArt
             }
         case .annoyed:
@@ -181,6 +181,7 @@ struct QuotaPetTouchPose: Equatable, Sendable {
                 return .init(kind: .star, x: 8.5 + 8 * cos(angle), y: y + 1.6 * sin(angle), opacity: 1)
             }
         }
+        if pet == .bbq || pet == .ox { return sausageOrCow(reaction, pet: pet, elapsed: e) }
         let fish = pet == .fish
         switch reaction {
         case .pat:
@@ -204,6 +205,41 @@ struct QuotaPetTouchPose: Equatable, Sendable {
             if e < 0.75 { pose.particles = [.init(kind: .question, x: 16, y: fish ? 1 : 3, opacity: 1)] }
         case .open:
             if !fish { pose.dy = Double(QuotaPetArt.hop(e)) }
+        }
+        return pose
+    }
+
+    /// 芭比Q了 flips over when petted and spins on its skewer when dizzy; 牛马 flaps its ears and moos.
+    private static func sausageOrCow(_ reaction: QuotaPetReaction, pet: QuotaPetKind, elapsed e: TimeInterval) -> QuotaPetTouchPose {
+        var pose = QuotaPetTouchPose()
+        let rise = e / reaction.duration
+        let sausage = pet == .bbq
+        func alternate(_ period: Double) -> Double { Int(e / period) % 2 == 0 ? -1 : 1 }
+        switch reaction {
+        case .pat:
+            if sausage {
+                pose.dy = Double(QuotaPetArt.hop(e))
+                pose.flipped = e > 0.4
+                pose.particles = [.init(kind: .heart, x: 15, y: 2 - rise * 5, opacity: 1.2 - rise),
+                                  .init(kind: .heart, x: 1, y: 4 - rise * 6, opacity: 1 - rise)]
+            } else {
+                pose.particles = [.init(kind: .heart, x: 13, y: -rise * 3, opacity: 1.2 - rise),
+                                  .init(kind: .heart, x: 0, y: 1 - rise * 4, opacity: 1 - rise)]
+            }
+        case .annoyed:
+            pose.dx = e < 0.6 ? alternate(0.06) : 0
+            pose.particles = [.init(kind: .anger, x: sausage ? 1 : 11, y: sausage ? 1 : 0, opacity: Int(e / 0.15) % 2 == 0 ? 0.4 : 1)]
+        case .dizzy:
+            pose.particles = (0..<3).map { k in
+                let angle = e / 0.26 + Double(k) * 2 * .pi / 3
+                return sausage ? .init(kind: .star, x: 8.5 + 8 * cos(angle), y: -0.5 + 1.6 * sin(angle), opacity: 1)
+                               : .init(kind: .star, x: 4 + 4.8 * cos(angle), y: 1 + 1.6 * sin(angle), opacity: 1)
+            }
+        case .stir:
+            if e < 0.75 { pose.particles = [.init(kind: .question, x: sausage ? 15 : 11, y: 1, opacity: 1)] }
+        case .open:
+            if sausage { pose.dy = Double(QuotaPetArt.hop(e)) }
+            else { pose.particles = [.init(kind: .note, x: 11, y: 2 - rise * 4, opacity: 1.3 - rise)] }
         }
         return pose
     }

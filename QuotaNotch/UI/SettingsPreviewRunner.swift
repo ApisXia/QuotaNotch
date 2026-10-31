@@ -132,7 +132,7 @@ struct SettingsPreviewRunner {
                     }
                 }
             }
-        }.padding(16).background(Color(white: 0.16)), width: 1080, name: "Quota-pets", output: output, height: 1250)
+        }.padding(16).background(Color(white: 0.16)), width: 1080, name: "Quota-pets", output: output, height: 1600)
         try captureTaskPanel(output: output, fixtures: fixtures)
         for dark in [true, false] {
             try capture(VStack(alignment: .leading, spacing: 12) {

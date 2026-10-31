@@ -3,10 +3,10 @@ import Foundation
 
 /// The small pixel pet that shows quota and tasks in the closed notch.
 enum QuotaPetKind: String, CaseIterable, Sendable {
-    case mochi, bit, jelly, ghost, sprout, fish, pear
+    case mochi, bit, jelly, ghost, sprout, fish, pear, bbq, ox
     static let defaultsKey = "quotaPet"
     static let defaultKind: QuotaPetKind = .bit
-    static let pets: [QuotaPetKind] = [.mochi, .bit, .jelly, .ghost, .sprout, .fish, .pear]
+    static let pets: [QuotaPetKind] = [.mochi, .bit, .jelly, .ghost, .sprout, .fish, .pear, .bbq, .ox]
     /// The saved pet; older values such as "off" fall back to the default.
     static func choice(_ raw: String?) -> QuotaPetKind {
         raw.flatMap(QuotaPetKind.init(rawValue:)) ?? defaultKind
@@ -244,6 +244,10 @@ enum QuotaPetArt {
         case (.fish, .minimal): grid = crop(fish(mood: mood, remaining: q, frame: 0, touch: nil), x: 2, y: 4, width: 16, height: 12)
         case (.pear, .widget): grid = pear(mood: mood, remaining: q, frame: frame, blink: blink, touch: touch)
         case (.pear, .minimal): grid = crop(pear(mood: mood, remaining: q, frame: 0, blink: blink, touch: nil), x: 2, y: 4, width: 16, height: 12)
+        case (.bbq, .widget): grid = bbq(mood: mood, remaining: q, frame: frame, blink: blink, touch: touch)
+        case (.bbq, .minimal): grid = crop(bbq(mood: mood, remaining: q, frame: 0, blink: blink, touch: nil), x: 2, y: 2, width: 16, height: 12)
+        case (.ox, .widget): grid = ox(mood: mood, remaining: q, frame: frame, touch: touch)
+        case (.ox, .minimal): grid = crop(ox(mood: mood, remaining: q, frame: 0, touch: nil), x: 1, y: 3, width: 16, height: 12)
         case (.mochi, .widget): grid = mochi(mood: mood, remaining: q, frame: frame, blink: blink, props: true)
         case (.bit, .widget): grid = bit(mood: mood, remaining: q, frame: frame, blink: blink, props: true)
         case (.jelly, .widget):
@@ -568,6 +572,185 @@ enum QuotaPetArt {
         return g
     }
 
+    // MARK: 芭比Q了 and 牛马
+
+    /// How cooked the sausage is: 0 raw (plenty of quota) to 5 charred (none left).
+    static func doneness(_ q: Double) -> Int { q >= 80 ? 0 : q >= 55 ? 1 : q >= 35 ? 2 : q >= 15 ? 3 : q > 0 ? 4 : 5 }
+    private static let sausageColors: [(body: UInt32, outline: UInt32, marks: UInt32)] = [
+        (0xFF9AA8, 0xC0566A, 0xE88A98), (0xF7A35C, 0xB9692F, 0xD07A3A), (0xD4783C, 0x8F4A22, 0x9A5228),
+        (0x9A5228, 0x5E301A, 0x5A2E18), (0x5A3220, 0x33201A, 0x2E1A12), (0x2A201C, 0x120E0C, 0x050404)
+    ]
+    private static let sausage = ["..oooo..", ".occcco.", "occcccco", "occcccco", "occcccco", "occcccco", "occcccco",
+                                  "occcccco", "occcccco", ".occcco.", "..oooo.."]
+    private static let sausageSide = [".oo.", "occo", "occo", "occo", "occo", "occo", "occo", "occo", "occo", "occo", ".oo."]
+
+    /// 芭比Q了: a sausage on a skewer over a grill. The less quota, the more cooked it is; at zero
+    /// it's charred, with × × eyes and smoke.
+    private static func bbq(mood: QuotaPetMood, remaining q: Double, frame f: Int, blink: Bool, touch: QuotaPetTouchMoment?) -> Grid {
+        var g = blank()
+        let t = touch.flatMap { $0.elapsed < $0.reaction.duration ? $0.reaction : nil }
+        let e = touch?.elapsed ?? 0, still = touch?.reduceMotion ?? false
+        let happy = mood == .refilled || mood == .celebrate
+        let level = happy ? 0 : doneness(q)
+        let charred = level == 5 && !happy
+        let c = UInt8(ascii: "c"), j = UInt8(ascii: "j")
+        // coals, grate and flames
+        let glow = (f + (t != nil ? Int(e / 0.16) : 0)) % 2
+        paint(&g, [charred ? "KKKKKKKKKKKK" : (glow == 1 ? "CKCCKCCKCCKC" : "KCCKCCKCCKCC")], 4, 15)
+        paint(&g, ["gggggggggggggg"], 3, 14)
+        paint(&g, ["g............g"], 3, 13)
+        if !charred {
+            let big = mood == .working || t == .annoyed || t == .open
+            let flames = big ? (f % 2 == 1 ? [".F...F...F..", "FfF.FfF.FfF."] : ["F...F...F...", "fF.FfF.FfF.F"])
+                             : (glow == 1 ? ["..F.....F...", ".FfF...FfF.."] : ["...F.....F..", "..FfF...FfF."])
+            paint(&g, flames, 4, 12)
+        }
+        // the sausage on its skewer
+        let sx = 6
+        var sy = 1
+        if mood == .needsYou && t == nil { sy = f % 2 == 1 ? 0 : 1 }
+        var view = "front"
+        if t == .dizzy && !still { view = ["front", "side", "back", "side"][Int(e / 0.12) % 4] }
+        if t == .pat && e > 0.25 && e < 0.55 && !still { view = "side" }
+        paint(&g, ["jj"], 9, 0)
+        for y in 12...13 { g[y][9] = j; g[y][10] = j }
+        paint(&g, view == "side" ? sausageSide : sausage, view == "side" ? 8 : sx, sy)
+        if level >= 2 && view != "side" {
+            // grill marks
+            for y in (sy + 2)...(sy + 8) { for x in (sx + 1)...(sx + 6)
+                where g[y][x] == c && (x + y + (view == "back" ? 2 : 0)) % 4 == 0 && (y - sy) % 3 != 1 { g[y][x] = UInt8(ascii: "m") } }
+        }
+        if view == "front" {
+            if !charred { g[sy + 2][sx + 1] = UInt8(ascii: "h"); g[sy + 3][sx + 1] = UInt8(ascii: "h") }
+            var eyes = ["e"], eyesR: [String]? = nil, mouth = ["MM"], cheek: String? = "p"
+            switch mood {
+            case .needsYou: eyes = ["e", "e"]; mouth = ["MM", "MM"]
+            case .refilled, .celebrate: eyes = [".e.", "e.e"]; mouth = ["MM", "TT"]
+            case .empty, .stale, .working: eyes = ["ee"]
+            default:
+                if level >= 3 { eyes = ["e.", ".e"]; eyesR = [".e", "e."]; mouth = [".MM.", "M..M"] }
+                else if blink { eyes = ["ee"] }
+            }
+            if charred { eyes = ["x.x", ".x.", "x.x"]; eyesR = nil; mouth = ["xx"]; cheek = nil }
+            switch t {
+            case .pat: eyes = [".e.", "e.e"]; eyesR = nil; mouth = ["MM", "TT"]
+            case .annoyed: eyes = ["e.", ".e", "e."]; eyesR = [".e", "e.", ".e"]; mouth = ["MM"]; cheek = "q"
+            case .stir: if e < 0.75 { eyes = charred ? ["x.x", ".x.", "x.x"] : ["ee"]; eyesR = ["e"] }
+            case .open: eyes = ["e", "e"]; mouth = ["MM", "MM"]
+            default: break
+            }
+            let tall = eyes.count == 3, width = eyes[0].count
+            let ey = sy + 4 - (eyes.count - 1) + (tall ? 1 : 0)
+            paint(&g, eyes, sx + 3 - width, ey); paint(&g, eyesR ?? flipped(eyes), sx + 5, ey)
+            paint(&g, mouth, sx + 4 - mouth[0].count / 2, sy + 6 + (tall ? 1 : 0))
+            if let cheek { paint(&g, [cheek], sx + 1, sy + 6); paint(&g, [cheek], sx + 6, sy + 6) }
+        }
+        // oil drips while it works; smoke once it's done for; steam when it's cross
+        if mood == .working && t == nil { paint(&g, f % 2 == 1 ? ["y"] : [".", "y"], 7 + (f % 2) * 4, sy + 11) }
+        if charred { paint(&g, f % 2 == 1 ? [".SS...", "S..S.."] : ["..SS..", ".S..S."], 12, 0) }
+        if t == .annoyed { paint(&g, Int(e / 0.15) % 2 == 1 ? ["S.S", ".S."] : [".S.", "S.S"], 12, 0) }
+        if t == nil {
+            switch mood {
+            case .needsYou: bang(&g, frame: f, 17, 1)
+            case .empty where !charred: sleepZ(&g, frame: f, 16, 0)
+            case .low, .pacing: drop(&g, frame: f, 15, 3)
+            case .refilled, .celebrate: sparkle(&g, frame: f, 1, 1)
+            default: break
+            }
+        }
+        if t == .open { bang(&g, frame: f, 17, 1) }
+        return g
+    }
+
+    private static let cowHead = ["H..........H", ".HHooooooHH.", "EoccccKKKcoE", "EoccccccKcoE", ".occcccccco.",
+                                  ".onnnnnnnno.", ".onknnnnkno.", "..oooooooo.."]
+    private static let cowBody = ["..occcKcco..", "..oKKcccco..", "..oooooooo..", "..kk....kk.."]
+
+    /// 牛马: a little cow hitched to a cart. Every sixth of the quota used is one more box on the cart.
+    private static func ox(mood: QuotaPetMood, remaining q: Double, frame f: Int, touch: QuotaPetTouchMoment?) -> Grid {
+        var g = blank()
+        let t = touch.flatMap { $0.elapsed < $0.reaction.duration ? $0.reaction : nil }
+        let e = touch?.elapsed ?? 0, still = touch?.reduceMotion ?? false
+        let lying = (mood == .empty || mood == .stale) && t != .open
+        let pulling = mood == .working || mood == .low || mood == .pacing
+        let happy = mood == .refilled || mood == .celebrate
+        // the cart and its boxes
+        paint(&g, ["jjjjjjj"], 13, 14)
+        paint(&g, [".k...k."], 13, 15)
+        let boxes = happy ? 0 : Int(((100 - max(0, q)) / 100 * 6).rounded())
+        for i in 0..<boxes {
+            var bx = 14, by = 12 - i * 2
+            if t == .dizzy && !still {
+                // the pile sways and the top box falls off
+                bx += Int((sin(e / 0.12) * Double(i) * 0.35).rounded())
+                if i == boxes - 1 && e > 1 { bx += 2 + Int((e - 1) / 0.2); by += Int((e - 1) / 0.09) }
+            }
+            if t == .annoyed && e < 0.6 && i >= 2 && !still && alternate(e, 0.06) > 0 { bx += 1 }
+            paint(&g, i % 2 == 1 ? ["BBBBB", "BbbbB"] : ["BBBBB", "BBbBB"], bx, by)
+        }
+        // the cow
+        var oy = 3
+        if lying { oy = 5 }
+        if happy && t == nil { oy = 3 - f % 2 }
+        if pulling && t == nil { oy = 3 + f % 2 }
+        if t == .open && !still { oy = 3 + min(0, hop(e)) }
+        paint(&g, lying ? ["..oooooooo.."] : cowBody, 1, oy + 8)
+        // the rope to the cart
+        for (x, y) in [(11, oy + 8), (12, (oy + 8 + 13) / 2), (13, 13)] where y >= 0 && y < 16 { g[y][x] = UInt8(ascii: "r") }
+        paint(&g, cowHead, 1, oy)
+        func set(_ x: Int, _ y: Int, _ code: Character) {
+            guard y >= 0, y < 16, x >= 0, x < 20 else { return }
+            g[y][x] = UInt8(ascii: code.unicodeScalars.first!)
+        }
+        if t == .pat && Int(e / 0.13) % 2 == 0 {
+            // ears flap
+            g[oy + 2][1] = dot; g[oy + 2][12] = dot; set(1, oy + 1, "E"); set(12, oy + 1, "E")
+        }
+        // eyes: two pixels tall, in columns 4 and 9
+        var look = "open"
+        if lying { look = "closed" }
+        if happy { look = "happy" }
+        if mood == .low || mood == .pacing { look = "tired" }
+        if mood == .working && t == nil { look = "down" }
+        switch t {
+        case .pat: look = "happy"
+        case .annoyed: look = "roll"
+        case .dizzy: look = ["roll", "open", "rollR", "open"][Int(e / 0.11) % 4]
+        case .stir: look = e < 0.75 ? "peek" : "closed"
+        case .open: look = "open"
+        case nil: break
+        }
+        let ey = oy + 4
+        for (x, out) in [(4, -1), (9, 1)] {
+            switch look {
+            case "open": set(x, ey, "e"); set(x, ey - 1, "e")
+            case "peek" where out > 0: set(x, ey, "e"); set(x, ey - 1, "e")
+            case "closed", "peek": set(x + out, ey, "e"); set(x, ey, "e")
+            case "happy": set(x - 1, ey, "e"); set(x, ey - 1, "e"); set(x + 1, ey, "e")
+            case "down": set(x, ey, "e"); set(x + out, ey, "e")
+            case "tired": set(x, ey - 1, "e"); set(x, ey, "V"); set(x + out, ey, "V")
+            case "roll": set(x, ey - 1, "e"); set(x, ey, "G")
+            case "rollR": set(x + out, ey - 1, "e"); set(x, ey, "G"); set(x, ey - 1, "G")
+            default: break
+            }
+        }
+        // a moo when it needs you
+        if mood == .needsYou || t == .open { for x in 5...8 { set(x, oy + 7, "M") }; set(6, oy + 6, "M"); set(7, oy + 6, "M") }
+        if mood == .low && t == nil { set(7, oy + 7, "T") }
+        if happy || t == .pat { set(3, ey, "p"); set(10, ey, "p") }
+        if t == .annoyed { let s = Int(e / 0.15) % 2; set(1 + s, oy + 7, "S"); set(12 - s, oy + 7, "S") }
+        if pulling && t == nil { paint(&g, ["d", "d"], 0, oy - 2 + f % 2) }
+        if t == nil {
+            switch mood {
+            case .needsYou: bang(&g, frame: f, 0, 0)
+            case .empty: sleepZ(&g, frame: f, 0, 0)
+            case .refilled, .celebrate: sparkle(&g, frame: f, 15, 8); sparkle(&g, frame: f + 1, 0, 0)
+            default: break
+            }
+        }
+        return g
+    }
+
     // MARK: 摸鱼 and 鸭梨
 
     private static let fishRight = ["...ff..", "f.ffffo", "fffffef", "f.fbbff", "...f..."]
@@ -819,7 +1002,7 @@ enum QuotaPetArt {
             var grid = crop(bit(mood: mood, remaining: q, frame: 0, blink: blink, props: false), x: 2, y: 1, width: 16, height: 11)
             grid.append(meter(width: 16, remaining: q, fill: UInt8(ascii: "m"), empty: UInt8(ascii: "d")))
             return grid
-        case .ghost, .sprout, .fish, .pear:
+        case .ghost, .sprout, .fish, .pear, .bbq, .ox:
             return sprite(kind, size: .minimal, mood: mood, remaining: q, blink: blink).rows.map { Array($0.utf8) }
         }
     }
@@ -866,6 +1049,8 @@ enum QuotaPetArt {
         case .sprout: return 0x8FDC6A
         case .fish: return 0xFF9F4A
         case .pear: return 0xDFE874
+        case .bbq: return 0xFF6A2A
+        case .ox: return 0xD9A85F
         }
     }
 
@@ -921,6 +1106,8 @@ enum QuotaPetArt {
         case .sprout: return palette[UInt8(ascii: "m")] ?? 0x6FC3FF
         case .fish: return palette[UInt8(ascii: "u")] ?? 0x5FB3FF
         case .pear: return warning ?? (tint == .service ? brandColor(provider) : 0xDFE874)
+        case .bbq: return warning ?? (tint == .service ? brandColor(provider) : sausageColors[doneness(remaining)].body)
+        case .ox: return warning ?? (tint == .service ? brandColor(provider) : 0xD9A85F)
         }
     }
 
@@ -953,6 +1140,17 @@ enum QuotaPetArt {
             colors = ["o": 0x4D5A1F, "c": 0xDFE874, "s": 0xB9C64E, "a": 0x8D9A35, "l": 0x5AA14A, "n": 0x7A4A2A, "r": 0x8A8F99,
                       "R": 0x6C717B, "W": 0xF2F4F8, "e": 0x2A1F1C, "b": 0xFF9F2A, "d": 0x7AA2FF, "q": 0xFF6B6B, "p": 0xFFA3B8,
                       "M": 0x5A2E2E, "T": 0xFF7A8A, "X": 0xFF9F0A, "Z": 0xCFD8E0, "w": 0xFFFFFF]
+        case .bbq:
+            let cooked = sausageColors[doneness(remaining)]
+            colors = ["o": cooked.outline, "c": cooked.body, "m": cooked.marks, "h": 0xFFE0E6, "e": 0x2A140A, "x": 0xD8D8D8,
+                      "q": 0xFF6B6B, "j": 0xE8C48A, "g": 0x7A7F88, "C": 0xFF6A2A, "K": 0x7A2A14, "F": 0xFFCF3A, "f": 0xFF6A2A,
+                      "y": 0xFFD34D, "S": 0x9AA0AA, "p": 0xFFA3B8, "M": 0x5A2E2E, "T": 0xFF7A8A, "X": 0xFF9F0A, "Z": 0xCFD8E0,
+                      "w": 0xFFFFFF, "d": 0x7AA2FF]
+        case .ox:
+            colors = ["o": 0x3A3330, "c": 0xF4F1EA, "K": 0x2B2724, "H": 0xE8D6A0, "E": 0xC9B8A8, "n": 0xFFB3C0, "k": 0x5A3A3A,
+                      "e": 0x1F1A18, "G": 0x9AA3B2, "V": 0x8A7AA8, "r": 0xB98A52, "j": 0xB5793F, "B": 0xD9A85F, "b": 0x8A5A2A,
+                      "S": 0xCFD3DC, "M": 0x5A2E2E, "T": 0xFF7A8A, "p": 0xFFA3B8, "X": 0xFF9F0A, "Z": 0xCFD8E0, "w": 0xFFFFFF,
+                      "d": 0x7AA2FF]
         }
         let brand = brandColor(provider)
         let warning: UInt32? = remaining < 20 ? 0xFF5A4F : (remaining < 35 ? 0xF4D35E : nil)
@@ -965,6 +1163,8 @@ enum QuotaPetArt {
             case .sprout: colors["m"] = brand
             case .fish: colors["u"] = brand; colors["U"] = lighten(brand)
             case .pear: colors["c"] = lighten(brand); colors["s"] = brand
+            case .bbq: colors["F"] = lighten(brand); colors["f"] = brand; colors["C"] = brand
+            case .ox: colors["B"] = brand; colors["b"] = fade(brand, 0.6)
             }
         }
         if kind == .bit {

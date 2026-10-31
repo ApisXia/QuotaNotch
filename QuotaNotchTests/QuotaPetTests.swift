@@ -261,6 +261,8 @@ final class QuotaPetTests: XCTestCase {
         XCTAssertEqual(QuotaPetKind.choice("sprout"), .sprout)
         XCTAssertEqual(QuotaPetKind.choice("fish"), .fish)
         XCTAssertEqual(QuotaPetKind.choice("pear"), .pear)
+        XCTAssertEqual(QuotaPetKind.choice("bbq"), .bbq)
+        XCTAssertEqual(QuotaPetKind.choice("ox"), .ox)
         XCTAssertEqual(QuotaPetKind.choice("unknown"), .bit)
         XCTAssertEqual(QuotaPetKind.choice("off"), .bit)
         XCTAssertEqual(QuotaPetKind.allCases, QuotaPetKind.pets)
@@ -412,6 +414,16 @@ final class QuotaPetTests: XCTestCase {
         XCTAssertGreaterThan(mountain(40), mountain(60))
         XCTAssertGreaterThan(mountain(20), mountain(40))
         XCTAssertGreaterThan(mountain(5), mountain(20))
+        // The sausage chars as quota runs out; the cart fills with boxes.
+        XCTAssertEqual(QuotaPetArt.doneness(100), 0)
+        XCTAssertEqual(QuotaPetArt.doneness(0), 5)
+        XCTAssertGreaterThan(count(QuotaPetArt.sprite(.bbq, size: .widget, mood: .empty, remaining: 0), "x"), 0)
+        XCTAssertEqual(count(QuotaPetArt.sprite(.bbq, size: .widget, mood: .idle, remaining: 70), "x"), 0)
+        let boxes = { (q: Double) in count(QuotaPetArt.sprite(.ox, size: .widget, mood: .idle, remaining: q), "Bb") }
+        XCTAssertEqual(boxes(100), 0)
+        XCTAssertGreaterThan(boxes(50), boxes(90))
+        XCTAssertGreaterThan(boxes(5), boxes(50))
+        XCTAssertEqual(count(QuotaPetArt.sprite(.ox, size: .widget, mood: .refilled, remaining: 30), "Bb"), 0)
         // Just refilled, the mountain is gone whatever the number says.
         XCTAssertEqual(count(QuotaPetArt.sprite(.pear, size: .widget, mood: .refilled, remaining: 30), "rRW"), 0)
     }
@@ -419,7 +431,7 @@ final class QuotaPetTests: XCTestCase {
     /// The fish and the pear act clicks out inside their art; every moment stays on the grid,
     /// is fully colored, and goes back to the plain pet when the reaction ends.
     func testFishAndPearActOutClicks() {
-        for kind in [QuotaPetKind.fish, .pear] {
+        for kind in [QuotaPetKind.fish, .pear, .bbq, .ox] {
             for (reaction, mood, remaining) in [(QuotaPetReaction.pat, QuotaPetMood.idle, 70.0), (.annoyed, .idle, 70), (.dizzy, .idle, 20),
                                                 (.stir, .empty, 0), (.open, .needsYou, 41), (.pat, .idle, 90), (.pat, .empty, 0)] {
                 let palette = QuotaPetArt.palette(kind, provider: .codex, tint: .original, remaining: remaining)

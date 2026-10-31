@@ -24380,6 +24380,40 @@
         }
       }
     },
+    "芭比Q了 · 烤肠" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "BBQ'd · Sausage"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "芭比Q了 · 烤肠"
+          }
+        }
+      }
+    },
+    "牛马 · 打工牛" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Workhorse · Cow"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "牛马 · 打工牛"
+          }
+        }
+      }
+    },
     "苗苗 · 豆芽" : {
       "extractionState" : "manual",
       "localizations" : {

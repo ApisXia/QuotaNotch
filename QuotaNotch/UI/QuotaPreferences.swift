@@ -84,6 +84,8 @@ struct QuotaPreferences: View {
                     Text("苗苗 · 豆芽").tag(QuotaPetKind.sprout.rawValue)
                     Text("摸鱼 · 鱼缸").tag(QuotaPetKind.fish.rawValue)
                     Text("鸭梨 · 压力山大").tag(QuotaPetKind.pear.rawValue)
+                    Text("芭比Q了 · 烤肠").tag(QuotaPetKind.bbq.rawValue)
+                    Text("牛马 · 打工牛").tag(QuotaPetKind.ox.rawValue)
                 }
             }
             SettingsField("宠物配色") {
