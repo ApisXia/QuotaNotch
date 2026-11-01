@@ -418,7 +418,6 @@ struct AgentTaskRow: View {
     }
     required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
     func show() {
-        NSApp.setActivationPolicy(.regular)
         if UserDefaults.standard.string(forKey: "NSWindow Frame QuotaNotchActivityWindow") == nil { window?.center() }
         window?.makeKeyAndOrderFront(nil); NSApp.activate(ignoringOtherApps: true)
     }
