@@ -129,6 +129,25 @@ final class QuotaClientTests: XCTestCase {
         XCTAssertEqual(requests[0].value(forHTTPHeaderField: "ChatGPT-Account-Id"), "fixture-account")
     }
 
+    func testManualRefreshFetchesCodexAfterAMinute() async throws {
+        let ok = QuotaHTTPResponse(data: try fixture("codex"), status: 200, retryAfter: nil)
+        let transport = TestTransport([ok, ok])
+        let clock = TestClock()
+        let client = QuotaClient(credentials: TestCredentials(), transport: transport, clock: clock.now)
+        _ = await client.refresh(.codex)
+        clock.advance(30)
+        _ = await client.refresh(.codex, manual: true)
+        var requests = await transport.requests
+        XCTAssertEqual(requests.count, 1)
+        clock.advance(31)
+        _ = await client.refresh(.codex)
+        requests = await transport.requests
+        XCTAssertEqual(requests.count, 1)
+        _ = await client.refresh(.codex, manual: true)
+        requests = await transport.requests
+        XCTAssertEqual(requests.count, 2)
+    }
+
     func testNotLoggedInAndExpiredNeverSendRequest() async {
         let transport = TestTransport([])
         for credentials in [TestCredentials(error: .notSignedIn), TestCredentials(expiry: fixtureNow.addingTimeInterval(-1))] {

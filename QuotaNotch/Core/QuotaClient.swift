@@ -161,13 +161,13 @@ actor QuotaClient {
         return result
     }
 
-    /// A manual Claude refresh may run early when there is nothing recent to show,
-    /// but never against a server cooldown.
+    /// A manual refresh may run early, but never against a server cooldown: Codex when its
+    /// reading is over a minute old, Claude (which then runs /usage) when it is over 10 minutes old.
     static func mayBypassCooldown(provider: QuotaProvider, manual: Bool, result: QuotaResult, now: Date) -> Bool {
-        guard manual, provider == .claude else { return false }
+        guard manual else { return false }
         if case .rateLimited? = result.failure { return false }
         guard let snapshot = result.snapshot else { return true }
-        return now.timeIntervalSince(snapshot.fetchedAt) > 600
+        return now.timeIntervalSince(snapshot.fetchedAt) > (provider == .claude ? 600 : 60)
     }
 
     private static func claudeSnapshot(usage: any ClaudeUsageSource, probe: ClaudeProbe?,
