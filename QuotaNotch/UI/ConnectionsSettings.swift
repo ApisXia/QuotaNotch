@@ -74,6 +74,20 @@ extension QuotaNotchStore {
         case let failure?: return .waiting(failure.message)
         }
     }
+
+    var geminiState: ConnectionState {
+        guard providerEnabled(.gemini) else { return .off(QuotaText.localized("此服务已暂停")) }
+        let result = results[.gemini]
+        if let snapshot = result?.snapshot, result?.failure == nil {
+            return .connected(QuotaText.localized("已登录") + " · " + QuotaText.localized("更新于") + " " + QuotaText.relative(snapshot.fetchedAt))
+        }
+        switch result?.failure {
+        case nil: return .waiting(QuotaText.localized("正在读取…"))
+        case .notSignedIn?: return .off(QuotaText.localized("未找到 agy：安装 Antigravity CLI 并在终端运行 agy 登录"))
+        case .invalidResponse?: return .waiting(QuotaText.localized("agy 没有返回用量：在终端运行 agy 确认已登录，并升级到 1.1.11 或更高版本"))
+        case let failure?: return .waiting(failure.message)
+        }
+    }
 }
 
 struct ConnectionsSettings: View {
@@ -117,6 +131,17 @@ struct ConnectionsSettings: View {
                 pathRow(store: AgentActivityStore.shared.home.path) { hooks.chooseCodexHome() }
             } header: {
                 Label { Text(verbatim: "Codex") } icon: { QuotaBrandMark(brand: .codex).frame(width: 14, height: 14) }
+            }
+
+            Section {
+                ConnectionRow(title: "额度", detail: "运行本机 Antigravity CLI（agy）自带的 /usage 报告读取 Gemini 额度，不向模型发送任何内容，也不读取令牌。约每 10 分钟一次。",
+                              state: store.geminiState) {
+                    if !store.providerEnabled(.gemini) {
+                        Button("启用") { store.setProvider(.gemini, enabled: true) }
+                    }
+                }
+            } header: {
+                Label { Text(verbatim: "Gemini (Antigravity)") } icon: { QuotaBrandMark(brand: .gemini).frame(width: 14, height: 14) }
             }
 
             Section("诊断") {

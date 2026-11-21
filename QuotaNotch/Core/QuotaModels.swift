@@ -3,14 +3,24 @@ import Foundation
 import CoreFoundation
 
 enum QuotaProvider: String, CaseIterable, Sendable, Identifiable {
-    case claude, codex
+    /// `gemini` is the Gemini quota of Google Antigravity, read through its `agy` CLI.
+    case claude, codex, gemini
     var id: String { rawValue }
-    var title: String { switch self { case .claude: return "Claude"; case .codex: return "Codex" } }
-    var loginHint: String {
-        self == .claude ? "在设置 → AI 额度中连接 Claude Code，然后在 Claude Code 里发送一条消息。" : "在本机终端运行 codex login，然后刷新。"
+    var title: String {
+        switch self { case .claude: return "Claude"; case .codex: return "Codex"; case .gemini: return "Gemini" }
     }
-    /// How often to look again. Claude only reads a local file written by its status line.
-    var interval: TimeInterval { self == .claude ? 30 : 300 }
+    var loginHint: String {
+        switch self {
+        case .claude: return "在设置 → AI 额度中连接 Claude Code，然后在 Claude Code 里发送一条消息。"
+        case .codex: return "在本机终端运行 codex login，然后刷新。"
+        case .gemini: return "在本机终端运行 agy 并登录，然后刷新。"
+        }
+    }
+    /// How often to look again. Claude only reads a local file written by its status line;
+    /// Gemini starts the `agy` CLI for each reading, so it is asked least often.
+    var interval: TimeInterval {
+        switch self { case .claude: return 30; case .codex: return 300; case .gemini: return 600 }
+    }
     /// When a reading should be presented as old. Claude's numbers only change when Claude Code
     /// talks to the server, so an idle hour is normal.
     var staleAfter: TimeInterval { self == .claude ? 3 * 3600 : interval + 60 }
@@ -101,6 +111,8 @@ enum QuotaParser {
                 if let date = reset, date <= now { remaining = 100; reset = nil }
                 windows.append(QuotaWindow(id: key, title: title, remainingPercent: remaining, resetsAt: reset))
             }
+        } else if provider == .gemini {
+            windows = antigravityWindows(root)
         } else if let limits = root["rate_limit"] as? [String: Any] {
             for (key, fallback) in [("primary_window", "主窗口"), ("secondary_window", "次窗口")] {
                 guard let window = limits[key] as? [String: Any],
@@ -125,6 +137,51 @@ enum QuotaParser {
         // Missing/unsupported fields are never interpreted as 0% used or unlimited.
         guard !windows.isEmpty else { throw QuotaFailure.invalidResponse }
         return QuotaSnapshot(windows: windows, fetchedAt: now)
+    }
+
+    /// The report printed by `agy -p /usage --output-format json`: groups of quota buckets, each
+    /// with the fraction left. Field names follow CodexBar's parser for the same report.
+    /// Gemini's own windows come first with plain titles; other pools (Claude and GPT models
+    /// used through Antigravity) keep their group name, as in "Claude and GPT · 7 天".
+    private static func antigravityWindows(_ root: [String: Any]) -> [QuotaWindow] {
+        guard root["status"] as? String == "SUCCESS",
+              let command = root["command"] as? [String: Any], command["name"] as? String == "usage",
+              let data = command["data"] as? [String: Any],
+              let groups = data["groups"] as? [[String: Any]] else { return [] }
+        var gemini: [QuotaWindow] = []
+        var others: [QuotaWindow] = []
+        var seen = Set<String>()
+        for group in groups {
+            var label = ((group["display_name"] ?? group["name"]) as? String ?? "")
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            if label.lowercased().hasSuffix(" models") { label = String(label.dropLast(7)) }
+            let plain = label.isEmpty || label.lowercased() == "gemini"
+            var windows: [QuotaWindow] = []
+            for bucket in group["buckets"] as? [[String: Any]] ?? [] {
+                guard let id = ((bucket["bucket_id"] ?? bucket["id"]) as? String)?
+                        .trimmingCharacters(in: .whitespacesAndNewlines), !id.isEmpty, !seen.contains(id),
+                      bucket["disabled"] as? Bool != true,
+                      let fraction = number(bucket["remaining_fraction"])
+                        ?? number((bucket["remaining"] as? [String: Any])?["remaining_fraction"]),
+                      (0...1).contains(fraction) else { continue }
+                seen.insert(id)
+                // "5h" / "weekly", from the explicit cadence or else the bucket id ("gemini-5h").
+                let cadence = ((bucket["window"] as? String) ?? id).lowercased()
+                let period: (title: String, seconds: TimeInterval)?
+                if cadence.hasSuffix("5h") { period = ("5 小时", 5 * 3600) }
+                else if cadence.hasSuffix("weekly") { period = ("7 天", 7 * 86400) }
+                else { period = nil }
+                let name = period?.title ?? ((bucket["display_name"] ?? bucket["name"]) as? String ?? id)
+                windows.append(QuotaWindow(id: id, title: plain ? name : label + " · " + name,
+                                           remainingPercent: fraction * 100,
+                                           resetsAt: isoDate(bucket["reset_time"] as? String),
+                                           duration: period?.seconds))
+            }
+            // Shortest window first, like Claude's 5 hours before 7 days.
+            windows.sort { ($0.duration ?? .infinity) < ($1.duration ?? .infinity) }
+            if plain { gemini += windows } else { others += windows }
+        }
+        return gemini + others
     }
 
     static func number(_ value: Any?) -> Double? {

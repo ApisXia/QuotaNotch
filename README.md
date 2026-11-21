@@ -16,7 +16,7 @@ Each pet shows the remaining quota in its own way: Mochi's tea runs low, Slacker
 
 ## Features
 
-- **Quota:** Claude and Codex, with 5-hour and 7-day windows. Pin one to the closed notch. Low quota turns yellow, then red.
+- **Quota:** Claude, Codex and Gemini (through Google Antigravity's `agy` CLI), with 5-hour and 7-day windows. Pin one to the closed notch. Low quota turns yellow, then red.
 - **Tasks:** follow local Codex and Claude Code tasks across projects, see when one is waiting for you, and keep read history for 1 hour, 5 hours or 1 day.
 - **Music:** controls for Now Playing, with cover art looked up when the app doesn't provide one.
 - **Calendar:** events and reminders, a week view, and one-click links for Zoom, Google Meet, Teams, Tencent Meeting, Feishu and DingTalk.

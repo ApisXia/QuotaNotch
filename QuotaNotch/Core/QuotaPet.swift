@@ -1097,7 +1097,9 @@ enum QuotaPetArt {
 
     // MARK: Colors (0xRRGGBB)
 
-    static func brandColor(_ provider: QuotaProvider) -> UInt32 { provider == .claude ? 0xE39B7A : 0x9ED4BF }
+    static func brandColor(_ provider: QuotaProvider) -> UInt32 {
+        switch provider { case .claude: return 0xE39B7A; case .codex: return 0x9ED4BF; case .gemini: return 0x8AB4F8 }
+    }
 
     /// Each pet's own color for task effects.
     static func themeColor(_ kind: QuotaPetKind) -> UInt32 {

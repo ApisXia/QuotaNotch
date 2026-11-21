@@ -62,7 +62,11 @@ struct QuotaPreferences: View {
     }
 
     private func state(_ provider: QuotaProvider) -> ConnectionState {
-        provider == .claude ? claude.state(result: store.results[.claude]) : store.codexState
+        switch provider {
+        case .claude: return claude.state(result: store.results[.claude])
+        case .codex: return store.codexState
+        case .gemini: return store.geminiState
+        }
     }
 
     private var displaySection: some View {

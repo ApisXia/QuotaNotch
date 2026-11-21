@@ -67,7 +67,8 @@ final class QuotaNotchStore: ObservableObject {
     }
     func title(for pin: QuotaPin) -> String {
         let window = window(for: pin)?.localizedTitle ?? QuotaText.localized([
-            "five_hour": "5 小时", "seven_day": "7 天", "primary_window": "主窗口", "secondary_window": "次窗口"
+            "five_hour": "5 小时", "seven_day": "7 天", "primary_window": "主窗口", "secondary_window": "次窗口",
+            "gemini-5h": "5 小时", "gemini-weekly": "7 天"
         ][pin.windowID] ?? pin.windowID)
         return (pin.provider?.title ?? pin.providerID) + " · " + window
     }

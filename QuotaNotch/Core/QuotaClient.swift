@@ -57,6 +57,7 @@ actor QuotaClient {
     private let claudeUsage: any ClaudeUsageSource
     private let claudeFallback: (any ClaudeQuotaFallback)?
     private let claudeConnected: @Sendable () -> Bool
+    private let gemini: any GeminiQuotaSource
     private var results: [QuotaProvider: QuotaResult] = [:]
     private var failures: [QuotaProvider: Int] = [:]
     /// The last reading from Claude Code's /usage screen, kept until the status line has newer numbers.
@@ -82,7 +83,9 @@ actor QuotaClient {
          claudeFallback: (any ClaudeQuotaFallback)? = nil,
          claudeConnected: @escaping @Sendable () -> Bool = {
              FileManager.default.fileExists(atPath: ClaudeStatusLineUsage.defaultDirectory.path)
-         }) {
+         },
+         gemini: any GeminiQuotaSource = AntigravityCLIQuota()) {
+        self.gemini = gemini
         self.credentials = credentials
         self.transport = transport
         self.clock = clock
@@ -105,6 +108,7 @@ actor QuotaClient {
         let credentials = self.credentials
         let transport = self.transport
         let claudeUsage = self.claudeUsage
+        let gemini = self.gemini
         var probe: ClaudeProbe?
         if provider == .claude, let fallback = claudeFallback {
             if manual {
@@ -133,6 +137,8 @@ actor QuotaClient {
                                                             previousFallback: previousFallback, now: now)
                     outcome = reading.probe
                     snapshot = try reading.result.get()
+                } else if provider == .gemini {
+                    snapshot = try await gemini.fetch(now: now)
                 } else {
                     snapshot = try await Self.codexSnapshot(credentials: credentials, transport: transport, now: now)
                 }

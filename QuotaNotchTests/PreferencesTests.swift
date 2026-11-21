@@ -3,9 +3,10 @@ import XCTest
 
 final class PreferencesTests: XCTestCase {
     func testPausedProvidersAreAbsent() {
-        XCTAssertEqual(QuotaProviderVisibility.visible(disabled: ["codex"]), [.claude])
-        // Stored values for removed providers are ignored.
+        XCTAssertEqual(QuotaProviderVisibility.visible(disabled: ["codex"]), [.claude, .gemini])
         XCTAssertEqual(QuotaProviderVisibility.visible(disabled: ["gemini"]), [.claude, .codex])
+        // Stored values for unknown providers are ignored.
+        XCTAssertEqual(QuotaProviderVisibility.visible(disabled: ["cursor"]), [.claude, .codex, .gemini])
     }
     func testPausingCurrentProviderSelectsNextVisibleProvider() {
         XCTAssertEqual(QuotaProviderVisibility.selection(.claude, disabled: ["claude"]), .codex)

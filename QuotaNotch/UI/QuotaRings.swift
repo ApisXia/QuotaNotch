@@ -2,7 +2,9 @@
 import SwiftUI
 
 extension QuotaProvider {
-    var brand: QuotaBrand { self == .claude ? .claude : .codex }
+    var brand: QuotaBrand {
+        switch self { case .claude: return .claude; case .codex: return .codex; case .gemini: return .gemini }
+    }
     var accent: Color { brand.color }
 }
 
@@ -162,7 +164,8 @@ struct QuotaNotchView: View {
             }
         }
         if let failure = store.results[provider]?.failure {
-            return failure == .notSignedIn ? QuotaText.localized("在终端运行 codex login") : failure.message
+            guard failure == .notSignedIn else { return failure.message }
+            return QuotaText.localized(provider == .gemini ? "在终端运行 agy 并登录" : "在终端运行 codex login")
         }
         return QuotaText.localized("正在读取…")
     }

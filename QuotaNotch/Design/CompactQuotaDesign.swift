@@ -2,13 +2,17 @@
 import SwiftUI
 
 enum QuotaBrand: CaseIterable, Equatable {
-    case claude, codex
+    case claude, codex, gemini
     var color: Color {
-        self == .claude ? Color(red: 0.89, green: 0.61, blue: 0.48) : Color(red: 0.62, green: 0.83, blue: 0.75)
+        switch self {
+        case .claude: return Color(red: 0.89, green: 0.61, blue: 0.48)
+        case .codex: return Color(red: 0.62, green: 0.83, blue: 0.75)
+        case .gemini: return Color(red: 0.54, green: 0.71, blue: 0.97)
+        }
     }
 }
 
-/// Original small-size interpretations: asymmetric rays and a six-loop knot.
+/// Original small-size interpretations: asymmetric rays, a six-loop knot and a four-point spark.
 /// These are not official brand assets or SF Symbol substitutes.
 struct QuotaBrandMark: View {
     let brand: QuotaBrand
@@ -19,6 +23,9 @@ struct QuotaBrandMark: View {
             let ink = muted ? Color.gray : brand.color
             if brand == .claude {
                 ClaudeRays().fill(ink)
+                    .frame(width: side, height: side)
+            } else if brand == .gemini {
+                GeminiSpark().fill(ink)
                     .frame(width: side, height: side)
             } else {
                 CodexKnot().stroke(ink, style: StrokeStyle(lineWidth: max(0.65, side * 0.07), lineCap: .round, lineJoin: .round))
@@ -41,6 +48,23 @@ private struct ClaudeRays: Shape {
             let radius = (i % 3 == 2 ? 0.15 : radii[ray]) * size
             let point = CGPoint(x: rect.midX + CGFloat(cos(angle)) * radius, y: rect.midY + CGFloat(sin(angle)) * radius)
             if i == 0 { p.move(to: point) } else { p.addLine(to: point) }
+        }
+        p.closeSubpath()
+        return p
+    }
+}
+
+private struct GeminiSpark: Shape {
+    func path(in rect: CGRect) -> Path {
+        let radius = min(rect.width, rect.height) * 0.48
+        let center = CGPoint(x: rect.midX, y: rect.midY)
+        var p = Path()
+        p.move(to: CGPoint(x: center.x, y: center.y - radius))
+        // Four tips joined by curves that pull in toward the center.
+        for i in 1...4 {
+            let angle = CGFloat(i) * .pi / 2 - .pi / 2
+            p.addQuadCurve(to: CGPoint(x: center.x + cos(angle) * radius, y: center.y + sin(angle) * radius),
+                           control: center)
         }
         p.closeSubpath()
         return p
