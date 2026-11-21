@@ -27,17 +27,20 @@ final class XPCHelperClient: NSObject {
         
         let conn = NSXPCConnection(serviceName: serviceName)
         
-        conn.interruptionHandler = { [weak self] in
+        // A late callback from an earlier connection must not clear the one that replaced it.
+        conn.interruptionHandler = { [weak self, weak conn] in
             Task { @MainActor in
-                self?.connection = nil
-                self?.remoteService = nil
+                guard let self, let conn, self.connection === conn else { return }
+                self.connection = nil
+                self.remoteService = nil
             }
         }
         
-        conn.invalidationHandler = { [weak self] in
+        conn.invalidationHandler = { [weak self, weak conn] in
             Task { @MainActor in
-                self?.connection = nil
-                self?.remoteService = nil
+                guard let self, let conn, self.connection === conn else { return }
+                self.connection = nil
+                self.remoteService = nil
             }
         }
         
