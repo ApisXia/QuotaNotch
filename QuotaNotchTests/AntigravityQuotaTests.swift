@@ -20,7 +20,8 @@ final class AntigravityQuotaTests: XCTestCase {
         XCTAssertEqual(result.windows.map(\.title), ["5 小时", "7 天", "Claude and GPT · 5 小时", "Claude and GPT · 7 天"])
         XCTAssertEqual(result.windows.map { ($0.remainingPercent * 100).rounded() / 100 }, [95, 86, 100, 89])
         XCTAssertEqual(result.windows[1].resetsAt, QuotaParser.isoDate("2026-09-17T18:40:27Z"))
-        XCTAssertEqual(result.windows.map(\.period), [5 * 3600, 7 * 86400, 5 * 3600, 7 * 86400])
+        let periods: [TimeInterval?] = [5 * 3600, 7 * 86400, 5 * 3600, 7 * 86400]
+        XCTAssertEqual(result.windows.map(\.period), periods)
         XCTAssertEqual(result.fetchedAt, fixtureNow)
     }
 
